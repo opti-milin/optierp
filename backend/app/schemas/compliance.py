@@ -209,3 +209,63 @@ class Gstr3bReport(BaseModel):
     inter_state_unreg: list[Gstr3bInterStateRow]  # section 3.2
     itc: list[Gstr3bItcRow]  # section 4 (eligible ITC)
     net_tax_payable: Gstr3bTaxRow  # 3.1 output tax − eligible ITC (informational)
+
+
+# ---------------------------------------------------------------------------
+# GSTR-2B reconciliation — Phase 6.1.
+#
+# Match the purchase register (booked Purchase Invoices) against the portal's
+# GSTR-2B (what suppliers actually filed) to protect Input Tax Credit: you can
+# only claim ITC that appears in your 2B. Buckets each supplier invoice as
+# Matched / Mismatch / Only in Books / Only in 2B.
+# ---------------------------------------------------------------------------
+
+RECON_STATUSES = ("Matched", "Mismatch", "Only in Books", "Only in 2B")
+
+
+class Gstr2bReconRow(BaseModel):
+    """One supplier document, compared between the books and the portal 2B."""
+
+    supplier_gstin: str | None = None
+    supplier_name: str | None = None
+    invoice_no: str | None = None
+    invoice_date: date | None = None
+    # books side (our Purchase Invoice)
+    books_ref: str | None = None  # our PI document number
+    books_taxable: Decimal | None = None
+    books_tax: Decimal | None = None  # Input GST (ITC) we booked
+    # portal 2B side
+    portal_taxable: Decimal | None = None
+    portal_tax: Decimal | None = None
+    # comparison (portal − books; only when both sides present)
+    taxable_diff: Decimal | None = None
+    tax_diff: Decimal | None = None
+    status: str  # one of RECON_STATUSES
+
+
+class Gstr2bReconSummary(BaseModel):
+    books_count: int
+    portal_count: int
+    matched: int
+    mismatch: int
+    only_in_books: int
+    only_in_2b: int
+    books_itc: Decimal  # total Input GST per books (in the window)
+    portal_itc: Decimal  # total tax per 2B
+    matched_itc: Decimal  # ITC that reconciles → safe to claim
+    at_risk_itc: Decimal  # booked but NOT in 2B → claim only once it appears
+
+
+class Gstr2bReconRequest(BaseModel):
+    """Reconcile the purchase register in a window against an uploaded portal GSTR-2B JSON."""
+
+    from_date: date
+    to_date: date
+    gstr2b: dict  # the GSTR-2B JSON as downloaded from the portal / GSP
+
+
+class Gstr2bReconReport(BaseModel):
+    from_date: date
+    to_date: date
+    summary: Gstr2bReconSummary
+    rows: list[Gstr2bReconRow]

@@ -116,3 +116,39 @@ export interface Gstr3bReport {
   itc: Gstr3bItcRow[];
   net_tax_payable: Gstr3bTaxRow;
 }
+
+// GSTR-2B reconciliation (Phase 6.1)
+export interface Gstr2bReconRow {
+  supplier_gstin: string | null;
+  supplier_name: string | null;
+  invoice_no: string | null;
+  invoice_date: string | null;
+  books_ref: string | null;
+  books_taxable: string | null;
+  books_tax: string | null;
+  portal_taxable: string | null;
+  portal_tax: string | null;
+  taxable_diff: string | null;
+  tax_diff: string | null;
+  status: string;
+}
+
+export interface Gstr2bReconSummary {
+  books_count: number;
+  portal_count: number;
+  matched: number;
+  mismatch: number;
+  only_in_books: number;
+  only_in_2b: number;
+  books_itc: string;
+  portal_itc: string;
+  matched_itc: string;
+  at_risk_itc: string;
+}
+
+export interface Gstr2bReconReport {
+  from_date: string;
+  to_date: string;
+  summary: Gstr2bReconSummary;
+  rows: Gstr2bReconRow[];
+}

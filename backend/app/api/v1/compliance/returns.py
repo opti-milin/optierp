@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
-from app.schemas.compliance import Gstr1Report, Gstr3bReport
-from app.services import gst_returns
+from app.schemas.compliance import Gstr1Report, Gstr2bReconReport, Gstr2bReconRequest, Gstr3bReport
+from app.services import gst_returns, gstr2b_recon
 from app.services.accounts_common import get_company
 
 router = APIRouter(prefix="/gst-returns", tags=["compliance: gst returns"])
@@ -75,3 +75,21 @@ async def get_gstr3b(
 ) -> Gstr3bReport:
     company = await get_company(db, _company(current_user))
     return await gst_returns.gstr3b(db, company, from_date=from_date, to_date=to_date)
+
+
+@router.post(
+    "/gstr-2b/reconcile",
+    response_model=Gstr2bReconReport,
+    summary="GSTR-2B reconciliation",
+    description="Reconcile the purchase register in a period against an uploaded portal GSTR-2B "
+    "JSON — matches supplier invoices and flags mismatches + ITC at risk (booked but not yet in 2B).",
+)
+async def reconcile_gstr2b(
+    payload: Gstr2bReconRequest,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Purchase Invoice", "report"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> Gstr2bReconReport:
+    company = await get_company(db, _company(current_user))
+    return await gstr2b_recon.reconcile_gstr2b(
+        db, company, from_date=payload.from_date, to_date=payload.to_date, gstr2b=payload.gstr2b
+    )

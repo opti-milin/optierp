@@ -225,8 +225,19 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
   filing, GSTR-2B pull) + secure per-tenant credential storage. The seams are in place to drop these in.
 
 ### Phase 6 — Reconciliation & the long tail (per-tenant, as demand appears)
-- **GSTR-2B reconciliation** (matcher + portal pull), **Composition** scheme flows, **QRMP**,
-  **SEZ/Export** (with/without payment), **e-commerce TCS u/s 52**, **TDS 26Q + Form 16A** reports.
+- **GSTR-2B reconciliation** — 🟢 **DONE (2026-07-03, slice 6.1).** `app/services/gstr2b_recon.py`
+  (`reconcile_gstr2b`) matches the submitted **Purchase Invoices** in a window against an **uploaded portal
+  GSTR-2B JSON** (parses `b2b` + `cdnr`, tolerant of the `data.docdata`/`docdata`/top-level wrappers, sums
+  item taxes, accepts igst/cgst/sgst or iamt/camt/samt keys). Match key = (supplier GSTIN, normalised
+  invoice no = our `bill_no` vs the 2B `inum`); buckets **Matched / Mismatch / Only in Books (ITC at risk) /
+  Only in 2B** with a summary (books ITC, 2B ITC, matched ITC, at-risk ITC). Only registered-supplier
+  purchases are reconciled (unregistered can't appear in 2B). RCM bills count only the Input head as ITC.
+  `POST /api/v1/gst-returns/gstr-2b/reconcile` (Purchase-Invoice report perm); frontend **GSTR-2B recon**
+  tab (upload the 2B JSON → summary cards + problems-first table). Test `test_gstr2b_recon.py`; verified live
+  on the demo (books ITC ₹46,085.96 vs 2B ₹28,003.24 → ₹18,773.12 at risk). **Deferred:** the live portal
+  **pull** of 2B (via a GSP — Phase 5).
+- Remaining long tail: **Composition** scheme flows, **QRMP**, **SEZ/Export** (with/without payment),
+  **e-commerce TCS u/s 52**, **TDS 26Q + Form 16A** reports, **GST on advances**.
 
 ### Out of scope (no module yet)
 - Payroll statutory (PF / ESI / Professional Tax) — needs an HR/Payroll module first.

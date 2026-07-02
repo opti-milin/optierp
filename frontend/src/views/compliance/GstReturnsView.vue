@@ -8,10 +8,11 @@ import { formatCurrency, formatDate, formatNumber } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type {
   Gstr1Report,
+  Gstr2bReconReport,
   Gstr3bReport,
 } from "@/types/compliance";
 
-type Tab = "gstr-1" | "gstr-3b";
+type Tab = "gstr-1" | "gstr-3b" | "gstr-2b";
 
 const tab = ref<Tab>("gstr-1");
 // default to the current month
@@ -21,6 +22,8 @@ const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 const gstr1 = ref<Gstr1Report | null>(null);
 const gstr3b = ref<Gstr3bReport | null>(null);
+const recon = ref<Gstr2bReconReport | null>(null);
+const recon2bFileName = ref("");
 
 const range = computed(() => {
   const [y, m] = period.value.split("-").map(Number);
@@ -30,6 +33,7 @@ const range = computed(() => {
 });
 
 async function run(): Promise<void> {
+  if (tab.value === "gstr-2b") return; // recon is driven by a file upload, not the period fetch
   loading.value = true;
   error.value = null;
   try {
@@ -43,6 +47,44 @@ async function run(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+// GSTR-2B reconciliation: upload the portal 2B JSON → match against the purchase register.
+async function reconcile2b(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  recon2bFileName.value = file.name;
+  loading.value = true;
+  error.value = null;
+  try {
+    const gstr2b = JSON.parse(await file.text());
+    recon.value = (
+      await api.post<Gstr2bReconReport>("/gst-returns/gstr-2b/reconcile", {
+        ...range.value,
+        gstr2b,
+      })
+    ).data;
+  } catch (e) {
+    error.value =
+      e instanceof SyntaxError
+        ? ({ detail: "That file isn't valid JSON — upload the GSTR-2B JSON downloaded from the portal." } as ErrorEnvelope)
+        : (e as ErrorEnvelope);
+  } finally {
+    loading.value = false;
+    input.value = ""; // allow re-uploading the same file
+  }
+}
+
+function reconStatusClass(status: string): string {
+  return (
+    {
+      Matched: "text-green-700",
+      Mismatch: "text-red-600 font-medium",
+      "Only in Books": "text-amber-600",
+      "Only in 2B": "text-blue-600",
+    }[status] || ""
+  );
 }
 
 function select(t: Tab): void {
@@ -90,13 +132,13 @@ onMounted(run);
 
     <div class="flex gap-1 border-b border-gray-200">
       <button
-        v-for="t in (['gstr-1', 'gstr-3b'] as Tab[])"
+        v-for="t in (['gstr-1', 'gstr-3b', 'gstr-2b'] as Tab[])"
         :key="t"
         class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
         :class="tab === t ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
         @click="select(t)"
       >
-        {{ t === "gstr-1" ? "GSTR-1" : "GSTR-3B" }}
+        {{ { "gstr-1": "GSTR-1", "gstr-3b": "GSTR-3B", "gstr-2b": "GSTR-2B recon" }[t] }}
       </button>
     </div>
 
@@ -347,6 +389,82 @@ onMounted(run);
           </tbody>
         </table>
       </section>
+    </div>
+
+    <!-- ===================== GSTR-2B reconciliation ===================== -->
+    <div v-if="tab === 'gstr-2b'" class="space-y-5">
+      <div class="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+        <p class="mb-2 text-gray-600">
+          Reconcile your purchase register for <strong>{{ period }}</strong> against the GST portal's
+          <strong>GSTR-2B</strong> — so you only claim Input Tax Credit that your suppliers actually filed.
+          Download the 2B JSON from the portal and upload it here.
+        </p>
+        <label class="inline-flex cursor-pointer items-center gap-2">
+          <span class="btn-primary">Upload GSTR-2B JSON</span>
+          <input type="file" accept=".json,application/json" class="hidden" @change="reconcile2b" />
+          <span v-if="recon2bFileName" class="text-xs text-gray-500">{{ recon2bFileName }}</span>
+        </label>
+      </div>
+
+      <template v-if="recon">
+        <!-- summary cards -->
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-lg border border-green-200 bg-green-50 p-3">
+            <div class="text-xs text-green-700">Matched</div>
+            <div class="text-xl font-semibold text-green-800">{{ recon.summary.matched }}</div>
+            <div class="text-xs text-green-600">ITC {{ formatCurrency(recon.summary.matched_itc) }}</div>
+          </div>
+          <div class="rounded-lg border border-red-200 bg-red-50 p-3">
+            <div class="text-xs text-red-700">Mismatch</div>
+            <div class="text-xl font-semibold text-red-800">{{ recon.summary.mismatch }}</div>
+            <div class="text-xs text-red-600">values differ</div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div class="text-xs text-amber-700">Only in books (ITC at risk)</div>
+            <div class="text-xl font-semibold text-amber-800">{{ recon.summary.only_in_books }}</div>
+            <div class="text-xs text-amber-600">{{ formatCurrency(recon.summary.at_risk_itc) }}</div>
+          </div>
+          <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div class="text-xs text-blue-700">Only in 2B (missing bill)</div>
+            <div class="text-xl font-semibold text-blue-800">{{ recon.summary.only_in_2b }}</div>
+            <div class="text-xs text-blue-600">supplier filed</div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-4 rounded-lg border border-gray-200 bg-white p-4 text-sm">
+          <span>ITC per books <strong>{{ formatCurrency(recon.summary.books_itc) }}</strong></span>
+          <span>ITC per 2B <strong>{{ formatCurrency(recon.summary.portal_itc) }}</strong></span>
+          <span>Books docs <strong>{{ recon.summary.books_count }}</strong></span>
+          <span>2B docs <strong>{{ recon.summary.portal_count }}</strong></span>
+        </div>
+
+        <!-- detail table -->
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Status</th><th>Supplier GSTIN</th><th>Supplier</th><th>Invoice</th><th>Date</th>
+              <th>Our doc</th>
+              <th class="text-right">Books ITC</th><th class="text-right">2B ITC</th>
+              <th class="text-right">Diff</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in recon.rows" :key="i">
+              <td :class="reconStatusClass(row.status)">{{ row.status }}</td>
+              <td class="font-mono text-xs">{{ row.supplier_gstin }}</td>
+              <td>{{ row.supplier_name || "—" }}</td>
+              <td>{{ row.invoice_no || "—" }}</td>
+              <td>{{ row.invoice_date ? formatDate(row.invoice_date) : "—" }}</td>
+              <td>{{ row.books_ref || "—" }}</td>
+              <td class="text-right">{{ row.books_tax != null ? formatCurrency(row.books_tax) : "—" }}</td>
+              <td class="text-right">{{ row.portal_tax != null ? formatCurrency(row.portal_tax) : "—" }}</td>
+              <td class="text-right" :class="reconStatusClass(row.status)">
+                {{ row.tax_diff != null ? formatCurrency(row.tax_diff) : "—" }}
+              </td>
+            </tr>
+            <tr v-if="!recon.rows.length"><td colspan="9" class="py-3 text-center text-gray-400">Nothing to reconcile</td></tr>
+          </tbody>
+        </table>
+      </template>
     </div>
   </div>
 </template>
