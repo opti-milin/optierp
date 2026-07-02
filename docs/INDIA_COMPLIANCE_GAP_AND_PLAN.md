@@ -6,9 +6,11 @@ bills**, **reverse charge**, **GSTR-2B reconciliation**, and the TDS/TCS already
 covering the full GST spectrum** (regular + composition, monthly + QRMP, B2B/B2C, SEZ/export, e-commerce
 TCS), **configurable per tenant**, and with **live portal/GSP automation** as a planned phase. Modelled on
 ERPNext + the Frappe **India Compliance** app.
-**Status:** 🟡 plan (2026-06-23), **build on hold** — GST *core* exists; the *compliance layer* (HSN,
-returns, e-docs, GSP integration) does not.
-**Designed:** 2026-06-23.
+**Status:** 🟢 **building — Phases 0–5 done (2026-07-02).** HSN + GST-invoice completeness, GST Settings,
+GSTR-1/3B returns (+JSON), reverse-charge posting, e-invoice/e-way-bill JSON, and a pluggable GSP provider
+abstraction (JSON fallback) are built + tested. Remaining: the concrete live GSP adapter (needs creds) and
+the Phase-6 long tail.
+**Designed:** 2026-06-23. **Built:** 2026-06-28 → 2026-07-02.
 
 > **SaaS framing (owner, 2026-06-23):** this is a product for *many* MSMEs, so we **cannot permanently skip**
 > a GST case — some tenant will need each one. The lever is **per-tenant configuration + sensible
@@ -166,17 +168,31 @@ a filing artifact → read-only generator/report.
   CGST+SGST. Tests: 9 integration (`test_gst_invoice.py` — item GST fields, HSN snapshot + override,
   POS intra/inter defaulting, reverse-charge flag, purchase POS from company) + Playwright UI pass.
 
-### Phase 2 — GST returns *(the headline value)*
-- **GSTR-1** report: B2B, B2C (large/small), **HSN-wise summary**, document summary — from submitted Sales
-  Invoices; + **GSTR-1 JSON** export (portal schema).
-- **GSTR-3B** report: outward tax summary + eligible ITC from Purchase Invoices.
-- A **Compliance → GST Returns** reports surface (period picker, drill-down, export).
-- *Acceptance:* for a month, GSTR-1 totals tie to the sales register and the Output GST ledger; GSTR-3B
-  3.1 tax matches; HSN summary sums to taxable value.
+### Phase 2 — GST returns *(the headline value)* — ✅ DONE (2026-07-02)
+- **GSTR-1** report: B2B, B2C (large/small), **HSN-wise summary**, document summary, plus **CDNR/CDNUR**
+  credit/debit notes — from submitted Sales Invoices; + **GSTR-1 JSON** export (portal offline-tool schema).
+- **GSTR-3B** report: §3.1 outward tax (a…e) + §3.2 inter-state to unregistered + §4 eligible ITC from
+  Purchase Invoices, with a net-payable line.
+- A **Compliance → GST Returns** reports surface (`/gst-returns`, month picker, GSTR-1/3B tabs, drill-down,
+  JSON download). **Built:** service `app/services/gst_returns.py` (tax amounts read from the invoices'
+  actual tax rows → tie to the Output GST ledger; per-line HSN/taxable split allocated by taxable×rate);
+  schemas in `app/schemas/compliance.py`; router `app/api/v1/compliance/returns.py`
+  (`/gst-returns/gstr-1`, `/gstr-1/json`, `/gstr-3b`); frontend `views/compliance/GstReturnsView.vue`
+  + `types/compliance.ts` + nav. Tests: `test_gst_returns.py` (3) — buckets + totals tie to the invoices;
+  JSON export carries the portal keys.
+- *Acceptance (verified):* for a month, GSTR-1 B2B/B2CS/B2CL/HSN totals and GSTR-3B §3.1 tie to the
+  submitted invoices; HSN summary sums to taxable value; §3.2 = the inter-state B2C subset.
 
-### Phase 3 — Reverse charge + advances
-- **RCM** flag on Purchase Invoice → post GST liability + ITC (and a self-invoice for unregistered).
-- **GST on advances** (optional) — liability on advance receipts, adjusted at invoicing.
+### Phase 3 — Reverse charge + advances — 🟢 RCM DONE (2026-07-02); advances deferred
+- **RCM** on a Purchase Invoice → **self-assessed GST**: booked as both ITC (`Input GST`, an *Add* tax row →
+  Dr) and liability (`Output CGST/SGST` intra or `Output IGST` inter, *Deduct* rows → Cr), netting the
+  payable to the base (supplier charges no GST). **Built:** `accounts_common.reverse_charge_tax_rows`
+  (self-contained; leaves `auto_gst_from_items` untouched), wired into `create_purchase_invoice` when
+  `is_reverse_charge` and no explicit taxes; GSTR-3B splits input(ITC 4A3)/output(liability 3.1d) heads.
+  Reuses the existing taxes-and-totals engine + GL posting (no new posting engine). Test `test_gst_rcm.py`:
+  GL posts Dr ITC / Cr liability, payable = base, returns pick up 3.1(d) + ITC 4(A)(3).
+- **GST on advances** *(optional)* — **deferred** (liability on advance receipts adjusted at invoicing;
+  belongs with the Payment-Entry advance flow — lands in the long tail when demanded).
 
 ### Phase 0 (cross-cutting) — per-company **GST Settings** — ✅ DONE (2026-06-28)
 A tenant config record everything below reads. **Built:** `GstSettings` stored as a per-company JSON blob
@@ -188,15 +204,25 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
 `/gst-settings` page (Settings + Accounting→Taxes links). Tests: 4 unit (state derivation) + 3 integration
 (defaults/save/reload, validation, GSTIN-derived state). The GSP-credentials slot lands with Phase 5.
 
-### Phase 4 — E-documents (data/JSON layer)
+### Phase 4 — E-documents (data/JSON layer) — ✅ DONE (2026-07-02)
 - **E-Way Bill JSON** generator (transporter/vehicle/from-to/HSN/value), gated by `e_way_bill_applicable`.
 - **E-Invoice JSON** (Schema 1.1) generator for B2B, gated by `e_invoice_applicable`.
+- **Built:** `app/services/e_documents.py` (`e_invoice_json`, `e_way_bill_json` — per-line GST from the
+  effective HSN rate, IGST vs CGST+SGST by company↔POS state; UQC mapping; graceful pincode/URP defaults);
+  router `app/api/v1/compliance/e_documents.py` (GET endpoints, each gated by the GST-settings flag; e-invoice
+  is B2B-only); frontend **download buttons** on a submitted Sales Invoice (`InvoiceFormView.vue`). Tests:
+  `test_e_documents.py` (4) — e-invoice B2B payload + gating + B2C refusal, e-way-bill payload, push fallback.
 
-### Phase 5 — Live GSP/IRP/NIC integration *(portal automation — owner wants this)*
-- A **pluggable GSP provider** abstraction + per-tenant credentials (sandbox/production).
-- Push **e-invoice → IRN + signed QR** (with cancel/amend), **e-way bill → EWB no.** (with Part-B updates),
-  and **GSTR-1/3B filing** + **GSTR-2B pull** through the GSP.
-- Built on the Phase-4 data layer, so a tenant without GSP creds still gets JSON export.
+### Phase 5 — Live GSP/IRP/NIC integration *(portal automation — owner wants this)* — 🟢 ABSTRACTION DONE; live push needs creds
+- A **pluggable GSP provider** abstraction (`app/services/gsp.py`: `GspProvider` protocol, `NullProvider`
+  default, `register_provider`/`get_provider` keyed by `GstSettings.gsp_provider`) + a **credentials slot**
+  (provider name in settings; secrets held out-of-band in a secure store, never in the settings blob).
+- **Push endpoints** `POST /e-documents/.../e-invoice|e-way-bill/push` built on the Phase-4 layer: with a GSP
+  configured they push (IRN/QR, EWB no.); **with none they degrade to returning the JSON** for manual upload
+  (verified in `test_e_documents.py`). Frontend: a **GSP provider** field on GST Settings.
+- **Remaining for a live tenant (needs real GSP/NIC sandbox credentials — cannot be exercised here):** the
+  concrete HTTPS adapter(s) implementing `GspProvider` (auth, IRN/QR, EWB Part-B cancel/amend, GSTR-1/3B
+  filing, GSTR-2B pull) + secure per-tenant credential storage. The seams are in place to drop these in.
 
 ### Phase 6 — Reconciliation & the long tail (per-tenant, as demand appears)
 - **GSTR-2B reconciliation** (matcher + portal pull), **Composition** scheme flows, **QRMP**,
@@ -223,5 +249,9 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
 > → Phase 5 (live GSP/IRP/NIC) → Phase 6 (reconciliation + composition/QRMP/SEZ/TCS long tail). Foundation
 > is broad and shared; tenant-specific cases ride on per-company settings.
 
-> **Status:** 🟢 **Phase 0 + Phase 1 built (2026-06-28/29).** Remaining phases (2 → 6) on hold; resume
-> Phase 2 (GSTR-1/3B) on the owner's go-ahead.
+> **Status:** 🟢 **Phases 0–5 built (0/1 on 2026-06-28/29; 2, 3-RCM, 4, 5-abstraction on 2026-07-02).**
+> GST returns (GSTR-1/3B + JSON), reverse-charge posting, e-invoice/e-way-bill JSON generators, and the
+> pluggable GSP provider abstraction (with JSON fallback) are live and tested. **Remaining:** Phase 5's
+> concrete GSP HTTPS adapter + secure credential storage (needs real GSP/NIC sandbox creds); Phase 6 long
+> tail (GSTR-2B reconciliation, composition/QRMP, SEZ/export, e-commerce TCS, TDS 26Q/Form 16A) and the
+> optional GST-on-advances — phased in per tenant demand.
