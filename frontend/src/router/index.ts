@@ -50,6 +50,11 @@ const routes: RouteRecordRaw[] = [
         name: "gst-settings",
         component: () => import("@/views/compliance/GstSettingsView.vue"),
       },
+      {
+        path: "gst-returns",
+        name: "gst-returns",
+        component: () => import("@/views/compliance/GstReturnsView.vue"),
+      },
       // Module 02 — Accounts
       {
         path: "sales-invoices",

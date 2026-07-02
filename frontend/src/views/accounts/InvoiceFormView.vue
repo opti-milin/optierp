@@ -158,6 +158,8 @@ async function refreshTaxPreview(): Promise<void> {
       [partyKey]: partyId.value,
       posting_date: postingDate.value,
       place_of_supply: placeOfSupply.value || null,
+      // reverse charge (purchase): self-assessed GST nets the payable to the base
+      is_reverse_charge: isReverseCharge.value,
       apply_discount_on: discount.value.apply_discount_on,
       additional_discount_percentage: discount.value.additional_discount_percentage || 0,
       discount_amount: discount.value.discount_amount || 0,
@@ -176,7 +178,7 @@ async function refreshTaxPreview(): Promise<void> {
 }
 
 watch(
-  [items, partyId, placeOfSupply, discount, () => taxes.value.length],
+  [items, partyId, placeOfSupply, isReverseCharge, discount, () => taxes.value.length],
   () => {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => void refreshTaxPreview(), 400);
@@ -490,6 +492,27 @@ async function action(name: "submit" | "cancel"): Promise<void> {
   }
 }
 
+// India GST e-documents: download the e-invoice / e-way-bill JSON for a submitted
+// sales invoice (gated per-company by GST Settings; a 422 explains if it's off).
+async function downloadEdoc(kind: "e-invoice" | "e-way-bill"): Promise<void> {
+  if (!doc.value) return;
+  error.value = null;
+  try {
+    const data = (
+      await api.get(`/e-documents/sales-invoices/${doc.value.id}/${kind}`)
+    ).data;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${kind}_${doc.value.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    error.value = e as ErrorEnvelope;
+  }
+}
+
 // --- Advances: apply a party's on-account payments to this invoice -----------
 // Reuses Payment Reconciliation (an on-account receipt already sits as a credit
 // on the party's receivable/payable; allocating just links it and drops the
@@ -724,6 +747,18 @@ onMounted(async () => {
             @click="createServiceCredit"
           >Create Service Credit</button>
           <button v-if="doc.docstatus === 1" class="btn-secondary" @click="action('cancel')">Cancel</button>
+          <button
+            v-if="kind === 'sales' && doc.docstatus === 1"
+            class="btn-secondary"
+            title="Download the NIC e-invoice JSON (needs E-Invoice enabled in GST Settings)"
+            @click="downloadEdoc('e-invoice')"
+          >e-Invoice JSON</button>
+          <button
+            v-if="kind === 'sales' && doc.docstatus === 1"
+            class="btn-secondary"
+            title="Download the e-way-bill JSON (needs E-Way Bill enabled in GST Settings)"
+            @click="downloadEdoc('e-way-bill')"
+          >e-Way Bill JSON</button>
           <PrintButton :path="`${endpoint}/${doc.id}/pdf`" :title="`${doc.name} — Preview`" />
           <SendEmailButton :doctype="meta.title" :doc-id="doc.id" :doc-name="doc.name" />
         </div>

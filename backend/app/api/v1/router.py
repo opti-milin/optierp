@@ -5,8 +5,10 @@ from fastapi import APIRouter
 from app.api.v1 import auth
 from app.api.v1.assets import assets as assets_module, reports as assets_reports
 from app.api.v1.compliance import (
+    e_documents as compliance_e_documents,
     gst_settings as compliance_gst_settings,
     hsn_codes as compliance_hsn_codes,
+    returns as compliance_returns,
 )
 from app.api.v1.accounts import (
     bank_reconciliation,
@@ -112,6 +114,8 @@ api_v1_router.include_router(assets_reports.router)
 # Module — India Compliance (GST settings, returns, e-documents)
 api_v1_router.include_router(compliance_gst_settings.router)
 api_v1_router.include_router(compliance_hsn_codes.router)
+api_v1_router.include_router(compliance_returns.router)
+api_v1_router.include_router(compliance_e_documents.router)
 
 # Metadata engine ("the machine") — generic CRUD/list/form for every registered
 # DocType (app.registry). Adding a master needs no new router here.

@@ -361,6 +361,7 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS", to: "/m/tax-withholding-category" },
         { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
       ],
     },
     {
@@ -438,6 +439,7 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS Category", to: "/m/tax-withholding-category" },
         { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
       ],
     },
     {

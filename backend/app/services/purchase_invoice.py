@@ -31,6 +31,7 @@ from app.services.accounts_common import (
     item_tax_rates,
     require_draft,
     require_submitted,
+    reverse_charge_tax_rows,
     set_invoice_status,
 )
 from app.services.audit import log_audit
@@ -162,6 +163,7 @@ async def preview_purchase_invoice(db: AsyncSession, payload: PurchaseInvoiceCre
         apply_discount_on=payload.apply_discount_on,
         additional_discount_percentage=payload.additional_discount_percentage,
         discount_amount=payload.discount_amount,
+        is_reverse_charge=payload.is_reverse_charge,
     )
 
 
@@ -185,6 +187,20 @@ async def create_purchase_invoice(
     # outstanding payable against the Temporary Opening account.
     tax_rows_in = [] if payload.is_opening else await _load_tax_rows(db, payload, supplier)
     item_rates = await item_tax_rates(db, payload.items)
+    # India RCM: a reverse-charge inward supply self-assesses GST — the buyer books it as
+    # both ITC (Input GST, an Add row → Dr) and a liability (Output CGST/SGST/IGST, Deduct
+    # rows → Cr), netting the payable to the base. It overrides the normal tax resolution
+    # (the supplier charges no GST) whenever the caller didn't pass explicit tax rows.
+    if payload.is_reverse_charge and not payload.is_opening and not payload.taxes:
+        rcm_rows, rcm_overrides = await reverse_charge_tax_rows(
+            db, company=company, party_gstin=supplier.tax_id,
+            place_of_supply=payload.place_of_supply, payload_items=payload.items,
+            item_rates=item_rates,
+        )
+        if rcm_rows:
+            tax_rows_in = rcm_rows
+            for iid, heads in rcm_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
     # No tax template resolved (supplier with no GST category and no default): fall
     # back to the line items' own GST (Input GST from the item's HSN / template),
     # so purchase GST applies too. Only fires on the otherwise-zero-tax path.

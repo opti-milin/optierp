@@ -12,6 +12,7 @@ interface GstSettings {
   e_invoice_applicable: boolean;
   e_way_bill_applicable: boolean;
   is_sez: boolean;
+  gsp_provider: string | null;
   gstin: string | null;
   gst_state: string | null;
 }
@@ -22,6 +23,7 @@ const form = reactive<GstSettings>({
   e_invoice_applicable: false,
   e_way_bill_applicable: false,
   is_sez: false,
+  gsp_provider: null,
   gstin: null,
   gst_state: null,
 });
@@ -133,6 +135,19 @@ onMounted(load);
             <span class="block text-xs text-gray-500">This company operates in a Special Economic Zone (affects place-of-supply / tax treatment).</span>
           </span>
         </label>
+      </div>
+      <div class="mt-4 max-w-sm">
+        <label class="form-label">GSP / IRP provider (for live push)</label>
+        <input
+          v-model="form.gsp_provider"
+          class="form-input"
+          placeholder="none (JSON export only)"
+        />
+        <p class="mt-1 text-xs text-gray-500">
+          Name of the GST Suvidha Provider used to push e-invoices / e-way bills / returns. Leave
+          blank for JSON-only (download &amp; upload on the portal). Credentials are held securely,
+          not here.
+        </p>
       </div>
     </section>
 

@@ -271,18 +271,137 @@ async def auto_gst_from_items(
     return tax_rows, item_rate_override
 
 
+async def reverse_charge_tax_rows(
+    db: AsyncSession, *, company: Company, party_gstin: str | None,
+    place_of_supply: str | None, payload_items: list,
+    item_rates: dict[uuid.UUID, dict] | None = None,
+) -> tuple[list, dict[uuid.UUID, dict]]:
+    """Reverse-charge (RCM) purchase tax rows: the supplier charges no GST — the buyer
+    self-assesses it. We book the GST as **both** an input-tax-credit (``Input GST``, an
+    *Add* row → Dr ITC) **and** an output liability (``Output CGST/SGST`` intra or
+    ``Output IGST`` inter, *Deduct* rows → Cr liability). The two sides net to zero on the
+    payable (the supplier is paid the base only), while the GL carries Dr ITC / Cr liability
+    and the returns pick up 3.1(d) + ITC 4(A)(3).
+
+    Kept self-contained (mirrors ``auto_gst_from_items``' rate/account logic) so the normal
+    auto-GST path is untouched. Returns ``([], {})`` when RCM GST can't be derived (no GST
+    accounts / nothing taxable), leaving the caller's behaviour unchanged.
+    """
+    from app.models.accounts import Account
+    from app.models.stock import Item
+    from app.schemas.accounts import TaxRowIn
+
+    item_ids = {i.item_id for i in payload_items if getattr(i, "item_id", None) is not None}
+    if not item_ids:
+        return [], {}
+    meta = {
+        r.id: r
+        for r in (
+            await db.execute(
+                select(Item.id, Item.hsn_sac_code, Item.gst_treatment).where(Item.id.in_(item_ids))
+            )
+        ).all()
+    }
+
+    def _eff_hsn(item, m) -> str:
+        return (getattr(item, "hsn_sac_code", None) or (m.hsn_sac_code if m else None)) or ""
+
+    taxable_hsns = {
+        _eff_hsn(item, m)
+        for item in payload_items
+        if (m := meta.get(getattr(item, "item_id", None))) is not None and m.gst_treatment == "Taxable"
+    }
+    hsn_rate = await _hsn_rates(db, {h for h in taxable_hsns if h})
+
+    company_state = _gstin_state(company.tax_id)
+    party_state = _gstin_state(party_gstin)
+    if party_state is None and place_of_supply and place_of_supply[:2].isdigit():
+        party_state = place_of_supply[:2]
+    inter = bool(company_state and party_state and company_state != party_state)
+
+    totals: dict[uuid.UUID, Decimal] = {}
+    for item in payload_items:
+        m = meta.get(getattr(item, "item_id", None))
+        if m is None:
+            continue
+        rate = hsn_rate.get(_eff_hsn(item, m)) if m.gst_treatment == "Taxable" else None
+        totals[m.id] = rate if rate and rate > 0 else Decimal(0)
+    if not any(v > 0 for v in totals.values()):
+        return [], {}
+
+    async def _account(*needles: str) -> uuid.UUID | None:
+        stmt = select(Account.id).where(Account.company_id == company.id, Account.account_type == "Tax")
+        for n in needles:
+            stmt = stmt.where(Account.account_name.ilike(f"%{n}%"))
+        return await db.scalar(stmt.order_by(Account.account_name).limit(1))
+
+    input_gst = await _account("Input GST")
+    if input_gst is None:
+        return [], {}
+    if inter:
+        igst = await _account("Output", "IGST") or await _account("IGST")
+        if igst is None:
+            return [], {}
+        out_heads = [("Output IGST (RCM)", igst, Decimal(1))]
+    else:
+        cgst = await _account("Output", "CGST") or await _account("CGST")
+        sgst = await _account("Output", "SGST") or await _account("SGST")
+        if cgst is None or sgst is None:
+            return [], {}
+        out_heads = [("Output CGST (RCM)", cgst, Decimal("0.5")), ("Output SGST (RCM)", sgst, Decimal("0.5"))]
+
+    # Per-item overrides: Input GST carries the full rate (Add); each output head its share (Deduct).
+    item_rate_override: dict[uuid.UUID, dict] = {}
+    for iid, total in totals.items():
+        row = {input_gst: total}
+        for _, acc, share in out_heads:
+            row[acc] = total * share
+        item_rate_override[iid] = row
+
+    existing = item_rates or {}
+
+    def _row_rate(acc: uuid.UUID) -> Decimal:
+        vals = set()
+        for item in payload_items:
+            iid = getattr(item, "item_id", None)
+            r = item_rate_override.get(iid, {}).get(acc)
+            if r is None:
+                r = existing.get(iid, {}).get(acc)
+            if r and r > 0:
+                vals.add(Decimal(r))
+        return next(iter(vals)) if len(vals) == 1 else Decimal(0)
+
+    tax_rows = [
+        TaxRowIn(charge_type="On Net Total", rate=_row_rate(input_gst), account_head_id=input_gst,
+                 description="Input GST (RCM)", add_deduct_tax="Add", category="Total"),
+    ]
+    tax_rows += [
+        TaxRowIn(charge_type="On Net Total", rate=_row_rate(acc), account_head_id=acc,
+                 description=label, add_deduct_tax="Deduct", category="Total")
+        for label, acc, _ in out_heads
+    ]
+    return tax_rows, item_rate_override
+
+
 async def compute_doc_tax_preview(
     db: AsyncSession, *, company: Company, party, kind: str, items: list,
     place_of_supply: str | None = None, conversion_rate: Decimal = Decimal(1),
     apply_discount_on: str = "Grand Total",
     additional_discount_percentage: Decimal = Decimal(0), discount_amount: Decimal = Decimal(0),
+    is_reverse_charge: bool = False,
 ):
     """Compute the GST + totals a transaction document (invoice / order / quotation)
     would apply, WITHOUT persisting — for the draft form's live preview. Mirrors the
     create path: resolve the party's tax template (by ``kind``) else derive GST from
     each line's HSN, apply per-item Item-Tax-Template overrides, run the engine.
     ``party`` is a Customer (sales) or Supplier (purchase); both carry ``tax_id`` +
-    ``tax_category_id``."""
+    ``tax_category_id``.
+
+    On a **reverse-charge purchase** (``is_reverse_charge`` on the purchase side) the GST is
+    self-assessed, so — exactly like ``create_purchase_invoice`` — it is booked as Input GST
+    (Add) + Output GST (Deduct) rows that net the payable to the base. The Deduct rows are
+    returned with a **negative** amount so the draft's totals show the supplier is paid the
+    base only (no GST added to the payable)."""
     from app.core.gst_states import gst_state_label_of
     from app.schemas.accounts import InvoiceTaxLinePreview, InvoiceTaxPreview, TaxRowIn
     from app.services.accounts_masters import resolve_tax_template
@@ -302,6 +421,17 @@ async def compute_doc_tax_preview(
         if template is not None else []
     )
     item_rates = await item_tax_rates(db, items)
+    # Reverse-charge purchase: self-assess GST (Input Add + Output Deduct), overriding any
+    # resolved template — mirrors create_purchase_invoice so preview == create.
+    if not is_sales and is_reverse_charge:
+        rcm_rows, rcm_overrides = await reverse_charge_tax_rows(
+            db, company=company, party_gstin=party.tax_id, place_of_supply=place_of_supply,
+            payload_items=items, item_rates=item_rates,
+        )
+        if rcm_rows:
+            tax_rows_in = rcm_rows
+            for iid, heads in rcm_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
     if not tax_rows_in:
         auto_rows, auto_overrides = await auto_gst_from_items(
             db, company=company, party_gstin=party.tax_id, place_of_supply=place_of_supply,
@@ -327,7 +457,9 @@ async def compute_doc_tax_preview(
     ]
     engine_taxes = [
         TaxRow(charge_type=t.charge_type, rate=t.rate, tax_amount=t.tax_amount, row_id=t.row_id,
-               included_in_print_rate=t.included_in_print_rate, account_head_id=t.account_head_id)
+               included_in_print_rate=t.included_in_print_rate, account_head_id=t.account_head_id,
+               add_deduct_tax=getattr(t, "add_deduct_tax", "Add"),
+               category=getattr(t, "category", "Total"))
         for t in tax_rows_in
     ]
     totals = calculate_taxes_and_totals(
@@ -344,7 +476,12 @@ async def compute_doc_tax_preview(
             place_of_supply or gst_state_label_of(party.tax_id) or gst_state_label_of(company.tax_id)
         ),
         taxes=[
-            InvoiceTaxLinePreview(description=t.description or "", rate=et.rate, tax_amount=et.tax_amount)
+            InvoiceTaxLinePreview(
+                description=t.description or "", rate=et.rate,
+                # a Deduct (RCM self-assessed liability) reduces the payable → show it negative
+                tax_amount=(-et.tax_amount if getattr(t, "add_deduct_tax", "Add") == "Deduct"
+                            else et.tax_amount),
+            )
             for t, et in zip(tax_rows_in, engine_taxes)
         ],
     )
