@@ -269,3 +269,72 @@ class Gstr2bReconReport(BaseModel):
     to_date: date
     summary: Gstr2bReconSummary
     rows: list[Gstr2bReconRow]
+
+
+# ---------------------------------------------------------------------------
+# TDS returns — Form 26Q (quarterly TDS on non-salary payments) + Form 16A
+# (the TDS certificate for a deductee) — Phase 6.2.
+#
+# Read from submitted Purchase Invoices that carry a TDS withholding category.
+# The deductee PAN is derived from the supplier GSTIN (chars 3-12); TAN is not
+# captured yet (the filer completes it).
+# ---------------------------------------------------------------------------
+
+
+class Tds26qDoc(BaseModel):
+    """One deducted document (Purchase Invoice) behind a 26Q line."""
+
+    voucher: str
+    date: date
+    base_amount: Decimal  # amount paid/credited on which TDS was computed
+    tds: Decimal
+    rate: Decimal
+
+
+class Tds26qRow(BaseModel):
+    """A deductee × section line — the 26Q unit."""
+
+    supplier_id: uuid.UUID | None = None
+    deductee_name: str | None = None
+    pan: str | None = None
+    gstin: str | None = None
+    section: str | None = None  # nature-of-payment code, e.g. "194C"
+    category: str | None = None  # the withholding category name
+    rate: Decimal
+    total_base: Decimal
+    total_tds: Decimal
+    doc_count: int
+    documents: list[Tds26qDoc]
+
+
+class Tds26qSummary(BaseModel):
+    deductee_count: int
+    document_count: int
+    total_base: Decimal
+    total_tds: Decimal
+
+
+class Tds26qReport(BaseModel):
+    deductor_name: str | None = None
+    deductor_gstin: str | None = None
+    deductor_tan: str | None = None  # not captured yet
+    from_date: date
+    to_date: date
+    rows: list[Tds26qRow]
+    summary: Tds26qSummary
+
+
+class Form16A(BaseModel):
+    """The TDS certificate issued to one deductee (supplier) for the period."""
+
+    deductor_name: str | None = None
+    deductor_gstin: str | None = None
+    deductor_tan: str | None = None
+    deductee_name: str | None = None
+    deductee_pan: str | None = None
+    deductee_gstin: str | None = None
+    from_date: date
+    to_date: date
+    sections: list[Tds26qRow]  # section-wise TDS for this deductee
+    total_base: Decimal
+    total_tds: Decimal

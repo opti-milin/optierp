@@ -55,6 +55,11 @@ const routes: RouteRecordRaw[] = [
         name: "gst-returns",
         component: () => import("@/views/compliance/GstReturnsView.vue"),
       },
+      {
+        path: "tds-returns",
+        name: "tds-returns",
+        component: () => import("@/views/compliance/TdsReturnsView.vue"),
+      },
       // Module 02 — Accounts
       {
         path: "sales-invoices",

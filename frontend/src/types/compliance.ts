@@ -152,3 +152,57 @@ export interface Gstr2bReconReport {
   summary: Gstr2bReconSummary;
   rows: Gstr2bReconRow[];
 }
+
+// TDS returns — Form 26Q + Form 16A (Phase 6.2)
+export interface Tds26qDoc {
+  voucher: string;
+  date: string;
+  base_amount: string;
+  tds: string;
+  rate: string;
+}
+
+export interface Tds26qRow {
+  supplier_id: string | null;
+  deductee_name: string | null;
+  pan: string | null;
+  gstin: string | null;
+  section: string | null;
+  category: string | null;
+  rate: string;
+  total_base: string;
+  total_tds: string;
+  doc_count: number;
+  documents: Tds26qDoc[];
+}
+
+export interface Tds26qSummary {
+  deductee_count: number;
+  document_count: number;
+  total_base: string;
+  total_tds: string;
+}
+
+export interface Tds26qReport {
+  deductor_name: string | null;
+  deductor_gstin: string | null;
+  deductor_tan: string | null;
+  from_date: string;
+  to_date: string;
+  rows: Tds26qRow[];
+  summary: Tds26qSummary;
+}
+
+export interface Form16A {
+  deductor_name: string | null;
+  deductor_gstin: string | null;
+  deductor_tan: string | null;
+  deductee_name: string | null;
+  deductee_pan: string | null;
+  deductee_gstin: string | null;
+  from_date: string;
+  to_date: string;
+  sections: Tds26qRow[];
+  total_base: string;
+  total_tds: string;
+}

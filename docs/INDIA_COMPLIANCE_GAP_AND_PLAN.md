@@ -236,8 +236,17 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
   tab (upload the 2B JSON → summary cards + problems-first table). Test `test_gstr2b_recon.py`; verified live
   on the demo (books ITC ₹46,085.96 vs 2B ₹28,003.24 → ₹18,773.12 at risk). **Deferred:** the live portal
   **pull** of 2B (via a GSP — Phase 5).
+- **TDS Form 26Q + Form 16A** — 🟢 **DONE (2026-07-03, slice 6.2).** `app/services/tds_returns.py`
+  (`tds_26q`, `form_16a`) reads submitted Purchase Invoices carrying a TDS `tax_withholding_category`:
+  base = `base_net_total`, tax = `tax_withholding_amount`, **section** (194C/194J/…) parsed from the
+  category name, **deductee PAN derived from the supplier GSTIN** (chars 3-12). **26Q** groups by
+  (deductee × section) with a summary; **16A** is the per-deductee certificate. `GET /api/v1/tds-returns/26q`
+  + `/16a?supplier_id=` (Purchase-Invoice report perm); frontend `views/compliance/TdsReturnsView.vue`
+  (`/tds-returns`, quarter picker, 26Q table + inline Form-16A certificate). Test `test_tds_returns.py`;
+  verified live (194C, Duff Components, PAN BBBBB0001B, ₹50,000 → TDS ₹1,000). **Not captured yet:** the
+  deductor **TAN** (Company has no TAN field — the filer completes it); **TCS 27EQ** is a separate return.
 - Remaining long tail: **Composition** scheme flows, **QRMP**, **SEZ/Export** (with/without payment),
-  **e-commerce TCS u/s 52**, **TDS 26Q + Form 16A** reports, **GST on advances**.
+  **e-commerce TCS u/s 52**, **TCS 27EQ**, **GST on advances**.
 
 ### Out of scope (no module yet)
 - Payroll statutory (PF / ESI / Professional Tax) — needs an HR/Payroll module first.
