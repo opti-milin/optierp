@@ -241,3 +241,70 @@ async def test_no_gst_accounts_leaves_invoice_untaxed(ctx):
     inv = await _invoice(client, headers, cust["id"], fridge)
     assert inv["taxes"] == []
     assert float(inv["grand_total"]) == 15000
+
+
+async def test_free_text_line_with_hsn_gets_gst(ctx):
+    """A hand-typed (free-text) line — no item_id, but its own HSN — still gets GST,
+    and the live preview matches the created invoice."""
+    client, _company, base_headers = ctx
+    _co, headers = await _gst_company(client, base_headers)
+    await _seed_hsn([("84182100", 28, "Taxable")])
+    cust = (await client.post(f"{API}/customers", json={"customer_name": "Walk-in"}, headers=headers)).json()
+    body = {"customer_id": cust["id"], "posting_date": "2026-07-02",
+            "items": [{"item_name": "Custom fabrication", "qty": 1, "rate": "10000",
+                       "hsn_sac_code": "84182100"}]}  # NO item_id
+
+    preview = (await client.post(f"{API}/sales-invoices/preview", json=body, headers=headers)).json()
+    assert float(preview["total_taxes_and_charges"]) == 2800  # 28% of 10000
+
+    r = await client.post(f"{API}/sales-invoices", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    inv = r.json()
+    assert inv["items"][0]["item_id"] is None
+    assert inv["items"][0]["hsn_sac_code"] == "84182100"
+    assert float(inv["net_total"]) == 10000
+    assert float(inv["total_taxes_and_charges"]) == 2800  # preview == create
+    assert {t["description"]: float(t["tax_amount"]) for t in inv["taxes"]} == {"CGST": 1400, "SGST": 1400}
+
+
+async def test_free_text_line_without_hsn_untaxed(ctx):
+    """A free-text line with no HSN carries no GST (no item master to read a rate from)."""
+    client, _company, base_headers = ctx
+    _co, headers = await _gst_company(client, base_headers)
+    await _seed_hsn([("84182100", 28, "Taxable")])
+    cust = (await client.post(f"{API}/customers", json={"customer_name": "Walk-in"}, headers=headers)).json()
+    r = await client.post(
+        f"{API}/sales-invoices",
+        json={"customer_id": cust["id"], "posting_date": "2026-07-02",
+              "items": [{"item_name": "Sundry charge", "qty": 1, "rate": "500"}]},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    inv = r.json()
+    assert inv["taxes"] == []
+    assert float(inv["grand_total"]) == 500
+
+
+async def test_mixed_master_and_free_text_lines(ctx):
+    """A real item line (28%) + a free-text line with a different HSN (5%) — per-line
+    overrides drive each line's tax; the free-text line is no longer dropped."""
+    client, _company, base_headers = ctx
+    _co, headers = await _gst_company(client, base_headers)
+    await _seed_hsn([("84182100", 28, "Taxable"), ("10011100", 5, "Taxable")])
+    wh = await _warehouse(client, headers)
+    fridge = await _item(client, headers, "FRIDGE", wh, hsn_sac_code="84182100")  # 28%
+    cust = (await client.post(f"{API}/customers", json={"customer_name": "Walk-in"}, headers=headers)).json()
+    r = await client.post(
+        f"{API}/sales-invoices",
+        json={"customer_id": cust["id"], "posting_date": "2026-07-02", "items": [
+            {"item_id": fridge["id"], "item_name": "FRIDGE", "qty": 1, "rate": "10000"},       # 28% → 2800
+            {"item_name": "Loose grain", "qty": 1, "rate": "1000", "hsn_sac_code": "10011100"},  # 5% → 50
+        ]},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    inv = r.json()
+    # 2800 (28% of 10000) + 50 (5% of 1000) = 2850 total
+    assert float(inv["total_taxes_and_charges"]) == 2850
+    heads = {t["description"]: float(t["tax_amount"]) for t in inv["taxes"]}
+    assert heads == {"CGST": 1425, "SGST": 1425}  # (1400+25) each side

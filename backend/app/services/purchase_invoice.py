@@ -23,6 +23,7 @@ from app.services import gl
 from app.services.accounts_common import (
     NAMING_SERIES,
     auto_gst_from_items,
+    _line_key,
     base_payable_total,
     compute_doc_tax_preview,
     get_company,
@@ -221,9 +222,9 @@ async def create_purchase_invoice(
             price_list_rate=(item.price_list_rate if item.price_list_rate is not None else item.rate),
             discount_percentage=item.discount_percentage,
             discount_amount=item.discount_amount,
-            item_tax_rate=item_rates.get(item.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(item, idx), {}),
         )
-        for item in payload.items
+        for idx, item in enumerate(payload.items)
     ]
     engine_taxes = [
         TaxRow(

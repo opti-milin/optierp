@@ -139,11 +139,37 @@ async def _hsn_rates(db: AsyncSession, codes: set[str]) -> dict[str, Decimal]:
     return {code: rate for code, (count, rate) in best.items()}
 
 
+def _eff_hsn(item, m) -> str:
+    """The effective HSN for a line: its own ``hsn_sac_code`` override (per-line HSN lookup)
+    if present, else the item master's. Null-safe when there is no item master."""
+    return (getattr(item, "hsn_sac_code", None) or (m.hsn_sac_code if m else None)) or ""
+
+
+def _line_key(item, idx: int):
+    """A per-line key for rate overrides. For a master line this is the ``item_id`` — byte
+    identical to the historical item_id keying, so those lines behave exactly as before. A
+    **free-text** line (``item_id`` is None) gets a synthetic ``("__line__", idx)`` key so
+    several free-text lines never collide on the shared ``None`` key."""
+    iid = getattr(item, "item_id", None)
+    return iid if iid is not None else ("__line__", idx)
+
+
+def _line_treatment(item, m):
+    """``(effective HSN, gst_treatment)`` for a line, or ``None`` if it carries no GST context.
+    A **free-text** line (no item master) is treated as *Taxable* iff it carries its own
+    ``hsn_sac_code`` — so a hand-typed item with an HSN still gets GST — otherwise it is left
+    untaxed (there is no Item row to read a Nil/Exempt/Non-GST treatment from)."""
+    hsn = _eff_hsn(item, m)
+    if m is not None:
+        return hsn, m.gst_treatment
+    return (hsn, "Taxable") if getattr(item, "hsn_sac_code", None) else None
+
+
 async def auto_gst_from_items(
     db: AsyncSession, *, company: Company, party_gstin: str | None,
     place_of_supply: str | None, payload_items: list,
     item_rates: dict[uuid.UUID, dict] | None = None, is_sales: bool = True,
-) -> tuple[list, dict[uuid.UUID, dict]]:
+) -> tuple[list, dict]:
     """Derive GST tax rows + per-item rate overrides from the line items when no
     document-level tax template resolved — the "the item's HSN carries the rate,
     so GST just applies" path.
@@ -164,31 +190,32 @@ async def auto_gst_from_items(
     from app.schemas.accounts import TaxRowIn
 
     item_ids = {i.item_id for i in payload_items if getattr(i, "item_id", None) is not None}
-    if not item_ids:
+    # a free-text line (no item_id) still gets HSN-derived GST if it carries its own HSN
+    free_text_hsn = any(
+        getattr(i, "item_id", None) is None and getattr(i, "hsn_sac_code", None) for i in payload_items
+    )
+    if not item_ids and not free_text_hsn:
         return [], {}
 
-    # line item GST context (HSN + treatment + whether it has its own template)
-    meta = {
-        r.id: r
-        for r in (
-            await db.execute(
-                select(
-                    Item.id, Item.hsn_sac_code, Item.gst_treatment, Item.item_tax_template_id
-                ).where(Item.id.in_(item_ids))
-            )
-        ).all()
-    }
-    # The effective HSN for a line is the line's own hsn_sac_code override (set via
-    # the per-line HSN lookup) if present, else the item master's — so correcting
-    # the HSN on a line re-drives that line's GST.
-    def _eff_hsn(item, m) -> str:
-        return (getattr(item, "hsn_sac_code", None) or (m.hsn_sac_code if m else None)) or ""
+    # line item GST context (HSN + treatment + whether it has its own template), by item id
+    meta: dict = {}
+    if item_ids:
+        meta = {
+            r.id: r
+            for r in (
+                await db.execute(
+                    select(
+                        Item.id, Item.hsn_sac_code, Item.gst_treatment, Item.item_tax_template_id
+                    ).where(Item.id.in_(item_ids))
+                )
+            ).all()
+        }
 
-    taxable_hsns = {
-        _eff_hsn(item, m)
-        for item in payload_items
-        if (m := meta.get(getattr(item, "item_id", None))) is not None and m.gst_treatment == "Taxable"
-    }
+    taxable_hsns = set()
+    for item in payload_items:
+        t = _line_treatment(item, meta.get(getattr(item, "item_id", None)))
+        if t and t[1] == "Taxable":
+            taxable_hsns.add(t[0])
     hsn_rate = await _hsn_rates(db, {h for h in taxable_hsns if h})
 
     # intra vs inter: party state vs company state (GSTIN first, then place of supply)
@@ -202,17 +229,19 @@ async def auto_gst_from_items(
     # Every such line gets an EXPLICIT override (incl. 0), so a Nil/Exempt line
     # never falls back to a non-zero row rate. Template lines keep their own
     # item_tax_rate (computed by the caller) and are left untouched here.
-    totals: dict[uuid.UUID, Decimal] = {}
+    totals: dict = {}
     has_template = False
-    for item in payload_items:
+    for idx, item in enumerate(payload_items):
         m = meta.get(getattr(item, "item_id", None))
-        if m is None:
+        t = _line_treatment(item, m)
+        if t is None:
             continue
-        if m.item_tax_template_id is not None:
+        if m is not None and m.item_tax_template_id is not None:
             has_template = True
             continue
-        rate = hsn_rate.get(_eff_hsn(item, m)) if m.gst_treatment == "Taxable" else None
-        totals[m.id] = rate if rate and rate > 0 else Decimal(0)
+        hsn, treatment = t
+        rate = hsn_rate.get(hsn) if treatment == "Taxable" else None
+        totals[_line_key(item, idx)] = rate if rate and rate > 0 else Decimal(0)
 
     if not any(v > 0 for v in totals.values()) and not has_template:
         return [], {}  # nothing taxable — leave the invoice tax-free
@@ -245,9 +274,10 @@ async def auto_gst_from_items(
         heads = [("CGST", cgst, Decimal("0.5")), ("SGST", sgst, Decimal("0.5"))]
 
     # split each HSN-derived line total across the heads (per-line overrides drive
-    # the amounts; every taxable line has one).
+    # the amounts; every taxable line has one). Keyed by _line_key (item_id for master
+    # lines, a synthetic per-index key for free-text lines).
     item_rate_override = {
-        iid: {acc: total * share for _, acc, share in heads} for iid, total in totals.items()
+        key: {acc: total * share for _, acc, share in heads} for key, total in totals.items()
     }
     # Row rate per head = the common per-head rate when every taxable line agrees
     # (template lines contribute via ``item_rates``), else 0 for a mixed-slab bill.
@@ -255,11 +285,11 @@ async def auto_gst_from_items(
 
     def _row_rate(acc: uuid.UUID) -> Decimal:
         vals = set()
-        for item in payload_items:
-            iid = getattr(item, "item_id", None)
-            r = item_rate_override.get(iid, {}).get(acc)
+        for idx, item in enumerate(payload_items):
+            k = _line_key(item, idx)
+            r = item_rate_override.get(k, {}).get(acc)
             if r is None:
-                r = existing.get(iid, {}).get(acc)
+                r = existing.get(k, {}).get(acc)
             if r and r > 0:
                 vals.add(Decimal(r))
         return next(iter(vals)) if len(vals) == 1 else Decimal(0)
@@ -292,25 +322,27 @@ async def reverse_charge_tax_rows(
     from app.schemas.accounts import TaxRowIn
 
     item_ids = {i.item_id for i in payload_items if getattr(i, "item_id", None) is not None}
-    if not item_ids:
+    free_text_hsn = any(
+        getattr(i, "item_id", None) is None and getattr(i, "hsn_sac_code", None) for i in payload_items
+    )
+    if not item_ids and not free_text_hsn:
         return [], {}
-    meta = {
-        r.id: r
-        for r in (
-            await db.execute(
-                select(Item.id, Item.hsn_sac_code, Item.gst_treatment).where(Item.id.in_(item_ids))
-            )
-        ).all()
-    }
+    meta: dict = {}
+    if item_ids:
+        meta = {
+            r.id: r
+            for r in (
+                await db.execute(
+                    select(Item.id, Item.hsn_sac_code, Item.gst_treatment).where(Item.id.in_(item_ids))
+                )
+            ).all()
+        }
 
-    def _eff_hsn(item, m) -> str:
-        return (getattr(item, "hsn_sac_code", None) or (m.hsn_sac_code if m else None)) or ""
-
-    taxable_hsns = {
-        _eff_hsn(item, m)
-        for item in payload_items
-        if (m := meta.get(getattr(item, "item_id", None))) is not None and m.gst_treatment == "Taxable"
-    }
+    taxable_hsns = set()
+    for item in payload_items:
+        t = _line_treatment(item, meta.get(getattr(item, "item_id", None)))
+        if t and t[1] == "Taxable":
+            taxable_hsns.add(t[0])
     hsn_rate = await _hsn_rates(db, {h for h in taxable_hsns if h})
 
     company_state = _gstin_state(company.tax_id)
@@ -319,13 +351,15 @@ async def reverse_charge_tax_rows(
         party_state = place_of_supply[:2]
     inter = bool(company_state and party_state and company_state != party_state)
 
-    totals: dict[uuid.UUID, Decimal] = {}
-    for item in payload_items:
+    totals: dict = {}
+    for idx, item in enumerate(payload_items):
         m = meta.get(getattr(item, "item_id", None))
-        if m is None:
+        t = _line_treatment(item, m)
+        if t is None:
             continue
-        rate = hsn_rate.get(_eff_hsn(item, m)) if m.gst_treatment == "Taxable" else None
-        totals[m.id] = rate if rate and rate > 0 else Decimal(0)
+        hsn, treatment = t
+        rate = hsn_rate.get(hsn) if treatment == "Taxable" else None
+        totals[_line_key(item, idx)] = rate if rate and rate > 0 else Decimal(0)
     if not any(v > 0 for v in totals.values()):
         return [], {}
 
@@ -350,23 +384,24 @@ async def reverse_charge_tax_rows(
             return [], {}
         out_heads = [("Output CGST (RCM)", cgst, Decimal("0.5")), ("Output SGST (RCM)", sgst, Decimal("0.5"))]
 
-    # Per-item overrides: Input GST carries the full rate (Add); each output head its share (Deduct).
-    item_rate_override: dict[uuid.UUID, dict] = {}
-    for iid, total in totals.items():
+    # Per-item overrides: Input GST carries the full rate (Add); each output head its share
+    # (Deduct). Keyed by _line_key so free-text lines don't collide on None.
+    item_rate_override: dict = {}
+    for key, total in totals.items():
         row = {input_gst: total}
         for _, acc, share in out_heads:
             row[acc] = total * share
-        item_rate_override[iid] = row
+        item_rate_override[key] = row
 
     existing = item_rates or {}
 
     def _row_rate(acc: uuid.UUID) -> Decimal:
         vals = set()
-        for item in payload_items:
-            iid = getattr(item, "item_id", None)
-            r = item_rate_override.get(iid, {}).get(acc)
+        for idx, item in enumerate(payload_items):
+            k = _line_key(item, idx)
+            r = item_rate_override.get(k, {}).get(acc)
             if r is None:
-                r = existing.get(iid, {}).get(acc)
+                r = existing.get(k, {}).get(acc)
             if r and r > 0:
                 vals.add(Decimal(r))
         return next(iter(vals)) if len(vals) == 1 else Decimal(0)
@@ -451,9 +486,9 @@ async def compute_doc_tax_preview(
             qty=i.qty, rate=_rate(i), price_list_rate=_rate(i),
             discount_percentage=getattr(i, "discount_percentage", 0) or 0,
             discount_amount=getattr(i, "discount_amount", 0) or 0,
-            item_tax_rate=item_rates.get(i.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(i, idx), {}),
         )
-        for i in items
+        for idx, i in enumerate(items)
     ]
     engine_taxes = [
         TaxRow(charge_type=t.charge_type, rate=t.rate, tax_amount=t.tax_amount, row_id=t.row_id,

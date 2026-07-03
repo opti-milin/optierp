@@ -21,6 +21,7 @@ from app.schemas.accounts import TaxRowIn
 from app.schemas.selling import QuotationCreate
 from app.services.accounts_common import (
     auto_gst_from_items,
+    _line_key,
     compute_doc_tax_preview,
     get_company,
     get_customer,
@@ -137,9 +138,9 @@ async def create_quotation(
             price_list_rate=(row.price_list_rate if row.price_list_rate is not None else rate),
             discount_percentage=row.discount_percentage,
             discount_amount=row.discount_amount,
-            item_tax_rate=item_rates.get(row.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(row, idx), {}),
         )
-        for row, rate in zip(payload.items, rates)
+        for idx, (row, rate) in enumerate(zip(payload.items, rates))
     ]
     engine_taxes = [
         TaxRow(charge_type=t.charge_type, rate=t.rate, tax_amount=t.tax_amount, row_id=t.row_id,

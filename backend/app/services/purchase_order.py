@@ -25,6 +25,7 @@ from app.schemas.buying import PurchaseOrderCreate
 from app.services import gl  # noqa: F401  (kept for parity; POs post no GL)
 from app.services.accounts_common import (
     auto_gst_from_items,
+    _line_key,
     compute_doc_tax_preview,
     get_company,
     get_supplier,
@@ -233,9 +234,9 @@ async def create_purchase_order(
             price_list_rate=(row.price_list_rate if row.price_list_rate is not None else rate),
             discount_percentage=row.discount_percentage,
             discount_amount=row.discount_amount,
-            item_tax_rate=item_rates.get(row.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(row, idx), {}),
         )
-        for row, rate in zip(payload.items, rates)
+        for idx, (row, rate) in enumerate(zip(payload.items, rates))
     ]
     engine_taxes = [
         TaxRow(

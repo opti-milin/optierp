@@ -294,7 +294,7 @@ function stockQtyLabel(row: Record<string, unknown>): string {
 }
 
 const gridColumns = computed<GridColumn[]>(() => [
-  { key: "item_id", label: "Item / Service", type: "item", required: true },
+  { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" },
   { key: "qty", label: "Quantity", type: "number", align: "right", required: true },
   { key: "uom", label: "UOM", type: "text" },
   { key: "stock_qty", label: "Stock Qty", type: "computed", align: "right", compute: stockQtyLabel },

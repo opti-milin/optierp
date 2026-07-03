@@ -23,6 +23,8 @@ export interface GridColumn {
   compute?: (row: Record<string, unknown>) => string; // type "computed": read-only display
   showIfKey?: string; // render the control only when row[showIfKey] is truthy
   requiredFor?: (row: Record<string, unknown>) => number; // type "serials": required count
+  freeText?: boolean; // type "item": allow typing an ad-hoc item (item_id stays null)
+  nameKey?: string; // type "item" + freeText: row key to store the typed name (default "item_name")
 }
 
 type Row = Record<string, unknown>;
@@ -109,6 +111,52 @@ function patch(index: number, key: string, value: unknown): void {
     "update:modelValue",
     props.modelValue.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
   );
+}
+// patch several keys of one row in a SINGLE emit (two patch() calls in one handler
+// would race — the second reads the pre-update modelValue and clobbers the first).
+function patchMany(index: number, changes: Record<string, unknown>): void {
+  emit(
+    "update:modelValue",
+    props.modelValue.map((r, i) => (i === index ? { ...r, ...changes } : r)),
+  );
+}
+
+// --- free-text item combobox: type an ad-hoc item OR pick a master one ---------
+// Mirrors the HSN typeahead: the cell shows the picked item's label / the typed
+// free-text name; while focused it becomes a search box over itemOptions. Typing
+// stores the name and clears item_id (free text); picking sets item_id + prefills.
+const itemBox = ref<{ index: number; query: string } | null>(null);
+
+function itemLabelOf(value: string): string {
+  return props.itemOptions.find((o) => o.value === value)?.label ?? "";
+}
+function itemCellValue(index: number, col: GridColumn, row: Row): string {
+  if (itemBox.value?.index === index) return itemBox.value.query;
+  const id = row[col.key] as string | null;
+  if (id) return itemLabelOf(id);
+  return (row[col.nameKey ?? "item_name"] as string) ?? "";
+}
+function itemSuggestions(): { value: string; label: string }[] {
+  const q = (itemBox.value?.query ?? "").trim().toLowerCase();
+  const opts = props.itemOptions;
+  return (q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts).slice(0, 12);
+}
+function onItemFocus(index: number, col: GridColumn, row: Row): void {
+  itemBox.value = { index, query: itemCellValue(index, col, row) };
+}
+function onItemText(index: number, col: GridColumn, event: Event): void {
+  const q = (event.target as HTMLInputElement).value;
+  itemBox.value = { index, query: q };
+  // typing = free text: store the name + clear the master link in ONE emit
+  patchMany(index, { [col.nameKey ?? "item_name"]: q, [col.key]: null });
+}
+function pickItem(index: number, col: GridColumn, opt: { value: string; label: string }): void {
+  patch(index, col.key, opt.value);
+  itemBox.value = null;
+  emit("item-change", index); // parent resolves item_name / rate / uom / hsn
+}
+function closeItemBox(): void {
+  window.setTimeout(() => { itemBox.value = null; }, 150);
 }
 
 // --- "hsn" column: per-line HSN/SAC typeahead over the HSN master ------------
@@ -247,15 +295,42 @@ function confirmMulti(): void {
               >
                 Serials ({{ serialCount(row, col) }}/{{ serialRequired(row, col) }})
               </button>
-              <select
-                v-else-if="col.type === 'item'"
-                class="form-input py-1.5"
-                :value="(row[col.key] as string) ?? ''"
-                @change="onCell(i, col, $event)"
-              >
-                <option value="" disabled>Select item…</option>
-                <option v-for="o in itemOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <template v-else-if="col.type === 'item'">
+                <!-- master-only picker (default) -->
+                <select
+                  v-if="!col.freeText"
+                  class="form-input py-1.5"
+                  :value="(row[col.key] as string) ?? ''"
+                  @change="onCell(i, col, $event)"
+                >
+                  <option value="" disabled>Select item…</option>
+                  <option v-for="o in itemOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+                <!-- free-text combobox: type an ad-hoc item OR pick a master one -->
+                <div v-else class="relative min-w-[12rem]">
+                  <input
+                    :value="itemCellValue(i, col, row)"
+                    class="form-input py-1.5"
+                    placeholder="Type or pick an item…"
+                    @focus="onItemFocus(i, col, row)"
+                    @input="onItemText(i, col, $event)"
+                    @blur="closeItemBox"
+                  />
+                  <ul
+                    v-if="itemBox && itemBox.index === i && itemSuggestions().length"
+                    class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
+                  >
+                    <li
+                      v-for="o in itemSuggestions()"
+                      :key="o.value"
+                      class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
+                      @mousedown.prevent="pickItem(i, col, o)"
+                    >
+                      {{ o.label }}
+                    </li>
+                  </ul>
+                </div>
+              </template>
               <DateField
                 v-else-if="col.type === 'date'"
                 :model-value="(row[col.key] as string) ?? ''"
