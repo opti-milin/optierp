@@ -310,12 +310,14 @@ function confirmMulti(): void {
                 <div v-else class="relative min-w-[12rem]">
                   <input
                     :value="itemCellValue(i, col, row)"
-                    class="form-input py-1.5"
+                    class="form-input py-1.5 pr-7"
                     placeholder="Type or pick an item…"
                     @focus="onItemFocus(i, col, row)"
                     @input="onItemText(i, col, $event)"
                     @blur="closeItemBox"
                   />
+                  <!-- dropdown affordance: signals this is a picker (click focuses the input → opens the list) -->
+                  <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400">▾</span>
                   <ul
                     v-if="itemBox && itemBox.index === i && itemSuggestions().length"
                     class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
