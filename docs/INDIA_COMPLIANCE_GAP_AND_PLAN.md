@@ -6,12 +6,12 @@ bills**, **reverse charge**, **GSTR-2B reconciliation**, and the TDS/TCS already
 covering the full GST spectrum** (regular + composition, monthly + QRMP, B2B/B2C, SEZ/export, e-commerce
 TCS), **configurable per tenant**, and with **live portal/GSP automation** as a planned phase. Modelled on
 ERPNext + the Frappe **India Compliance** app.
-**Status:** 🟢 **building — Phases 0–5 + 6.1/6.2/6.3 done (2026-07-03).** HSN + GST-invoice completeness, GST
+**Status:** 🟢 **building — Phases 0–5 + 6.1/6.2/6.3/6.4 done (2026-07-03).** HSN + GST-invoice completeness, GST
 Settings, GSTR-1/3B returns (+JSON), reverse-charge posting, e-invoice/e-way-bill JSON, a pluggable GSP
-provider abstraction (JSON fallback), GSTR-2B reconciliation, TDS 26Q/16A, and now **Composition (CMP-08/
-GSTR-4), QRMP + IFF, e-commerce TCS u/s 52 (Table 14), and GST-on-advances (Table 11)** are built + tested +
-live-verified. Remaining: the concrete live GSP adapter (needs creds) and a smaller long tail (SEZ/export,
-TCS 27EQ, e-commerce operator GSTR-8/9(5), deductor TAN).
+provider abstraction (JSON fallback), GSTR-2B reconciliation, TDS 26Q/16A, **Composition (CMP-08/GSTR-4), QRMP +
+IFF, e-commerce TCS u/s 52 (Table 14), GST-on-advances (Table 11), and SEZ/Export zero-rated (Table 6A + 3.1(b))**
+are built + tested + live-verified. Remaining: the concrete live GSP adapter (needs creds) and a smaller long tail
+(TCS 27EQ, e-commerce operator GSTR-8/9(5), deductor TAN, deemed-export Table 6C).
 **Designed:** 2026-06-23. **Built:** 2026-06-28 → 2026-07-03.
 
 > **SaaS framing (owner, 2026-06-23):** this is a product for *many* MSMEs, so we **cannot permanently skip**
@@ -269,8 +269,20 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
   **reverses** it proportionally (capped at the remaining tax) — posted under the payment voucher so cancel
   auto-reverses both legs and the control **nets to zero**. `_load_advances` → GSTR-1 **Table 11A/11B** + `at`/`txpd`
   JSON; GSTR-3B **3.1(a)** adds the net advance (11A−11B) so 3B ties to Table 11. Test `test_gst_advances.py`.
-- Remaining long tail: **SEZ/Export** (with/without payment), **TCS 27EQ**, **e-commerce OPERATOR** (GSTR-8) & u/s
-  **9(5)**, and the deductor **TAN** capture.
+- **SEZ / Export (zero-rated u/s 16 IGST Act)** — 🟢 **DONE (2026-07-03, slice 6.4).** Sales invoice gains
+  `gst_category` (Regular|SEZ|Export|Deemed Export) + `export_with_payment` + shipping-bill/port (migration
+  **0064**). SEZ/Export are **zero-rated**: WITHOUT payment (LUT/bond) → no output GST; WITH payment → **IGST at
+  the HSN rate, always inter-state** (even a same-state SEZ, deemed inter-state u/s 7(5)), via `force_inter` in
+  `auto_gst_from_items`, bypassing the domestic template — hooked into create AND the live preview so preview==create.
+  **Deemed Export is taxed normally** (not zero-rated). GSTR-1: exports → new **Table 6A** (`exp`, EXPWP/EXPWOP +
+  shipping bill/port), SEZ/DE in **B2B** tagged `inv_typ` SEZWP/SEZWOP/DE, export credit notes → CDNUR EXPWP/EXPWOP;
+  portal JSON emits `exp` + inv_typ. GSTR-3B: zero-rated docs fold into **3.1(b)** (IGST only) via a document-level
+  branch and are excluded from 3.1(a)/(c)/(e)/3.2; with-payment IGST adds to net tax payable. Frontend: invoice-form
+  GST-category selector + LUT/with-IGST toggle + shipping bill/port (create+preview+read-back), and a GSTR-1 "6A —
+  Exports" section + B2B Type column. Test `test_gst_sez_export.py`; verified live (form fields + GSTR-1 load, 0
+  console errors). Mapped + verified by a 5-agent Workflow.
+- Remaining long tail: **TCS 27EQ**, **e-commerce OPERATOR** (GSTR-8) & u/s **9(5)**, the deductor **TAN** capture,
+  and deemed-export **Table 6C** reporting nuances.
 
 ### Out of scope (no module yet)
 - Payroll statutory (PF / ESI / Professional Tax) — needs an HR/Payroll module first.
