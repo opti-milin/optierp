@@ -4,12 +4,19 @@
 // bespoke API: GET /companies/{id}/chart-of-accounts, POST /accounts,
 // PATCH /accounts/{id}. A rename cascades the ltree path server-side.
 
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { api } from "@/api/client";
 import { useAccountsStore } from "@/stores/accounts";
 import type { AccountNode, ErrorEnvelope } from "@/types/core";
 
 const store = useAccountsStore();
+// The add/edit form renders above the (scrollable) tree; when the clicked row is
+// scrolled down, the form would otherwise open off-screen above the viewport — so
+// bring it into view on open.
+const formEl = ref<HTMLElement | null>(null);
+function revealForm(): void {
+  nextTick(() => formEl.value?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 const error = ref<ErrorEnvelope | null>(null);
 const loading = ref(false);
@@ -97,6 +104,7 @@ function openAddChild(parent: AccountNode): void {
   resetForm();
   showForm.value = true;
   expanded.value = new Set(expanded.value).add(parent.id);
+  revealForm();
 }
 
 function openEdit(node: AccountNode): void {
@@ -112,6 +120,7 @@ function openEdit(node: AccountNode): void {
     disabled: !!node.disabled,
   };
   showForm.value = true;
+  revealForm();
 }
 
 const parentName = computed(() => accountsById.value.get(parentId.value)?.account_name ?? "");
@@ -182,7 +191,8 @@ onMounted(load);
 
     <form
       v-if="showForm"
-      class="mb-6 rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+      ref="formEl"
+      class="mb-6 rounded-lg border border-gray-200 bg-white p-5 shadow-sm scroll-mt-4"
       @submit.prevent="save"
     >
       <p class="mb-3 text-sm text-gray-600">
