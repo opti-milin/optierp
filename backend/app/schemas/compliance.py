@@ -188,6 +188,21 @@ class Gstr1Eco(BaseModel):
     invoice_count: int
 
 
+class Gstr1Advance(BaseModel):
+    """GSTR-1 Table 11 — advances received (11A) or adjusted (11B) for a filing period,
+    consolidated by place-of-supply × rate. The advance is treated as GST-inclusive; the
+    net taxable value backing the tax is reported alongside the CGST/SGST/IGST."""
+
+    place_of_supply: str
+    supply_type: str  # INTRA | INTER
+    rate: Decimal
+    gross_advance: Decimal  # net taxable value backing the tax
+    cgst: Decimal
+    sgst: Decimal
+    igst: Decimal
+    cess: Decimal
+
+
 class Gstr1Totals(BaseModel):
     taxable_value: Decimal
     cgst: Decimal
@@ -212,6 +227,8 @@ class Gstr1Report(BaseModel):
     hsn: list[Gstr1Hsn]
     docs: list[Gstr1DocSummary]
     eco: list[Gstr1Eco] = []  # Table 14(a): supplies through e-commerce operators (u/s 52)
+    advances: list[Gstr1Advance] = []  # Table 11A: advances received (tax on service advances)
+    advances_adjusted: list[Gstr1Advance] = []  # Table 11B: advances adjusted to invoices
     totals: Gstr1Totals
 
 

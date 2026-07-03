@@ -29,12 +29,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.gst_states import gst_state_label_of, state_code_of
-from app.models.accounts import Account, PurchaseInvoice, SalesInvoice
+from app.models.accounts import AdvanceGstAdjustment, Account, PaymentEntry, PurchaseInvoice, SalesInvoice
 from app.models.core import Company
+from app.models.selling import Customer
 from app.models.stock import Item
 from app.schemas.compliance import (
     Cmp08Report,
     CompositionTaxRow,
+    Gstr1Advance,
     Gstr1B2B,
     Gstr1B2CS,
     Gstr1DocSummary,
@@ -306,6 +308,104 @@ def _eco_table14(docs: list[_Doc]) -> list[Gstr1Eco]:
     ]
 
 
+def _advance_rows(agg: dict) -> list[Gstr1Advance]:
+    """Build sorted Table-11 rows from a {(pos, supply_type, rate): {"s", "taxable"}} map."""
+    return [
+        Gstr1Advance(
+            place_of_supply=pos,
+            supply_type=sply,
+            rate=rate,
+            gross_advance=_q(e["taxable"]),
+            cgst=_q(e["s"].cgst),
+            sgst=_q(e["s"].sgst),
+            igst=_q(e["s"].igst),
+            cess=_q(e["s"].cess),
+        )
+        for (pos, sply, rate), e in sorted(agg.items(), key=lambda kv: (kv[0][0], str(kv[0][2])))
+    ]
+
+
+async def _load_advances(
+    db: AsyncSession, company: Company, from_date: date, to_date: date
+) -> tuple[list[Gstr1Advance], list[Gstr1Advance]]:
+    """GSTR-1 Table 11: (11A advances received, 11B advances adjusted) for the window.
+
+    11A comes from submitted Receive Payment Entries carrying advance GST; 11B from the
+    AdvanceGstAdjustment ledger (joined to a live payment so a cancelled advance drops out).
+    Both are consolidated by place-of-supply × rate; the advance is GST-inclusive, so the
+    net taxable value backing the tax = tax × 100 / rate."""
+    company_state = gst_state_label_of(company.tax_id) or ""
+
+    pes = (
+        (
+            await db.execute(
+                select(PaymentEntry).where(
+                    PaymentEntry.company_id == company.id,
+                    PaymentEntry.payment_type == "Receive",
+                    PaymentEntry.docstatus == 1,
+                    PaymentEntry.advance_gst_amount > 0,
+                    PaymentEntry.posting_date >= from_date,
+                    PaymentEntry.posting_date <= to_date,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    cust_ids = {p.party_id for p in pes if p.party_id}
+    cust_gstin = (
+        dict((await db.execute(select(Customer.id, Customer.tax_id).where(Customer.id.in_(cust_ids)))).all())
+        if cust_ids
+        else {}
+    )
+    received: dict[tuple, dict] = {}
+    for p in pes:
+        rate = Decimal(p.advance_gst_rate or 0)
+        if rate <= ZERO:
+            continue
+        inter = bool(p.advance_is_inter_state)
+        pos = gst_state_label_of(cust_gstin.get(p.party_id)) or company_state
+        amt = Decimal(p.advance_gst_amount)
+        if inter:
+            s = _Split(igst=amt)
+        else:
+            c = _q(amt / 2)
+            s = _Split(cgst=c, sgst=amt - c)
+        key = (pos, "INTER" if inter else "INTRA", _q(rate))
+        e = received.setdefault(key, {"s": _Split(), "taxable": ZERO})
+        e["s"].add(s)
+        e["taxable"] += amt * 100 / rate
+
+    adjs = (
+        (
+            await db.execute(
+                select(AdvanceGstAdjustment)
+                .join(PaymentEntry, PaymentEntry.id == AdvanceGstAdjustment.payment_entry_id)
+                .where(
+                    AdvanceGstAdjustment.company_id == company.id,
+                    AdvanceGstAdjustment.posting_date >= from_date,
+                    AdvanceGstAdjustment.posting_date <= to_date,
+                    PaymentEntry.docstatus == 1,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    adjusted: dict[tuple, dict] = {}
+    for a in adjs:
+        rate = Decimal(a.rate or 0)
+        inter = bool(a.igst and a.igst > 0)
+        pos = a.place_of_supply or company_state
+        tax = Decimal(a.cgst) + Decimal(a.sgst) + Decimal(a.igst)
+        key = (pos, "INTER" if inter else "INTRA", _q(rate))
+        e = adjusted.setdefault(key, {"s": _Split(), "taxable": ZERO})
+        e["s"].add(_Split(cgst=Decimal(a.cgst), sgst=Decimal(a.sgst), igst=Decimal(a.igst), cess=Decimal(a.cess)))
+        e["taxable"] += (tax * 100 / rate) if rate else ZERO
+
+    return _advance_rows(received), _advance_rows(adjusted)
+
+
 def _to_invoice(d: _Doc) -> Gstr1Invoice:
     return Gstr1Invoice(
         invoice_id=d.inv.id,
@@ -380,6 +480,7 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
     hsn = _hsn_summary(docs)
     report_docs = _doc_summary(docs)
     eco = _eco_table14(docs)
+    advances, advances_adjusted = await _load_advances(db, company, from_date, to_date)
 
     tx = _Split()
     taxable_total = ZERO
@@ -402,6 +503,8 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
         hsn=hsn,
         docs=report_docs,
         eco=eco,
+        advances=advances,
+        advances_adjusted=advances_adjusted,
         totals=Gstr1Totals(
             taxable_value=_q(taxable_total),
             cgst=_q(tx.cgst),
@@ -469,6 +572,19 @@ def _doc_summary(docs: list[_Doc]) -> list[Gstr1DocSummary]:
     return out
 
 
+def _sum_advances(rows: list[Gstr1Advance]) -> tuple[_Split, Decimal]:
+    """Aggregate Table-11 rows into a (_Split, net taxable value)."""
+    s = _Split()
+    taxable = ZERO
+    for r in rows:
+        s.cgst += r.cgst
+        s.sgst += r.sgst
+        s.igst += r.igst
+        s.cess += r.cess
+        taxable += r.gross_advance
+    return s, taxable
+
+
 async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date: date) -> Gstr3bReport:
     """GSTR-3B summary: §3.1 outward tax liability, §3.2 inter-state to unregistered,
     §4 eligible ITC (from Purchase Invoices)."""
@@ -495,6 +611,18 @@ async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date
                     e = inter_unreg.setdefault(d.pos, {"val": ZERO, "igst": ZERO})
                     e["val"] += val
                     e["igst"] += s.igst
+
+    # 3.1(a) also carries the NET tax on advances: advances received this period add
+    # liability, advances adjusted (against invoices that now carry their own output GST)
+    # subtract it — so the tax is never counted twice. GSTR-3B then ties to GSTR-1 Table 11.
+    advances, advances_adjusted = await _load_advances(db, company, from_date, to_date)
+    adv_recv, adv_recv_val = _sum_advances(advances)
+    adv_adj, adv_adj_val = _sum_advances(advances_adjusted)
+    taxable.cgst += adv_recv.cgst - adv_adj.cgst
+    taxable.sgst += adv_recv.sgst - adv_adj.sgst
+    taxable.igst += adv_recv.igst - adv_adj.igst
+    taxable.cess += adv_recv.cess - adv_adj.cess
+    taxable_value += adv_recv_val - adv_adj_val
 
     # 3.1(d) inward reverse charge + §4 ITC — from purchase invoices.
     rcm, itc_rcm, itc_other = await _purchase_itc(db, company, from_date, to_date)
@@ -998,6 +1126,33 @@ def gstr1_json(report: Gstr1Report) -> dict:
         out["hsn"] = hsn
     if doc_issue["doc_det"]:
         out["doc_issue"] = doc_issue
+    def _adv(rows: list[Gstr1Advance]) -> list[dict]:
+        by_pos: dict[str, list[Gstr1Advance]] = defaultdict(list)
+        for r in rows:
+            by_pos[r.place_of_supply[:2]].append(r)
+        return [
+            {
+                "pos": pos,
+                "sply_ty": rs[0].supply_type,
+                "itms": [
+                    {
+                        "rt": float(r.rate),
+                        "ad_amt": float(r.gross_advance),
+                        "iamt": float(r.igst),
+                        "camt": float(r.cgst),
+                        "samt": float(r.sgst),
+                        "csamt": float(r.cess),
+                    }
+                    for r in rs
+                ],
+            }
+            for pos, rs in sorted(by_pos.items())
+        ]
+
+    if report.advances:
+        out["at"] = _adv(report.advances)  # Table 11A — advances received
+    if report.advances_adjusted:
+        out["txpd"] = _adv(report.advances_adjusted)  # Table 11B — advances adjusted
     if report.eco:
         # Table 14(a) — supplies through e-commerce operators, TCS collected u/s 52.
         out["supeco"] = {

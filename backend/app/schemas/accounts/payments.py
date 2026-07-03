@@ -36,6 +36,10 @@ class PaymentEntryCreate(BaseModel):
     reference_no: str | None = None
     reference_date: date | None = None
     remarks: str | None = None
+    # GST on advances (Receive): a bare advance has no HSN, so the supply type + rate are
+    # explicit. Only a "Services" advance at a positive rate books GST (Regular dealers).
+    advance_supply_type: str | None = None  # Goods | Services
+    advance_gst_rate: Decimal | None = None
     references: list[PaymentReferenceIn] = Field(default_factory=list)
     deductions: list[PaymentDeductionIn] = Field(default_factory=list)
 
@@ -62,6 +66,10 @@ class PaymentEntryResponse(DocumentMeta):
     received_amount: Decimal
     total_allocated_amount: Decimal
     unallocated_amount: Decimal
+    advance_gst_amount: Decimal = Decimal("0")
+    advance_gst_outstanding: Decimal = Decimal("0")
+    advance_supply_type: str | None = None
+    advance_gst_rate: Decimal | None = None
     reference_no: str | None
     reference_date: date | None
     clearance_date: date | None

@@ -29,6 +29,7 @@ from app.schemas.accounts import PaymentEntryCreate
 from app.services import gl
 from app.services.accounts_common import (
     NAMING_SERIES,
+    advance_gst_from_amount,
     get_company,
     get_customer,
     get_payable_account,
@@ -117,6 +118,35 @@ async def create_payment_entry(
     if total_allocated > base_paid:
         raise ValidationError("Total allocated exceeds the paid amount", field="references")
 
+    # GST on advances received: the unallocated remainder of a Receive is an on-account
+    # advance. For a SERVICE advance (goods advances are exempt per Notf. 66/2017), a Regular
+    # dealer books inclusive output GST on it — a bare advance has no HSN, so the rate/supply
+    # type are explicit. Suppressed for Composition (they issue a Bill of Supply).
+    unallocated = base_paid - total_allocated - total_deductions
+    adv_gst_amount = ZERO
+    adv_gst_rate = None
+    adv_inter = False
+    adv_supply_type = payload.advance_supply_type
+    if payload.payment_type == "Receive" and unallocated > ZERO and payload.advance_gst_rate:
+        from app.services.gst_settings import get_gst_settings
+
+        settings = await get_gst_settings(db, company.id)
+        supply_type = payload.advance_supply_type or ("Services" if settings.collect_gst_on_advances else None)
+        if (
+            settings.registration_type != "Composition"
+            and settings.collect_gst_on_advances
+            and supply_type == "Services"
+        ):
+            adv = await advance_gst_from_amount(
+                db, company=company, party_gstin=customer.tax_id, place_of_supply=None,
+                advance_amount=unallocated, rate=payload.advance_gst_rate,
+            )
+            if adv is not None:
+                adv_gst_amount = adv.total
+                adv_gst_rate = Decimal(payload.advance_gst_rate)
+                adv_inter = adv.inter
+                adv_supply_type = "Services"
+
     name = await get_next_name(db, NAMING_SERIES["Payment Entry"], company.id)
     entry = PaymentEntry(
         id=uuid.uuid4(),
@@ -133,7 +163,12 @@ async def create_payment_entry(
         source_exchange_rate=payload.source_exchange_rate,
         target_exchange_rate=payload.target_exchange_rate,
         total_allocated_amount=total_allocated,
-        unallocated_amount=base_paid - total_allocated - total_deductions,
+        unallocated_amount=unallocated,
+        advance_supply_type=adv_supply_type,
+        advance_gst_rate=adv_gst_rate,
+        advance_gst_amount=adv_gst_amount,
+        advance_is_inter_state=adv_inter,
+        advance_gst_outstanding=adv_gst_amount,
         mode_of_payment_id=payload.mode_of_payment_id,
         reference_no=payload.reference_no,
         reference_date=payload.reference_date,
@@ -266,6 +301,32 @@ def _build_gl_rows(entry: PaymentEntry) -> list[gl.GLRow]:
     return rows
 
 
+async def _advance_gst_gl_rows(db: AsyncSession, entry: PaymentEntry) -> list[gl.GLRow]:
+    """The GST-on-advance leg booked at receipt: Dr 'GST on Advances' control / Cr Output GST.
+    Self-balancing, so the voucher stays balanced (Dr bank still == Cr receivable). Recomputes
+    from the entry's unallocated advance (== the amount at submit) so create == submit."""
+    if not entry.advance_gst_amount or entry.advance_gst_amount <= ZERO:
+        return []
+    company = await get_company(db, entry.company_id)
+    customer = await get_customer(db, entry.party_id, entry.company_id)
+    adv = await advance_gst_from_amount(
+        db, company=company, party_gstin=customer.tax_id, place_of_supply=None,
+        advance_amount=entry.unallocated_amount, rate=entry.advance_gst_rate,
+    )
+    if adv is None:
+        raise ValidationError(
+            "GST on the advance was expected but its accounts (a 'GST on Advances' control "
+            "and Output GST) could not be resolved — create them and retry.",
+            field="advance_gst_rate",
+        )
+    rows = [gl.GLRow(account_id=adv.control_id, debit=adv.total, remarks="GST on advance received")]
+    rows += [
+        gl.GLRow(account_id=acc, credit=amt, remarks="Output GST on advance")
+        for acc, amt in adv.output_rows
+    ]
+    return rows
+
+
 async def _apply_allocations(
     db: AsyncSession, entry: PaymentEntry, *, direction: int
 ) -> None:
@@ -291,6 +352,8 @@ async def submit_payment_entry(
                 f"{invoice.outstanding_amount} on {invoice.name}"
             )
 
+    rows = _build_gl_rows(entry)
+    rows += await _advance_gst_gl_rows(db, entry)
     await gl.make_gl_entries(
         db,
         company_id=entry.company_id,
@@ -298,7 +361,7 @@ async def submit_payment_entry(
         voucher_id=entry.id,
         voucher_no=entry.name,
         posting_date=entry.posting_date,
-        rows=_build_gl_rows(entry),
+        rows=rows,
         user_id=user.id,
         remarks=entry.remarks,
     )

@@ -1,6 +1,7 @@
 """Shared helpers for Module 02 document services."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
@@ -424,6 +425,81 @@ async def reverse_charge_tax_rows(
         for label, acc, _ in out_heads
     ]
     return tax_rows, item_rate_override
+
+
+@dataclass
+class AdvanceGst:
+    """Inclusive GST computed on a bare advance amount, with the GL heads to post it."""
+
+    control_id: uuid.UUID  # 'GST on Advances' control (Dr at receipt, Cr on adjustment)
+    output_rows: list  # [(output-head account id, amount), ...] — Cr at receipt
+    inter: bool
+    cgst: Decimal
+    sgst: Decimal
+    igst: Decimal
+    total: Decimal
+
+
+async def advance_gst_from_amount(
+    db: AsyncSession, *, company: Company, party_gstin: str | None,
+    place_of_supply: str | None, advance_amount: Decimal, rate: Decimal, inclusive: bool = True,
+) -> "AdvanceGst | None":
+    """GST on a lump-sum advance (a bare advance has no HSN, so ``rate`` is explicit).
+
+    Treated as **GST-inclusive** (the money received already contains the tax) — so
+    ``tax = amount × rate / (100 + rate)`` — split CGST/SGST intra-state or IGST inter-state.
+    Returns ``None`` (book nothing) when the rate is zero or the 'GST on Advances' control /
+    Output GST accounts can't be resolved — the same fail-safe as the auto-GST engine."""
+    from app.models.accounts import Account
+
+    rate = Decimal(rate or 0)
+    if rate <= 0 or advance_amount <= 0:
+        return None
+
+    company_state = _gstin_state(company.tax_id)
+    party_state = _gstin_state(party_gstin)
+    if party_state is None and place_of_supply and place_of_supply[:2].isdigit():
+        party_state = place_of_supply[:2]
+    inter = bool(company_state and party_state and company_state != party_state)
+
+    async def _tax_account(*needles: str) -> uuid.UUID | None:
+        stmt = select(Account.id).where(Account.company_id == company.id, Account.account_type == "Tax")
+        for n in needles:
+            stmt = stmt.where(Account.account_name.ilike(f"%{n}%"))
+        return await db.scalar(stmt.order_by(Account.account_name).limit(1))
+
+    # control = a leaf account named like 'GST on Advances' (holds the tax until the invoice clears it)
+    control_id = await db.scalar(
+        select(Account.id)
+        .where(
+            Account.company_id == company.id,
+            Account.is_group.is_(False),
+            Account.account_name.ilike("%advance%"),
+            Account.account_name.ilike("%gst%"),
+        )
+        .order_by(Account.account_name)
+        .limit(1)
+    )
+    if control_id is None:
+        return None
+
+    total = (advance_amount * rate / (100 + rate)) if inclusive else (advance_amount * rate / 100)
+    total = total.quantize(Decimal("0.01"))
+    if total <= 0:
+        return None
+
+    if inter:
+        igst_id = await _tax_account("Output", "IGST") or await _tax_account("IGST")
+        if igst_id is None:
+            return None
+        return AdvanceGst(control_id, [(igst_id, total)], True, ZERO, ZERO, total, total)
+    cgst_id = await _tax_account("Output", "CGST") or await _tax_account("CGST")
+    sgst_id = await _tax_account("Output", "SGST") or await _tax_account("SGST")
+    if cgst_id is None or sgst_id is None:
+        return None
+    cgst = (total / 2).quantize(Decimal("0.01"))
+    sgst = total - cgst
+    return AdvanceGst(control_id, [(cgst_id, cgst), (sgst_id, sgst)], False, cgst, sgst, ZERO, total)
 
 
 async def compute_doc_tax_preview(

@@ -56,6 +56,20 @@ class PaymentEntry(Base, DocumentMixin, CompanyScopedMixin, VoucherMixin):
     reference_date: Mapped[date | None] = mapped_column(Date)
     clearance_date: Mapped[date | None] = mapped_column(Date)  # bank reconciliation
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="Draft", server_default=text("'Draft'"))
+    # GST on advances received (services only, Regular dealers). Booked inclusive at
+    # receipt (Dr 'GST on Advances' control / Cr Output GST) and reversed proportionally as
+    # the advance is adjusted to invoices — so the control account nets to zero.
+    advance_supply_type: Mapped[str | None] = mapped_column(String(20))  # Goods | Services
+    advance_gst_rate: Mapped[Decimal | None] = mapped_column(Numeric(9, 4))
+    advance_gst_amount: Mapped[Decimal] = mapped_column(
+        Numeric(21, 6), nullable=False, default=0, server_default=text("0")
+    )
+    advance_is_inter_state: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    advance_gst_outstanding: Mapped[Decimal] = mapped_column(
+        Numeric(21, 6), nullable=False, default=0, server_default=text("0")
+    )
 
     references: Mapped[list["PaymentEntryReference"]] = relationship(
         back_populates="payment_entry", cascade="all, delete-orphan", order_by="PaymentEntryReference.idx"
@@ -99,6 +113,30 @@ class PaymentEntryDeduction(Base, DocumentMixin):
     description: Mapped[str | None] = mapped_column(String(300))
 
     payment_entry: Mapped[PaymentEntry] = relationship(back_populates="deductions")
+
+
+class AdvanceGstAdjustment(Base, DocumentMixin, CompanyScopedMixin):
+    """One advance-to-invoice adjustment of GST-on-advance (GSTR-1 Table 11B source).
+
+    Written by payment reconciliation when a GST-bearing advance is applied to an invoice:
+    records the tax reversed (Dr Output GST / Cr 'GST on Advances' control) so Table 11B and
+    the GSTR-3B 3.1(a) netting are queryable per period. The invoice keeps its own full Output
+    GST; this reversal is what stops the advance tax being counted twice."""
+
+    __tablename__ = "advance_gst_adjustments"
+
+    payment_entry_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payment_entries.id", ondelete="CASCADE"), nullable=False
+    )
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    posting_date: Mapped[date] = mapped_column(Date, nullable=False)
+    place_of_supply: Mapped[str | None] = mapped_column(String(64))
+    rate: Mapped[Decimal] = mapped_column(Numeric(9, 4), nullable=False, default=0, server_default=text("0"))
+    base: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
+    cgst: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
+    sgst: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
+    igst: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
+    cess: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
 
 
 class BankTransaction(Base, DocumentMixin, CompanyScopedMixin):

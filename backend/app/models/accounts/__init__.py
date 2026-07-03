@@ -55,6 +55,7 @@ from app.models.accounts.masters import (
     TaxWithholdingCategory,
 )
 from app.models.accounts.payments import (
+    AdvanceGstAdjustment,
     BankTransaction,
     PaymentEntry,
     PaymentEntryDeduction,
@@ -89,6 +90,7 @@ __all__ = [
     "SalesInvoice", "SalesInvoiceItem", "SalesInvoiceTax",
     "PurchaseInvoice", "PurchaseInvoiceItem", "PurchaseInvoiceTax",
     "PaymentEntry", "PaymentEntryReference", "PaymentEntryDeduction", "BankTransaction",
+    "AdvanceGstAdjustment",
     "Budget", "BudgetAccount", "PeriodClosingVoucher",
     "Subscription", "SubscriptionPlan", "SubscriptionPlanDetail",
     "BILLING_INTERVALS", "GENERATE_AT", "SUBSCRIPTION_STATUSES",

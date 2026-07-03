@@ -23,7 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
 from app.core.security import CurrentUser
-from app.models.accounts import PaymentEntry, PaymentEntryReference, PurchaseInvoice, SalesInvoice
+from app.models.accounts import (
+    AdvanceGstAdjustment,
+    PaymentEntry,
+    PaymentEntryReference,
+    PurchaseInvoice,
+    SalesInvoice,
+)
 from app.schemas.accounts import (
     PaymentReconciliationIn,
     PaymentReconciliationResponse,
@@ -32,7 +38,10 @@ from app.schemas.accounts import (
     UnreconciledPaymentRow,
     UnreconciledResponse,
 )
+from app.services import gl
 from app.services.accounts_common import (
+    advance_gst_from_amount,
+    get_company,
     get_customer,
     get_supplier,
     require_submitted,
@@ -129,6 +138,72 @@ async def get_unreconciled(
     )
 
 
+async def _reverse_advance_gst(
+    db: AsyncSession, entry: PaymentEntry, invoice: SalesInvoice, allocated_amount: Decimal, user: CurrentUser
+) -> None:
+    """When a GST-bearing advance is adjusted to an invoice, reverse the tax on the adjusted
+    portion (Dr Output GST / Cr 'GST on Advances' control) — proportional and capped at the
+    advance's remaining tax — so the invoice's own output GST isn't counted twice. Writes an
+    AdvanceGstAdjustment row (GSTR-1 Table 11B + GSTR-3B 3.1(a) netting source).
+
+    Posted under the Payment Entry voucher, so cancelling the payment auto-reverses it too."""
+    if entry.payment_type != "Receive" or entry.advance_gst_outstanding <= ZERO:
+        return
+    if not entry.advance_gst_rate or entry.advance_gst_rate <= ZERO:
+        return
+
+    company = await get_company(db, entry.company_id)
+    customer = await get_customer(db, entry.party_id, entry.company_id)
+    adv = await advance_gst_from_amount(
+        db, company=company, party_gstin=customer.tax_id, place_of_supply=invoice.place_of_supply,
+        advance_amount=allocated_amount, rate=entry.advance_gst_rate,
+    )
+    if adv is None:
+        return  # accounts unresolvable — leave the advance tax outstanding
+
+    reverse_total = min(adv.total, entry.advance_gst_outstanding)
+    if reverse_total <= ZERO:
+        return
+
+    control_id = adv.control_id
+    if entry.advance_is_inter_state:
+        igst_id = adv.output_rows[0][0]
+        cgst = sgst = ZERO
+        igst = reverse_total
+        debit_rows = [(igst_id, reverse_total)]
+    else:
+        cgst_id, sgst_id = adv.output_rows[0][0], adv.output_rows[1][0]
+        cgst = (reverse_total / 2).quantize(Decimal("0.01"))
+        sgst = reverse_total - cgst
+        igst = ZERO
+        debit_rows = [(cgst_id, cgst), (sgst_id, sgst)]
+
+    rows = [gl.GLRow(account_id=acc, debit=amt, remarks="Reverse GST on advance adjusted") for acc, amt in debit_rows]
+    rows.append(gl.GLRow(account_id=control_id, credit=reverse_total, remarks="Reverse GST on advance adjusted"))
+    await gl.make_gl_entries(
+        db, company_id=entry.company_id, voucher_type="Payment Entry", voucher_id=entry.id,
+        voucher_no=entry.name, posting_date=invoice.posting_date, rows=rows, user_id=user.id,
+    )
+
+    db.add(
+        AdvanceGstAdjustment(
+            company_id=entry.company_id,
+            payment_entry_id=entry.id,
+            invoice_id=invoice.id,
+            posting_date=invoice.posting_date,
+            place_of_supply=invoice.place_of_supply,
+            rate=entry.advance_gst_rate,
+            base=allocated_amount,
+            cgst=cgst,
+            sgst=sgst,
+            igst=igst,
+            cess=ZERO,
+            owner=user.id,
+        )
+    )
+    entry.advance_gst_outstanding -= reverse_total
+
+
 async def reconcile(
     db: AsyncSession, payload: PaymentReconciliationIn, user: CurrentUser
 ) -> PaymentReconciliationResponse:
@@ -197,6 +272,11 @@ async def reconcile(
         entry.modified_by = user.id
         invoice.outstanding_amount -= alloc.allocated_amount
         set_invoice_status(invoice)
+
+        # If this payment carried GST on an advance, reverse the tax on the adjusted portion
+        # (Sales Invoices only — advances are on the customer/Receive side).
+        if alloc.invoice_type == "Sales Invoice":
+            await _reverse_advance_gst(db, entry, invoice, alloc.allocated_amount, user)
 
         touched_invoices[invoice.id] = invoice
         touched_payments.add(entry.id)
