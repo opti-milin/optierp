@@ -3,7 +3,8 @@
 import type { DocumentMeta } from "@/types/core";
 
 export interface OrderItemIn {
-  item_id: string;
+  item_id: string | null; // null = free-text line
+  item_name?: string | null;
   qty: number;
   rate?: number | null;
   price_list_rate?: number | null;

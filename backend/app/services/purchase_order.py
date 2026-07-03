@@ -193,7 +193,7 @@ async def create_purchase_order(
     company = await get_company(db, user.company_id)
     supplier = await get_supplier(db, payload.supplier_id, company.id)
     currency = (payload.currency or company.default_currency).upper()
-    items = await get_items(db, {row.item_id for row in payload.items}, company.id)
+    items = await get_items(db, {row.item_id for row in payload.items if row.item_id}, company.id)
     if payload.set_warehouse_id is not None:
         await get_warehouse(db, payload.set_warehouse_id, company.id)
     await _validate_mr_links(db, company.id, payload)
@@ -205,14 +205,16 @@ async def create_purchase_order(
     # resolve missing rates from buying price lists / item master
     rates: list[Decimal] = []
     for row in payload.items:
+        item = items.get(row.item_id) if row.item_id else None
         if row.rate is not None:
             rates.append(row.rate)
-        else:
+        elif item is not None:
             rate, _ = await resolve_item_rate(
-                db, items[row.item_id], buying=True, on_date=payload.posting_date,
-                currency=currency,
+                db, item, buying=True, on_date=payload.posting_date, currency=currency,
             )
             rates.append(rate)
+        else:
+            rates.append(Decimal("0"))  # free-text line with no rate given
 
     tax_rows_in = await _load_tax_rows(db, payload, supplier)
     item_rates = await item_tax_rates(db, payload.items)  # per-item GST overrides
@@ -294,29 +296,31 @@ async def create_purchase_order(
     await db.flush()
 
     for idx, (row, engine_item) in enumerate(zip(payload.items, engine_items), start=1):
-        item = items[row.item_id]
-        warehouse_id = row.warehouse_id or payload.set_warehouse_id or item.default_warehouse_id
-        if item.is_stock_item and warehouse_id is None:
+        item = items.get(row.item_id) if row.item_id else None
+        warehouse_id = row.warehouse_id or payload.set_warehouse_id or (
+            item.default_warehouse_id if item else None
+        )
+        if item is not None and item.is_stock_item and warehouse_id is None:
             raise ValidationError(
                 f"Item row {idx}: warehouse is required for stock item '{item.item_code}'",
                 field="items",
             )
         if warehouse_id is not None:
             await get_warehouse(db, warehouse_id, company.id)
-        if not item.is_purchase_item:
+        if item is not None and not item.is_purchase_item:
             raise ValidationError(
                 f"Item '{item.item_code}' is not a purchase item", field="items"
             )
-        uom = row.uom or item.stock_uom
-        factor = resolve_conversion_factor(item, uom)
+        uom = row.uom or (item.stock_uom if item else None)
+        factor = resolve_conversion_factor(item, uom) if item is not None else Decimal("1")
         db.add(
             PurchaseOrderItem(
                 order_id=po.id,
                 idx=idx,
-                item_id=item.id,
-                item_code=item.item_code,
-                item_name=item.item_name,
-                description=row.description or item.description,
+                item_id=item.id if item else None,
+                item_code=item.item_code if item else None,
+                item_name=item.item_name if item else row.item_name,
+                description=row.description or (item.description if item else None),
                 qty=engine_item.qty,
                 uom=uom,
                 conversion_factor=factor,

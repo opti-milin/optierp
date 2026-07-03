@@ -8,7 +8,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.accounts import InvoiceTaxResponse, TaxRowIn
 from app.schemas.common import DocumentMeta, ORMModel
@@ -17,7 +17,8 @@ from app.schemas.common import DocumentMeta, ORMModel
 
 
 class OrderItemIn(BaseModel):
-    item_id: uuid.UUID
+    item_id: uuid.UUID | None = None  # None = free-text line (a hand-typed item_name)
+    item_name: str | None = Field(default=None, max_length=140)
     qty: Decimal = Field(gt=0)
     rate: Decimal | None = Field(ge=0, default=None)  # None -> resolved from price list / item
     # Per-line discount (ERPNext parity): a % derives the absolute amount; the
@@ -33,6 +34,13 @@ class OrderItemIn(BaseModel):
     delivery_date: date | None = None  # sales side
     material_request_item_id: uuid.UUID | None = None  # purchase side
     quotation_item_id: uuid.UUID | None = None  # sales side
+
+    @model_validator(mode="after")
+    def _require_item(self) -> "OrderItemIn":
+        # a line must identify an item: either a master item_id, or a free-text item_name
+        if self.item_id is None and not (self.item_name and self.item_name.strip()):
+            raise ValueError("item_name is required for a free-text line (no item_id)")
+        return self
 
 
 class OrderCreateBase(BaseModel):

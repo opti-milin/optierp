@@ -58,7 +58,7 @@ const partyId = ref("");
 const postingDate = ref(new Date().toISOString().slice(0, 10));
 const extraDate = ref(""); // delivery_date (SO) / schedule_date (PO) / valid_till (QTN)
 const remarks = ref("");
-const items = ref<OrderItemIn[]>([{ item_id: "", qty: 1, rate: null }]);
+const items = ref<OrderItemIn[]>([{ item_id: "", item_name: "", qty: 1, rate: null }]);
 const taxes = ref<TaxRowIn[]>([]);
 const taxTemplateId = ref("");
 
@@ -91,7 +91,7 @@ const previewTaxes = ref<TaxRowIn[]>([]);
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 
 async function refreshTaxPreview(): Promise<void> {
-  const lines = items.value.filter((i) => i.item_id && i.rate != null);
+  const lines = items.value.filter((i) => (i.item_id || i.item_name) && i.rate != null);
   if (!partyId.value || !lines.length || taxes.value.length) {
     previewTaxes.value = [];
     return;
@@ -254,7 +254,9 @@ function stockQtyLabel(row: Record<string, unknown>): string {
 }
 
 const gridColumns = computed<GridColumn[]>(() => {
-  const cols: GridColumn[] = [{ key: "item_id", label: "Item / Service", type: "item", required: true }];
+  const cols: GridColumn[] = [
+    { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" },
+  ];
   if (props.kind === "sales-order") cols.push({ key: "delivery_date", label: "Delivery Date", type: "date" });
   if (props.kind === "purchase-order") cols.push({ key: "schedule_date", label: "Required By", type: "date" });
   cols.push({ key: "qty", label: "Quantity", type: "number", align: "right", required: true });
@@ -286,26 +288,29 @@ const gridRows = computed<Record<string, unknown>[]>({
 });
 
 function newItemRow(): Record<string, unknown> {
-  return { item_id: "", qty: 1, rate: null, uom: "", discount_percentage: 0, _uomOptions: [], _rowKey: rowKey() };
+  return { item_id: "", item_name: "", qty: 1, rate: null, uom: "", discount_percentage: 0, _uomOptions: [], _rowKey: rowKey() };
 }
 
 async function onItemChange(index: number): Promise<void> {
   const row = items.value[index];
-  if (!row?.item_id) return;
-  const item = stock.items.find((it) => it.id === row.item_id);
+  const itemId = row?.item_id;
+  if (!itemId) return; // free-text line: item_name already stored by the grid, no prefill
+  const item = stock.items.find((it) => it.id === itemId);
   // default to the buy/sell UOM for the document kind; rate is per that UOM
   const uom =
     (cfg.value.buying ? item?.purchase_uom : item?.sales_uom) || item?.stock_uom || "";
-  const factor = stock.uomFactor(row.item_id, uom);
+  const factor = stock.uomFactor(itemId, uom);
   let rate: number | null = row.rate ?? null;
   try {
-    const resolved = await stock.resolveItemRate(row.item_id, cfg.value.buying);
+    const resolved = await stock.resolveItemRate(itemId, cfg.value.buying);
     rate = Number(resolved.rate) * factor; // resolved is per stock UOM
   } catch {
     // best-effort; backend re-resolves on save
   }
   items.value = items.value.map((r, i) =>
-    i === index ? { ...r, rate, uom, _uomOptions: stock.uomOptionsFor(row.item_id) } : r,
+    i === index
+      ? { ...r, rate, uom, item_name: item?.item_name ?? "", _uomOptions: stock.uomOptionsFor(itemId) }
+      : r,
   );
 }
 
@@ -347,7 +352,7 @@ function applyImportedRows(rows: ImportedRow[]): void {
   }
   // keep real or in-progress lines (item chosen OR a rate already typed); drop only blank placeholders
   if (additions.length) {
-    items.value = [...items.value.filter((i) => i.item_id || Number(i.rate)), ...additions];
+    items.value = [...items.value.filter((i) => i.item_id || i.item_name || Number(i.rate)), ...additions];
   }
 }
 
@@ -450,7 +455,7 @@ async function save(): Promise<void> {
     const payload: Record<string, unknown> = {
       posting_date: postingDate.value,
       remarks: remarks.value || null,
-      items: items.value.filter((i) => i.item_id),
+      items: items.value.filter((i) => i.item_id || i.item_name),
       currency: currencyModel.value.currency || null,
       conversion_rate: currencyModel.value.conversion_rate || 1,
       apply_discount_on: discount.value.apply_discount_on,

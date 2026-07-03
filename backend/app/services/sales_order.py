@@ -126,7 +126,7 @@ async def create_sales_order(
     company = await get_company(db, user.company_id)
     customer = await get_customer(db, payload.customer_id, company.id)
     currency = (payload.currency or customer.default_currency or company.default_currency).upper()
-    items = await get_items(db, {row.item_id for row in payload.items}, company.id)
+    items = await get_items(db, {row.item_id for row in payload.items if row.item_id}, company.id)
     if payload.set_warehouse_id is not None:
         await get_warehouse(db, payload.set_warehouse_id, company.id)
 
@@ -162,20 +162,25 @@ async def create_sales_order(
 
     rates: list[Decimal] = []
     for row in payload.items:
+        item = items.get(row.item_id) if row.item_id else None
         if row.rate is not None:
             base = row.rate
-        else:
+        elif item is not None:
             base = await blanket_rate(db, company.id, customer.id, row.item_id, payload.posting_date)
             if base is None:
                 base, _ = await resolve_item_rate(
-                    db, items[row.item_id], buying=False, on_date=payload.posting_date,
-                    currency=currency,
+                    db, item, buying=False, on_date=payload.posting_date, currency=currency,
                 )
-        priced = await apply_selling_pricing(
-            db, company.id, item=items[row.item_id], customer=customer,
-            qty=row.qty, base_rate=base, on_date=payload.posting_date,
-        )
-        rates.append(priced.rate)
+        else:
+            base = Decimal("0")  # free-text line with no rate given
+        if item is not None:
+            priced = await apply_selling_pricing(
+                db, company.id, item=item, customer=customer,
+                qty=row.qty, base_rate=base, on_date=payload.posting_date,
+            )
+            rates.append(priced.rate)
+        else:
+            rates.append(base)  # no pricing rules without an item master
 
     additional_discount_pct = payload.additional_discount_percentage
     if payload.coupon_code:
@@ -275,27 +280,29 @@ async def create_sales_order(
     await db.flush()
 
     for idx, (row, engine_item) in enumerate(zip(payload.items, engine_items), start=1):
-        item = items[row.item_id]
-        if not item.is_sales_item:
+        item = items.get(row.item_id) if row.item_id else None
+        if item is not None and not item.is_sales_item:
             raise ValidationError(f"Item '{item.item_code}' is not a sales item", field="items")
-        warehouse_id = row.warehouse_id or payload.set_warehouse_id or item.default_warehouse_id
-        if item.is_stock_item and warehouse_id is None:
+        warehouse_id = row.warehouse_id or payload.set_warehouse_id or (
+            item.default_warehouse_id if item else None
+        )
+        if item is not None and item.is_stock_item and warehouse_id is None:
             raise ValidationError(
                 f"Item row {idx}: warehouse is required for stock item '{item.item_code}'",
                 field="items",
             )
         if warehouse_id is not None:
             await get_warehouse(db, warehouse_id, company.id)
-        uom = row.uom or item.stock_uom
-        factor = resolve_conversion_factor(item, uom)
+        uom = row.uom or (item.stock_uom if item else None)
+        factor = resolve_conversion_factor(item, uom) if item is not None else Decimal("1")
         db.add(
             SalesOrderItem(
                 order_id=so.id,
                 idx=idx,
-                item_id=item.id,
-                item_code=item.item_code,
-                item_name=item.item_name,
-                description=row.description or item.description,
+                item_id=item.id if item else None,
+                item_code=item.item_code if item else None,
+                item_name=item.item_name if item else row.item_name,
+                description=row.description or (item.description if item else None),
                 qty=engine_item.qty,
                 uom=uom,
                 conversion_factor=factor,
