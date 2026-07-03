@@ -22,6 +22,9 @@ from app.models.selling import Quotation, QuotationItem, SalesOrder, SalesOrderI
 from app.schemas.accounts import TaxRowIn
 from app.schemas.selling import SalesOrderCreate
 from app.services.accounts_common import (
+    auto_gst_from_items,
+    _line_key,
+    compute_doc_tax_preview,
     get_company,
     get_customer,
     item_tax_rates,
@@ -104,13 +107,26 @@ async def _load_tax_rows(db: AsyncSession, payload: SalesOrderCreate, customer) 
     ]
 
 
+async def preview_sales_order(db: AsyncSession, payload: SalesOrderCreate, user: CurrentUser):
+    """GST + totals preview for a draft Sales Order (no persistence). Uses the
+    entered line rates (pricing is resolved on save)."""
+    company = await get_company(db, user.company_id)
+    customer = await get_customer(db, payload.customer_id, company.id)
+    return await compute_doc_tax_preview(
+        db, company=company, party=customer, kind="sales", items=payload.items,
+        conversion_rate=payload.conversion_rate, apply_discount_on=payload.apply_discount_on,
+        additional_discount_percentage=payload.additional_discount_percentage,
+        discount_amount=payload.discount_amount,
+    )
+
+
 async def create_sales_order(
     db: AsyncSession, payload: SalesOrderCreate, user: CurrentUser
 ) -> SalesOrder:
     company = await get_company(db, user.company_id)
     customer = await get_customer(db, payload.customer_id, company.id)
     currency = (payload.currency or customer.default_currency or company.default_currency).upper()
-    items = await get_items(db, {row.item_id for row in payload.items}, company.id)
+    items = await get_items(db, {row.item_id for row in payload.items if row.item_id}, company.id)
     if payload.set_warehouse_id is not None:
         await get_warehouse(db, payload.set_warehouse_id, company.id)
 
@@ -146,20 +162,25 @@ async def create_sales_order(
 
     rates: list[Decimal] = []
     for row in payload.items:
+        item = items.get(row.item_id) if row.item_id else None
         if row.rate is not None:
             base = row.rate
-        else:
+        elif item is not None:
             base = await blanket_rate(db, company.id, customer.id, row.item_id, payload.posting_date)
             if base is None:
                 base, _ = await resolve_item_rate(
-                    db, items[row.item_id], buying=False, on_date=payload.posting_date,
-                    currency=currency,
+                    db, item, buying=False, on_date=payload.posting_date, currency=currency,
                 )
-        priced = await apply_selling_pricing(
-            db, company.id, item=items[row.item_id], customer=customer,
-            qty=row.qty, base_rate=base, on_date=payload.posting_date,
-        )
-        rates.append(priced.rate)
+        else:
+            base = Decimal("0")  # free-text line with no rate given
+        if item is not None:
+            priced = await apply_selling_pricing(
+                db, company.id, item=item, customer=customer,
+                qty=row.qty, base_rate=base, on_date=payload.posting_date,
+            )
+            rates.append(priced.rate)
+        else:
+            rates.append(base)  # no pricing rules without an item master
 
     additional_discount_pct = payload.additional_discount_percentage
     if payload.coupon_code:
@@ -168,12 +189,24 @@ async def create_sales_order(
         )
 
     tax_rows_in = await _load_tax_rows(db, payload, customer)
+    item_rates = await item_tax_rates(db, payload.items)  # per-item GST overrides
+    # No sales tax template resolved (customer with no GST category): derive GST
+    # from each line's HSN so the order shows GST too. Runs before shipping is
+    # appended, only on the otherwise-zero-tax path.
+    if not tax_rows_in:
+        auto_rows, auto_overrides = await auto_gst_from_items(
+            db, company=company, party_gstin=customer.tax_id, place_of_supply=None,
+            payload_items=payload.items, item_rates=item_rates, is_sales=True,
+        )
+        if auto_rows:
+            tax_rows_in = auto_rows
+            for iid, heads in auto_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
     if payload.shipping_rule_id:
         subtotal = sum((row.qty * rate for row, rate in zip(payload.items, rates)), Decimal("0"))
         ship_row = await shipping_tax_row(db, company.id, payload.shipping_rule_id, subtotal)
         if ship_row is not None:
             tax_rows_in = [*tax_rows_in, ship_row]
-    item_rates = await item_tax_rates(db, payload.items)  # per-item GST overrides
     engine_items = [
         ItemRow(
             qty=row.qty,
@@ -181,9 +214,9 @@ async def create_sales_order(
             price_list_rate=(row.price_list_rate if row.price_list_rate is not None else rate),
             discount_percentage=row.discount_percentage,
             discount_amount=row.discount_amount,
-            item_tax_rate=item_rates.get(row.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(row, idx), {}),
         )
-        for row, rate in zip(payload.items, rates)
+        for idx, (row, rate) in enumerate(zip(payload.items, rates))
     ]
     engine_taxes = [
         TaxRow(
@@ -247,27 +280,29 @@ async def create_sales_order(
     await db.flush()
 
     for idx, (row, engine_item) in enumerate(zip(payload.items, engine_items), start=1):
-        item = items[row.item_id]
-        if not item.is_sales_item:
+        item = items.get(row.item_id) if row.item_id else None
+        if item is not None and not item.is_sales_item:
             raise ValidationError(f"Item '{item.item_code}' is not a sales item", field="items")
-        warehouse_id = row.warehouse_id or payload.set_warehouse_id or item.default_warehouse_id
-        if item.is_stock_item and warehouse_id is None:
+        warehouse_id = row.warehouse_id or payload.set_warehouse_id or (
+            item.default_warehouse_id if item else None
+        )
+        if item is not None and item.is_stock_item and warehouse_id is None:
             raise ValidationError(
                 f"Item row {idx}: warehouse is required for stock item '{item.item_code}'",
                 field="items",
             )
         if warehouse_id is not None:
             await get_warehouse(db, warehouse_id, company.id)
-        uom = row.uom or item.stock_uom
-        factor = resolve_conversion_factor(item, uom)
+        uom = row.uom or (item.stock_uom if item else None)
+        factor = resolve_conversion_factor(item, uom) if item is not None else Decimal("1")
         db.add(
             SalesOrderItem(
                 order_id=so.id,
                 idx=idx,
-                item_id=item.id,
-                item_code=item.item_code,
-                item_name=item.item_name,
-                description=row.description or item.description,
+                item_id=item.id if item else None,
+                item_code=item.item_code if item else None,
+                item_name=item.item_name if item else row.item_name,
+                description=row.description or (item.description if item else None),
                 qty=engine_item.qty,
                 uom=uom,
                 conversion_factor=factor,

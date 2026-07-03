@@ -11,8 +11,10 @@
     <div><span class="ph-muted">Date:</span> {{ doc.posting_date }}</div>
     {% if doc.due_date %}<div><span class="ph-muted">Due Date:</span> {{ doc.due_date }}</div>{% endif %}
     <div><span class="ph-muted">Currency:</span> {{ doc.currency }}</div>
+    {% if doc.place_of_supply %}<div><span class="ph-muted">Place of Supply:</span> {{ doc.place_of_supply }}</div>{% endif %}
     {% if doc.bill_no %}<div><span class="ph-muted">Supplier Inv No:</span> {{ doc.bill_no }}</div>{% endif %}
     {% if doc.bill_date %}<div><span class="ph-muted">Supplier Inv Date:</span> {{ doc.bill_date }}</div>{% endif %}
+    {% if doc.is_reverse_charge %}<div><strong>Reverse Charge applicable</strong></div>{% endif %}
   </div>
 </div>
 
@@ -21,9 +23,10 @@
     <tr>
       <th style="width:4%">#</th>
       <th>Item</th>
-      <th class="num" style="width:12%">Qty</th>
-      <th class="num" style="width:16%">Rate</th>
-      <th class="num" style="width:18%">Amount</th>
+      <th style="width:11%">HSN/SAC</th>
+      <th class="num" style="width:11%">Qty</th>
+      <th class="num" style="width:15%">Rate</th>
+      <th class="num" style="width:16%">Amount</th>
     </tr>
   </thead>
   <tbody>
@@ -31,6 +34,7 @@
     <tr>
       <td>{{ item.idx }}</td>
       <td><strong>{{ item.item_name }}</strong>{% if item.description %}<br><span class="ph-muted">{{ item.description }}</span>{% endif %}</td>
+      <td>{{ item.hsn_sac_code or "—" }}</td>
       <td class="num">{{ m.qty(item.qty, item.uom) }}</td>
       <td class="num">{{ m.money(item.rate) }}</td>
       <td class="num">{{ m.money(item.amount) }}</td>

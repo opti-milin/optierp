@@ -222,6 +222,34 @@ class Currency(Base, DocumentMixin):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
+class HsnCode(Base, DocumentMixin):
+    """Global HSN/SAC → GST-rate reference master (India compliance).
+
+    Seeded once from the official HSN rate schedule (``data/seeds/hsn_codes.json``);
+    not company-scoped — the government's code list is the same for every tenant.
+    Powers the "type an item name → auto-fetch HSN + GST rate" lookup on the Item
+    form (``services.hsn_lookup``). A single 8-digit code can carry several rows
+    (e.g. *fresh/chilled* Nil vs *frozen* 12%), so uniqueness is on code+description
+    and the caller picks the specific commodity line.
+    """
+
+    __tablename__ = "hsn_codes"
+    __table_args__ = (
+        UniqueConstraint("hsn_code", "description", name="uq_hsn_code_description"),
+        Index("ix_hsn_codes_hsn_code", "hsn_code"),
+    )
+
+    hsn_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    gst_rate: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    # Buckets the Item's gst_treatment (Taxable / Nil-Rated); Nil for the 0% slab.
+    gst_treatment: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'Taxable'")
+    )
+    chapter: Mapped[int | None] = mapped_column(Integer)
+    schedule: Mapped[str | None] = mapped_column(String(6))  # Roman numeral (I..V)
+
+
 class CurrencyExchange(Base, DocumentMixin):
     """Source: erpnext/setup/doctype/currency_exchange."""
 

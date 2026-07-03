@@ -8,12 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
+from app.schemas.accounts import InvoiceTaxPreview
 from app.schemas.buying import OrderListItem
 from app.schemas.common import ListResponse
 from app.schemas.selling import QuotationCreate, QuotationResponse
 from app.services import quotation as service
 
 router = APIRouter(prefix="/quotations", tags=["selling: quotations"])
+
+
+@router.post("/preview", response_model=InvoiceTaxPreview,
+             summary="Preview GST + totals for a draft (nothing is saved)")
+async def preview(
+    payload: QuotationCreate,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Quotation", "create"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> InvoiceTaxPreview:
+    return await service.preview_quotation(db, payload, current_user)
 
 
 @router.post("", response_model=QuotationResponse, status_code=201,

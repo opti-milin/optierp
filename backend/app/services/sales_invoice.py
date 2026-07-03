@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.gst_states import gst_state_label_of
 from app.core.naming import get_next_name
 from app.core.security import CurrentUser
 from app.models.accounts import SalesInvoice, SalesInvoiceItem, SalesInvoiceTax
@@ -21,6 +22,8 @@ from app.schemas.accounts import SalesInvoiceCreate
 from app.services import gl
 from app.services.accounts_common import (
     NAMING_SERIES,
+    auto_gst_from_items,
+    _line_key,
     base_payable_total,
     get_company,
     get_customer,
@@ -142,6 +145,40 @@ async def _load_tax_rows(db: AsyncSession, payload: SalesInvoiceCreate, customer
     ]
 
 
+async def _resolve_invoice_taxes(db: AsyncSession, payload: SalesInvoiceCreate, company, customer):
+    """Shared tax resolution: template rows (or HSN-derived auto-GST) + the
+    per-item rate overrides the engine applies. Returns (tax_rows_in, item_rates)."""
+    tax_rows_in = [] if payload.is_opening else await _load_tax_rows(db, payload, customer)
+    item_rates = await item_tax_rates(db, payload.items)
+    if not tax_rows_in and not payload.is_opening:
+        auto_rows, auto_overrides = await auto_gst_from_items(
+            db, company=company, party_gstin=customer.tax_id,
+            place_of_supply=payload.place_of_supply, payload_items=payload.items,
+            item_rates=item_rates,
+        )
+        if auto_rows:
+            tax_rows_in = auto_rows
+            for iid, heads in auto_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
+    return tax_rows_in, item_rates
+
+
+async def preview_sales_invoice(db: AsyncSession, payload: SalesInvoiceCreate, user: CurrentUser):
+    """Compute taxes + totals for a DRAFT (no persistence) so the form previews the
+    GST that ``create_sales_invoice`` will apply."""
+    from app.services.accounts_common import compute_doc_tax_preview
+
+    company = await get_company(db, user.company_id)
+    customer = await get_customer(db, payload.customer_id, company.id)
+    return await compute_doc_tax_preview(
+        db, company=company, party=customer, kind="sales", items=payload.items,
+        place_of_supply=payload.place_of_supply, conversion_rate=payload.conversion_rate,
+        apply_discount_on=payload.apply_discount_on,
+        additional_discount_percentage=payload.additional_discount_percentage,
+        discount_amount=payload.discount_amount,
+    )
+
+
 async def create_sales_invoice(
     db: AsyncSession, payload: SalesInvoiceCreate, user: CurrentUser
 ) -> SalesInvoice:
@@ -160,10 +197,9 @@ async def create_sales_invoice(
     )
     # Opening (migration-in) invoices carry no tax — they just establish the
     # outstanding receivable against the Temporary Opening account.
-    tax_rows_in = [] if payload.is_opening else await _load_tax_rows(db, payload, customer)
-
-    # per-item GST overrides (Item Tax Template) keyed by tax account head
-    item_rates = await item_tax_rates(db, payload.items)
+    # Tax rows (template or HSN-derived auto-GST) + per-item rate overrides —
+    # shared with preview_sales_invoice so the form preview matches this exactly.
+    tax_rows_in, item_rates = await _resolve_invoice_taxes(db, payload, company, customer)
 
     # run the calculation engine
     engine_items = [
@@ -173,9 +209,9 @@ async def create_sales_invoice(
             price_list_rate=(item.price_list_rate if item.price_list_rate is not None else item.rate),
             discount_percentage=item.discount_percentage,
             discount_amount=item.discount_amount,
-            item_tax_rate=item_rates.get(item.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(item, idx), {}),
         )
-        for item in payload.items
+        for idx, item in enumerate(payload.items)
     ]
     engine_taxes = [
         TaxRow(
@@ -216,6 +252,13 @@ async def create_sales_invoice(
 
     sign = Decimal("-1") if payload.is_return else Decimal("1")
     name = await get_next_name(db, NAMING_SERIES["Sales Invoice"], company.id)
+    # India GST place of supply: the recipient's (customer's) state, else the company's
+    # own state for an intra-state B2C sale. Caller may override.
+    place_of_supply = (
+        payload.place_of_supply
+        or gst_state_label_of(customer.tax_id)
+        or gst_state_label_of(company.tax_id)
+    )
     invoice = SalesInvoice(
         id=uuid.uuid4(),
         company_id=company.id,
@@ -229,6 +272,8 @@ async def create_sales_invoice(
         remarks=payload.remarks,
         is_return=payload.is_return,
         is_opening=payload.is_opening,
+        place_of_supply=place_of_supply,
+        is_reverse_charge=payload.is_reverse_charge,
         return_against_id=payload.return_against_id,
         po_no=payload.po_no,
         po_date=payload.po_date,
@@ -288,6 +333,7 @@ async def create_sales_invoice(
                 idx=idx,
                 item_code=item_in.item_code,
                 item_name=item_in.item_name,
+                hsn_sac_code=item_in.hsn_sac_code or (item_master.hsn_sac_code if item_master else None),
                 description=item_in.description,
                 qty=engine_item.qty * sign,
                 uom=item_in.uom,

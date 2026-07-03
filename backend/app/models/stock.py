@@ -152,6 +152,12 @@ class Item(Base, DocumentMixin, CompanyScopedMixin):
     item_tax_template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("item_tax_templates.id")
     )
+    # India GST: HSN (goods) / SAC (services) code printed on tax invoices + grouped in
+    # the GSTR-1 HSN summary; gst_treatment buckets the item (Taxable/Nil-Rated/Exempt/Non-GST).
+    hsn_sac_code: Mapped[str | None] = mapped_column(String(8))
+    gst_treatment: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="Taxable", server_default=text("'Taxable'")
+    )
     default_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouses.id")
     )

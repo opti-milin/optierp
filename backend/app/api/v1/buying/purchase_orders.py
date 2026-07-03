@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
+from app.schemas.accounts import InvoiceTaxPreview
 from app.schemas.buying import OrderListItem, PurchaseOrderCreate, PurchaseOrderResponse
 from app.schemas.common import ListResponse
 from app.services import purchase_order as service
@@ -15,6 +16,16 @@ from app.services import purchase_order as service
 router = APIRouter(prefix="/purchase-orders", tags=["buying: purchase orders"])
 
 PO_STATUS_PATTERN = "^(Draft|To Receive and Bill|To Receive|To Bill|Completed|Cancelled|Closed)$"
+
+
+@router.post("/preview", response_model=InvoiceTaxPreview,
+             summary="Preview GST + totals for a draft (nothing is saved)")
+async def preview(
+    payload: PurchaseOrderCreate,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Purchase Order", "create"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> InvoiceTaxPreview:
+    return await service.preview_purchase_order(db, payload, current_user)
 
 
 @router.post("", response_model=PurchaseOrderResponse, status_code=201,

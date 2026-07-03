@@ -182,23 +182,25 @@ SUPPLIERS = [
     ("Wonka Packaging", None),
 ]
 
+# (name, standard_rate, HSN code). HSN codes exist in the seeded HSN master and
+# carry the post-reform GST rate — appliances/parts are 18% (85xx / 73xx / 39xx).
 SALES_ITEMS = [
-    ("Mixer Grinder X200", 2850),
-    ("Induction Cooktop Pro", 3499),
-    ("Air Fryer 4.5L", 5200),
-    ("Electric Kettle 1.8L", 1150),
-    ("Toaster DuoSlice", 1690),
-    ("Wet Grinder 2L", 6100),
-    ("Hand Blender Turbo", 1390),
+    ("Mixer Grinder X200", 2850, "85094000"),      # food grinders & mixers
+    ("Induction Cooktop Pro", 3499, "85166000"),   # cookers / cooking plates
+    ("Air Fryer 4.5L", 5200, "85167900"),          # other electrothermic appliances
+    ("Electric Kettle 1.8L", 1150, "85167100"),    # electric kettles / tea makers
+    ("Toaster DuoSlice", 1690, "85167200"),        # toasters
+    ("Wet Grinder 2L", 6100, "85094000"),          # food grinders
+    ("Hand Blender Turbo", 1390, "85094000"),      # blenders
 ]
 
 PURCHASE_ITEMS = [
-    ("Copper Motor Winding 750W", 720),
-    ("ABS Body Shell", 240),
-    ("Stainless Steel Jar Set", 460),
-    ("Heating Element 2000W", 310),
-    ("Control PCB v4", 530),
-    ("Packaging Carton L", 38),
+    ("Copper Motor Winding 750W", 720, "85030000"),   # parts of electric motors
+    ("ABS Body Shell", 240, "39269099"),              # articles of plastic
+    ("Stainless Steel Jar Set", 460, "73239300"),     # steel household articles
+    ("Heating Element 2000W", 310, "85169000"),       # parts of heating appliances
+    ("Control PCB v4", 530, "85340000"),              # printed circuits
+    ("Packaging Carton L", 38, "48191000"),           # paper cartons (5% slab)
 ]
 
 
@@ -533,7 +535,7 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
         # Item Tax Templates per GST slab — each carries CGST+SGST (intra), IGST
         # (inter) and Input GST (purchase) rows so the per-item override applies on
         # any invoice type. Set on an Item, it drives that line's GST rate.
-        for slab in (0, 5, 12, 18, 28):
+        for slab in (0, 5, 18, 40):  # post-reform GST 2.0 slabs (12% & 28% abolished)
             itt = ItemTaxTemplate(id=uuid.uuid4(), company_id=company.id, title=f"GST {slab}%")
             db.add(itt)
             await db.flush()
@@ -617,6 +619,9 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
         for j, (name, category) in enumerate(SUPPLIERS):
             sup = await masters.create_supplier(
                 db, SupplierCreate(supplier_name=name, tax_category_id=category_ids[category]), actor)
+            state = gstin_state.get(category)  # In-State→27, Out-of-State→29; None→no GSTIN
+            if state:
+                sup.tax_id = f"{state}BBBBB{j:04d}B1Z5"  # 15-char GSTIN (state code is what matters)
             slug = "".join(ch for ch in name.lower() if ch.isalnum()) or f"supp{j + 1}"
             sup.email_id = f"{slug}@example.com"
             suppliers.append(sup)
@@ -639,22 +644,22 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
             return [
                 InvoiceItemIn(
                     item_name=item, qty=_d(rng.randint(1, 8)), rate=_d(rate),
-                    account_id=income_account.id,
+                    account_id=income_account.id, hsn_sac_code=hsn,
                     discount_percentage=_d(rng.choice([0, 0, 0, 5, 10])),
                     cost_center_id=extras["cc_sales"] if rng.random() < 0.3 else None,
                 )
-                for item, rate in rng.sample(SALES_ITEMS, rng.randint(1, max_lines))
+                for item, rate, hsn in rng.sample(SALES_ITEMS, rng.randint(1, max_lines))
             ]
 
         def purchase_items(max_lines: int = 3) -> list[InvoiceItemIn]:
             return [
                 InvoiceItemIn(
                     item_name=item, qty=_d(rng.randint(10, 120)), rate=_d(rate),
-                    account_id=expense_account.id,
+                    account_id=expense_account.id, hsn_sac_code=hsn,
                     discount_percentage=_d(rng.choice([0, 0, 0, 5])),
                     cost_center_id=extras["cc_ops"] if rng.random() < 0.3 else None,
                 )
-                for item, rate in rng.sample(PURCHASE_ITEMS, rng.randint(1, max_lines))
+                for item, rate, hsn in rng.sample(PURCHASE_ITEMS, rng.randint(1, max_lines))
             ]
 
         # --- prior-FY documents: opening balances + deep aging buckets ----------
@@ -1070,16 +1075,16 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         await seed_supply_chain(db, actor, customers, suppliers, income_account, recent, extras)
 
-        # assign GST slabs to the seeded items (default 18%, a few overrides for the
-        # mix). Self-contained SQL after a commit so the just-seeded items are visible.
+        # Assign each item the GST slab template that matches its HSN rate, so the
+        # rate charged (via the item-tax-template override) agrees with the item's
+        # HSN. Appliances/parts are 18%; the paper carton is 5%.
         await db.commit()
         await db.execute(
             text("UPDATE items SET item_tax_template_id = (SELECT id FROM item_tax_templates "
                  "WHERE title='GST 18%' AND company_id=items.company_id) WHERE company_id=:cid"),
             {"cid": str(company.id)},
         )
-        for code, title in (("AIR-FRYER-45L", "GST 5%"), ("HAND-BLENDER-TURBO", "GST 12%"),
-                            ("WET-GRINDER-2L", "GST 28%")):
+        for code, title in (("RM-PACKAGING-CARTON-L", "GST 5%"),):
             await db.execute(
                 text("UPDATE items SET item_tax_template_id = (SELECT id FROM item_tax_templates "
                      "WHERE title=:title AND company_id=items.company_id) "
@@ -1145,7 +1150,7 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
 
     # --- items: finished goods (sales) + raw materials (purchase) --------
     finished_items = []
-    for name, rate in SALES_ITEMS:
+    for name, rate, hsn in SALES_ITEMS:
         code = name.upper().replace(" ", "-").replace(".", "")[:30]
         finished_items.append(await stock_masters.create_item(
             db,
@@ -1154,11 +1159,12 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
                 standard_rate=_d(rate), valuation_rate=_d(rate * 0.55),
                 default_warehouse_id=main_store.id,
                 income_account_id=income_account.id,
+                hsn_sac_code=hsn, gst_treatment="Taxable",
             ),
             actor,
         ))
     raw_items = []
-    for name, rate in PURCHASE_ITEMS:
+    for name, rate, hsn in PURCHASE_ITEMS:
         code = "RM-" + name.upper().replace(" ", "-")[:26]
         # Multi-UOM (Phase 4) example: cartons are bought in Box-of-25, stocked in Nos
         uom_kwargs: dict = (
@@ -1173,6 +1179,7 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
                 valuation_rate=_d(rate), is_sales_item=False,
                 default_warehouse_id=main_store.id,
                 reorder_level=_d(50), reorder_qty=_d(200),
+                hsn_sac_code=hsn, gst_treatment="Taxable",
                 **uom_kwargs,
             ),
             actor,

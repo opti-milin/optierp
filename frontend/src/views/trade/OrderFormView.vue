@@ -2,7 +2,7 @@
 // Shared create/detail view for Quotations / Sales Orders / Purchase Orders,
 // with the document-flow actions (convert, fulfil, bill).
 
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
@@ -58,7 +58,7 @@ const partyId = ref("");
 const postingDate = ref(new Date().toISOString().slice(0, 10));
 const extraDate = ref(""); // delivery_date (SO) / schedule_date (PO) / valid_till (QTN)
 const remarks = ref("");
-const items = ref<OrderItemIn[]>([{ item_id: "", qty: 1, rate: null }]);
+const items = ref<OrderItemIn[]>([{ item_id: "", item_name: "", qty: 1, rate: null }]);
 const taxes = ref<TaxRowIn[]>([]);
 const taxTemplateId = ref("");
 
@@ -83,6 +83,55 @@ const discount = ref<DiscountModel>({
   additional_discount_percentage: 0,
   discount_amount: 0,
 });
+
+// Live GST preview: the server computes the taxes create() will apply from each
+// line's HSN / Item Tax Template, so the totals show GST while drafting. Display
+// only; NOT sent on save. Skipped once the user fills the tax rows manually.
+const previewTaxes = ref<TaxRowIn[]>([]);
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function refreshTaxPreview(): Promise<void> {
+  const lines = items.value.filter((i) => (i.item_id || i.item_name) && i.rate != null);
+  if (!partyId.value || !lines.length || taxes.value.length) {
+    previewTaxes.value = [];
+    return;
+  }
+  const partyKey = cfg.value.buying ? "supplier_id" : "customer_id";
+  try {
+    const { data } = await api.post<{
+      taxes: Array<{ description: string; rate: string; tax_amount: string }>;
+    }>(`${cfg.value.endpoint}/preview`, {
+      [partyKey]: partyId.value,
+      posting_date: postingDate.value,
+      apply_discount_on: discount.value.apply_discount_on,
+      additional_discount_percentage: discount.value.additional_discount_percentage || 0,
+      discount_amount: discount.value.discount_amount || 0,
+      conversion_rate: currencyModel.value.conversion_rate || 1,
+      items: lines,
+    });
+    previewTaxes.value = data.taxes.map((t) => ({
+      charge_type: "Actual",
+      account_head_id: "",
+      description: t.description,
+      rate: Number(t.rate),
+      tax_amount: Number(t.tax_amount),
+    })) as unknown as TaxRowIn[];
+  } catch {
+    previewTaxes.value = [];
+  }
+}
+
+watch(
+  [items, partyId, discount, () => taxes.value.length],
+  () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => void refreshTaxPreview(), 400);
+  },
+  { deep: true },
+);
+
+const effectiveTaxes = computed(() => (taxes.value.length ? taxes.value : previewTaxes.value));
+
 const currencyModel = ref<CurrencyModel>({ currency: "", conversion_rate: 1 });
 const terms = ref("");
 const termsTemplates = ref<Array<{ id: string; template_name: string; terms: string | null }>>([]);
@@ -107,7 +156,7 @@ async function fetchPaymentTermsTemplates(): Promise<void> {
 const liveGrandTotal = computed(() => {
   const t = computeTotals(
     items.value as unknown as Parameters<typeof computeTotals>[0],
-    taxes.value as unknown as Parameters<typeof computeTotals>[1],
+    effectiveTaxes.value as unknown as Parameters<typeof computeTotals>[1],
     discount.value as unknown as Parameters<typeof computeTotals>[2],
   );
   return t.roundedTotal || t.grandTotal;
@@ -205,7 +254,9 @@ function stockQtyLabel(row: Record<string, unknown>): string {
 }
 
 const gridColumns = computed<GridColumn[]>(() => {
-  const cols: GridColumn[] = [{ key: "item_id", label: "Item / Service", type: "item", required: true }];
+  const cols: GridColumn[] = [
+    { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" },
+  ];
   if (props.kind === "sales-order") cols.push({ key: "delivery_date", label: "Delivery Date", type: "date" });
   if (props.kind === "purchase-order") cols.push({ key: "schedule_date", label: "Required By", type: "date" });
   cols.push({ key: "qty", label: "Quantity", type: "number", align: "right", required: true });
@@ -237,26 +288,29 @@ const gridRows = computed<Record<string, unknown>[]>({
 });
 
 function newItemRow(): Record<string, unknown> {
-  return { item_id: "", qty: 1, rate: null, uom: "", discount_percentage: 0, _uomOptions: [], _rowKey: rowKey() };
+  return { item_id: "", item_name: "", qty: 1, rate: null, uom: "", discount_percentage: 0, _uomOptions: [], _rowKey: rowKey() };
 }
 
 async function onItemChange(index: number): Promise<void> {
   const row = items.value[index];
-  if (!row?.item_id) return;
-  const item = stock.items.find((it) => it.id === row.item_id);
+  const itemId = row?.item_id;
+  if (!itemId) return; // free-text line: item_name already stored by the grid, no prefill
+  const item = stock.items.find((it) => it.id === itemId);
   // default to the buy/sell UOM for the document kind; rate is per that UOM
   const uom =
     (cfg.value.buying ? item?.purchase_uom : item?.sales_uom) || item?.stock_uom || "";
-  const factor = stock.uomFactor(row.item_id, uom);
+  const factor = stock.uomFactor(itemId, uom);
   let rate: number | null = row.rate ?? null;
   try {
-    const resolved = await stock.resolveItemRate(row.item_id, cfg.value.buying);
+    const resolved = await stock.resolveItemRate(itemId, cfg.value.buying);
     rate = Number(resolved.rate) * factor; // resolved is per stock UOM
   } catch {
     // best-effort; backend re-resolves on save
   }
   items.value = items.value.map((r, i) =>
-    i === index ? { ...r, rate, uom, _uomOptions: stock.uomOptionsFor(row.item_id) } : r,
+    i === index
+      ? { ...r, rate, uom, item_name: item?.item_name ?? "", _uomOptions: stock.uomOptionsFor(itemId) }
+      : r,
   );
 }
 
@@ -298,7 +352,7 @@ function applyImportedRows(rows: ImportedRow[]): void {
   }
   // keep real or in-progress lines (item chosen OR a rate already typed); drop only blank placeholders
   if (additions.length) {
-    items.value = [...items.value.filter((i) => i.item_id || Number(i.rate)), ...additions];
+    items.value = [...items.value.filter((i) => i.item_id || i.item_name || Number(i.rate)), ...additions];
   }
 }
 
@@ -401,7 +455,7 @@ async function save(): Promise<void> {
     const payload: Record<string, unknown> = {
       posting_date: postingDate.value,
       remarks: remarks.value || null,
-      items: items.value.filter((i) => i.item_id),
+      items: items.value.filter((i) => i.item_id || i.item_name),
       currency: currencyModel.value.currency || null,
       conversion_rate: currencyModel.value.conversion_rate || 1,
       apply_discount_on: discount.value.apply_discount_on,
@@ -807,13 +861,26 @@ onMounted(async () => {
         </div>
         <TaxesCharges v-model="taxes" :account-options="accounts.accountOptions" />
 
+        <!-- Auto GST preview: what the server will charge from each line's HSN /
+             Item Tax Template. Shown until the user fills the rows manually. -->
+        <div
+          v-if="!taxes.length && previewTaxes.length"
+          class="mt-2 max-w-sm rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
+        >
+          <div class="mb-1 font-medium">GST (auto, from item HSN)</div>
+          <div v-for="(t, i) in previewTaxes" :key="i" class="flex justify-between">
+            <span>{{ t.description }}<span v-if="Number(t.rate) > 0"> @ {{ Number(t.rate) }}%</span></span>
+            <span class="tabular-nums">{{ formatCurrency(String(t.tax_amount ?? 0), currencyModel.currency || companyCurrency) }}</span>
+          </div>
+        </div>
+
         <!-- additional discount -->
         <AdditionalDiscount v-model="discount" />
 
         <!-- totals -->
         <DocumentTotals
           :items="items"
-          :taxes="taxes"
+          :taxes="effectiveTaxes"
           :discount="discount"
           :currency="currencyModel.currency || companyCurrency"
         />

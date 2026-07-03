@@ -7,6 +7,25 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
+class InvoiceTaxLinePreview(BaseModel):
+    """One computed tax row for the draft-invoice GST preview (display only)."""
+
+    description: str
+    rate: Decimal
+    tax_amount: Decimal
+
+
+class InvoiceTaxPreview(BaseModel):
+    """Server-computed taxes + totals for a draft invoice, so the form can show
+    the GST that create will apply — before anything is saved."""
+
+    net_total: Decimal
+    total_taxes_and_charges: Decimal
+    grand_total: Decimal
+    place_of_supply: str | None = None
+    taxes: list[InvoiceTaxLinePreview] = []
+
+
 class TaxRowIn(BaseModel):
     charge_type: str = "On Net Total"
     rate: Decimal = Decimal("0")
@@ -35,6 +54,8 @@ class InvoiceItemIn(BaseModel):
     cost_center_id: uuid.UUID | None = None
     # sales: income account; purchase: expense account (falls back to company default)
     account_id: uuid.UUID | None = None
+    # India GST: HSN/SAC override; if omitted it's snapshotted from the item master
+    hsn_sac_code: str | None = Field(default=None, max_length=8)
     # Module 03-05 cycle links (all optional; free-text items still work)
     item_id: uuid.UUID | None = None
     sales_order_item_id: uuid.UUID | None = None  # sales invoices only
@@ -60,5 +81,8 @@ class InvoiceCreateBase(BaseModel):
     return_against_id: uuid.UUID | None = None
     is_opening: bool = False  # migration-in opening invoice (posts vs Temporary Opening)
     tax_withholding_category_id: uuid.UUID | None = None  # India TDS (purchase) / TCS (sales)
+    # India GST: place of supply ("NN-State"); defaults from the party/company GSTIN when omitted
+    place_of_supply: str | None = Field(default=None, max_length=64)
+    is_reverse_charge: bool = False
 
 

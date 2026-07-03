@@ -6,6 +6,7 @@
 // item emits `item-change` so the parent can resolve the rate.
 
 import { computed, ref, watch } from "vue";
+import { api } from "@/api/client";
 import { formatCurrency } from "@/utils/format";
 import { rowKey } from "@/utils/rowKey";
 import DateField from "@/components/shared/DateField.vue";
@@ -14,7 +15,7 @@ import SerialEntryDialog from "@/components/shared/SerialEntryDialog.vue";
 export interface GridColumn {
   key: string;
   label: string;
-  type: "item" | "select" | "number" | "date" | "text" | "computed" | "serials";
+  type: "item" | "select" | "number" | "date" | "text" | "hsn" | "computed" | "serials";
   align?: "left" | "right";
   required?: boolean;
   options?: { value: string; label: string }[]; // for type "select"
@@ -22,6 +23,8 @@ export interface GridColumn {
   compute?: (row: Record<string, unknown>) => string; // type "computed": read-only display
   showIfKey?: string; // render the control only when row[showIfKey] is truthy
   requiredFor?: (row: Record<string, unknown>) => number; // type "serials": required count
+  freeText?: boolean; // type "item": allow typing an ad-hoc item (item_id stays null)
+  nameKey?: string; // type "item" + freeText: row key to store the typed name (default "item_name")
 }
 
 type Row = Record<string, unknown>;
@@ -108,6 +111,95 @@ function patch(index: number, key: string, value: unknown): void {
     "update:modelValue",
     props.modelValue.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
   );
+}
+// patch several keys of one row in a SINGLE emit (two patch() calls in one handler
+// would race — the second reads the pre-update modelValue and clobbers the first).
+function patchMany(index: number, changes: Record<string, unknown>): void {
+  emit(
+    "update:modelValue",
+    props.modelValue.map((r, i) => (i === index ? { ...r, ...changes } : r)),
+  );
+}
+
+// --- free-text item combobox: type an ad-hoc item OR pick a master one ---------
+// Mirrors the HSN typeahead: the cell shows the picked item's label / the typed
+// free-text name; while focused it becomes a search box over itemOptions. Typing
+// stores the name and clears item_id (free text); picking sets item_id + prefills.
+const itemBox = ref<{ index: number; query: string } | null>(null);
+
+function itemLabelOf(value: string): string {
+  return props.itemOptions.find((o) => o.value === value)?.label ?? "";
+}
+function itemCellValue(index: number, col: GridColumn, row: Row): string {
+  if (itemBox.value?.index === index) return itemBox.value.query;
+  const id = row[col.key] as string | null;
+  if (id) return itemLabelOf(id);
+  return (row[col.nameKey ?? "item_name"] as string) ?? "";
+}
+function itemSuggestions(): { value: string; label: string }[] {
+  const q = (itemBox.value?.query ?? "").trim().toLowerCase();
+  const opts = props.itemOptions;
+  return (q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts).slice(0, 12);
+}
+function onItemFocus(index: number, col: GridColumn, row: Row): void {
+  itemBox.value = { index, query: itemCellValue(index, col, row) };
+}
+function onItemText(index: number, col: GridColumn, event: Event): void {
+  const q = (event.target as HTMLInputElement).value;
+  itemBox.value = { index, query: q };
+  // typing = free text: store the name + clear the master link in ONE emit
+  patchMany(index, { [col.nameKey ?? "item_name"]: q, [col.key]: null });
+}
+function pickItem(index: number, col: GridColumn, opt: { value: string; label: string }): void {
+  patch(index, col.key, opt.value);
+  itemBox.value = null;
+  emit("item-change", index); // parent resolves item_name / rate / uom / hsn
+}
+function closeItemBox(): void {
+  window.setTimeout(() => { itemBox.value = null; }, 150);
+}
+
+// --- "hsn" column: per-line HSN/SAC typeahead over the HSN master ------------
+// The cell shows the stored 8-digit code; while focused it becomes a search box
+// (type a product name or code) whose query is kept separate from the row value
+// so a half-typed name is never stored — only a picked code is written back.
+interface HsnMatch {
+  hsn_code: string;
+  description: string;
+  gst_rate: string | number;
+  gst_treatment: string;
+}
+const hsnBox = ref<{ index: number; query: string; results: HsnMatch[]; loading: boolean } | null>(null);
+let hsnTimer: ReturnType<typeof setTimeout> | undefined;
+
+function hsnCellValue(index: number, key: string, row: Row): string {
+  return hsnBox.value?.index === index ? hsnBox.value.query : ((row[key] as string) ?? "");
+}
+function onHsnInput(index: number, event: Event): void {
+  const q = (event.target as HTMLInputElement).value;
+  hsnBox.value = { index, query: q, results: hsnBox.value?.index === index ? hsnBox.value.results : [], loading: false };
+  clearTimeout(hsnTimer);
+  if (q.trim().length < 2) {
+    hsnBox.value.results = [];
+    return;
+  }
+  hsnBox.value.loading = true;
+  hsnTimer = setTimeout(async () => {
+    try {
+      const { data } = await api.get<HsnMatch[]>("/hsn-codes", { params: { search: q.trim(), limit: 8 } });
+      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: data, loading: false };
+    } catch {
+      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: [], loading: false };
+    }
+  }, 300);
+}
+function pickHsn(index: number, key: string, m: HsnMatch): void {
+  patch(index, key, m.hsn_code);
+  hsnBox.value = null;
+}
+function closeHsn(): void {
+  // small delay so a mousedown on a result is handled before the box closes
+  window.setTimeout(() => { hsnBox.value = null; }, 150);
 }
 
 function onCell(index: number, col: GridColumn, event: Event): void {
@@ -203,15 +295,42 @@ function confirmMulti(): void {
               >
                 Serials ({{ serialCount(row, col) }}/{{ serialRequired(row, col) }})
               </button>
-              <select
-                v-else-if="col.type === 'item'"
-                class="form-input py-1.5"
-                :value="(row[col.key] as string) ?? ''"
-                @change="onCell(i, col, $event)"
-              >
-                <option value="" disabled>Select item…</option>
-                <option v-for="o in itemOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
+              <template v-else-if="col.type === 'item'">
+                <!-- master-only picker (default) -->
+                <select
+                  v-if="!col.freeText"
+                  class="form-input py-1.5"
+                  :value="(row[col.key] as string) ?? ''"
+                  @change="onCell(i, col, $event)"
+                >
+                  <option value="" disabled>Select item…</option>
+                  <option v-for="o in itemOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+                <!-- free-text combobox: type an ad-hoc item OR pick a master one -->
+                <div v-else class="relative min-w-[12rem]">
+                  <input
+                    :value="itemCellValue(i, col, row)"
+                    class="form-input py-1.5"
+                    placeholder="Type or pick an item…"
+                    @focus="onItemFocus(i, col, row)"
+                    @input="onItemText(i, col, $event)"
+                    @blur="closeItemBox"
+                  />
+                  <ul
+                    v-if="itemBox && itemBox.index === i && itemSuggestions().length"
+                    class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
+                  >
+                    <li
+                      v-for="o in itemSuggestions()"
+                      :key="o.value"
+                      class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
+                      @mousedown.prevent="pickItem(i, col, o)"
+                    >
+                      {{ o.label }}
+                    </li>
+                  </ul>
+                </div>
+              </template>
               <DateField
                 v-else-if="col.type === 'date'"
                 :model-value="(row[col.key] as string) ?? ''"
@@ -231,6 +350,39 @@ function confirmMulti(): void {
                 class="block py-1.5 tabular-nums text-gray-600"
                 :class="col.align === 'right' ? 'text-right' : ''"
               >{{ col.compute ? col.compute(row) : "" }}</span>
+              <div v-else-if="col.type === 'hsn'" class="relative min-w-[7rem]">
+                <input
+                  :value="hsnCellValue(i, col.key, row)"
+                  class="form-input py-1.5"
+                  placeholder="code / name"
+                  @input="onHsnInput(i, $event)"
+                  @focus="onHsnInput(i, $event)"
+                  @blur="closeHsn"
+                />
+                <ul
+                  v-if="hsnBox && hsnBox.index === i && (hsnBox.results.length || hsnBox.loading)"
+                  class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
+                >
+                  <li v-if="hsnBox.loading && !hsnBox.results.length" class="px-3 py-2 text-xs text-gray-400">
+                    Searching…
+                  </li>
+                  <li
+                    v-for="m in hsnBox.results"
+                    :key="m.hsn_code + m.description"
+                    class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
+                    @mousedown.prevent="pickHsn(i, col.key, m)"
+                  >
+                    <div class="flex justify-between gap-2">
+                      <span class="font-mono text-gray-500">{{ m.hsn_code }}</span>
+                      <span
+                        class="font-medium"
+                        :class="Number(m.gst_rate) === 0 ? 'text-gray-500' : 'text-emerald-700'"
+                      >{{ Number(m.gst_rate) }}%</span>
+                    </div>
+                    <div class="text-gray-700">{{ m.description }}</div>
+                  </li>
+                </ul>
+              </div>
               <input
                 v-else
                 :type="col.type === 'number' ? 'number' : 'text'"

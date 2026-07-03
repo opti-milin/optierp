@@ -49,6 +49,8 @@ export interface Item extends DocumentMeta {
   barcode: string | null;
   is_fixed_asset: boolean;
   asset_category_id: string | null;
+  hsn_sac_code: string | null;
+  gst_treatment: string;
   disabled: boolean;
 }
 
@@ -66,6 +68,7 @@ export interface ItemListItem {
   has_batch_no: boolean;
   is_stock_item: boolean;
   standard_rate: string;
+  hsn_sac_code: string | null;
   disabled: boolean;
 }
 

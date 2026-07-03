@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
+from app.core.gst_states import GST_TREATMENT_PATTERN
 from app.schemas.common import DocumentMeta, ORMModel
 
 # --- masters ------------------------------------------------------------------------
@@ -80,6 +81,8 @@ class ItemCreate(BaseModel):
     barcode: str | None = None
     is_fixed_asset: bool = False
     asset_category_id: uuid.UUID | None = None
+    hsn_sac_code: str | None = Field(default=None, max_length=8)
+    gst_treatment: str = Field(default="Taxable", pattern=GST_TREATMENT_PATTERN)
 
 
 class ItemUpdate(BaseModel):
@@ -104,6 +107,8 @@ class ItemUpdate(BaseModel):
     barcode: str | None = None
     is_fixed_asset: bool | None = None
     asset_category_id: uuid.UUID | None = None
+    hsn_sac_code: str | None = Field(default=None, max_length=8)
+    gst_treatment: str | None = Field(default=None, pattern=GST_TREATMENT_PATTERN)
     disabled: bool | None = None
 
 
@@ -138,6 +143,8 @@ class ItemResponse(DocumentMeta):
     barcode: str | None
     is_fixed_asset: bool
     asset_category_id: uuid.UUID | None
+    hsn_sac_code: str | None = None
+    gst_treatment: str = "Taxable"
     disabled: bool
     company_id: uuid.UUID
 
@@ -156,6 +163,7 @@ class ItemListItem(ORMModel):
     has_batch_no: bool = False
     is_stock_item: bool
     standard_rate: Decimal
+    hsn_sac_code: str | None = None
     disabled: bool
 
 

@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
-from app.schemas.accounts import InvoiceListItem, SalesInvoiceCreate, SalesInvoiceResponse
+from app.schemas.accounts import (
+    InvoiceListItem,
+    InvoiceTaxPreview,
+    SalesInvoiceCreate,
+    SalesInvoiceResponse,
+)
 from app.schemas.common import ListResponse
 from app.services import print_service
 from app.services import sales_invoice as service
@@ -34,6 +39,21 @@ async def create(
     return SalesInvoiceResponse.model_validate(
         await service.create_sales_invoice(db, payload, current_user)
     )
+
+
+@router.post(
+    "/preview",
+    response_model=InvoiceTaxPreview,
+    summary="Preview GST + totals for a draft (nothing is saved)",
+    description="Computes the taxes and totals the create call would apply — so the "
+    "form can show CGST/SGST/IGST and the grand total live while drafting.",
+)
+async def preview(
+    payload: SalesInvoiceCreate,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Sales Invoice", "create"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> InvoiceTaxPreview:
+    return await service.preview_sales_invoice(db, payload, current_user)
 
 
 @router.get(

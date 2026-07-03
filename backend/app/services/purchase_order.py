@@ -24,6 +24,9 @@ from app.schemas.accounts import TaxRowIn
 from app.schemas.buying import PurchaseOrderCreate
 from app.services import gl  # noqa: F401  (kept for parity; POs post no GL)
 from app.services.accounts_common import (
+    auto_gst_from_items,
+    _line_key,
+    compute_doc_tax_preview,
     get_company,
     get_supplier,
     item_tax_rates,
@@ -172,13 +175,25 @@ def set_purchase_order_status(po: PurchaseOrder) -> None:
         po.status = "To Receive and Bill"
 
 
+async def preview_purchase_order(db: AsyncSession, payload: PurchaseOrderCreate, user: CurrentUser):
+    """GST + totals preview for a draft Purchase Order (no persistence)."""
+    company = await get_company(db, user.company_id)
+    supplier = await get_supplier(db, payload.supplier_id, company.id)
+    return await compute_doc_tax_preview(
+        db, company=company, party=supplier, kind="purchase", items=payload.items,
+        conversion_rate=payload.conversion_rate, apply_discount_on=payload.apply_discount_on,
+        additional_discount_percentage=payload.additional_discount_percentage,
+        discount_amount=payload.discount_amount,
+    )
+
+
 async def create_purchase_order(
     db: AsyncSession, payload: PurchaseOrderCreate, user: CurrentUser
 ) -> PurchaseOrder:
     company = await get_company(db, user.company_id)
     supplier = await get_supplier(db, payload.supplier_id, company.id)
     currency = (payload.currency or company.default_currency).upper()
-    items = await get_items(db, {row.item_id for row in payload.items}, company.id)
+    items = await get_items(db, {row.item_id for row in payload.items if row.item_id}, company.id)
     if payload.set_warehouse_id is not None:
         await get_warehouse(db, payload.set_warehouse_id, company.id)
     await _validate_mr_links(db, company.id, payload)
@@ -190,17 +205,30 @@ async def create_purchase_order(
     # resolve missing rates from buying price lists / item master
     rates: list[Decimal] = []
     for row in payload.items:
+        item = items.get(row.item_id) if row.item_id else None
         if row.rate is not None:
             rates.append(row.rate)
-        else:
+        elif item is not None:
             rate, _ = await resolve_item_rate(
-                db, items[row.item_id], buying=True, on_date=payload.posting_date,
-                currency=currency,
+                db, item, buying=True, on_date=payload.posting_date, currency=currency,
             )
             rates.append(rate)
+        else:
+            rates.append(Decimal("0"))  # free-text line with no rate given
 
     tax_rows_in = await _load_tax_rows(db, payload, supplier)
     item_rates = await item_tax_rates(db, payload.items)  # per-item GST overrides
+    # No tax template resolved: derive Input GST from each line's HSN so the PO
+    # shows GST too. Only fires on the otherwise-zero-tax path.
+    if not tax_rows_in:
+        auto_rows, auto_overrides = await auto_gst_from_items(
+            db, company=company, party_gstin=supplier.tax_id, place_of_supply=None,
+            payload_items=payload.items, item_rates=item_rates, is_sales=False,
+        )
+        if auto_rows:
+            tax_rows_in = auto_rows
+            for iid, heads in auto_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
     engine_items = [
         ItemRow(
             qty=row.qty,
@@ -208,9 +236,9 @@ async def create_purchase_order(
             price_list_rate=(row.price_list_rate if row.price_list_rate is not None else rate),
             discount_percentage=row.discount_percentage,
             discount_amount=row.discount_amount,
-            item_tax_rate=item_rates.get(row.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(row, idx), {}),
         )
-        for row, rate in zip(payload.items, rates)
+        for idx, (row, rate) in enumerate(zip(payload.items, rates))
     ]
     engine_taxes = [
         TaxRow(
@@ -268,29 +296,31 @@ async def create_purchase_order(
     await db.flush()
 
     for idx, (row, engine_item) in enumerate(zip(payload.items, engine_items), start=1):
-        item = items[row.item_id]
-        warehouse_id = row.warehouse_id or payload.set_warehouse_id or item.default_warehouse_id
-        if item.is_stock_item and warehouse_id is None:
+        item = items.get(row.item_id) if row.item_id else None
+        warehouse_id = row.warehouse_id or payload.set_warehouse_id or (
+            item.default_warehouse_id if item else None
+        )
+        if item is not None and item.is_stock_item and warehouse_id is None:
             raise ValidationError(
                 f"Item row {idx}: warehouse is required for stock item '{item.item_code}'",
                 field="items",
             )
         if warehouse_id is not None:
             await get_warehouse(db, warehouse_id, company.id)
-        if not item.is_purchase_item:
+        if item is not None and not item.is_purchase_item:
             raise ValidationError(
                 f"Item '{item.item_code}' is not a purchase item", field="items"
             )
-        uom = row.uom or item.stock_uom
-        factor = resolve_conversion_factor(item, uom)
+        uom = row.uom or (item.stock_uom if item else None)
+        factor = resolve_conversion_factor(item, uom) if item is not None else Decimal("1")
         db.add(
             PurchaseOrderItem(
                 order_id=po.id,
                 idx=idx,
-                item_id=item.id,
-                item_code=item.item_code,
-                item_name=item.item_name,
-                description=row.description or item.description,
+                item_id=item.id if item else None,
+                item_code=item.item_code if item else None,
+                item_name=item.item_name if item else row.item_name,
+                description=row.description or (item.description if item else None),
                 qty=engine_item.qty,
                 uom=uom,
                 conversion_factor=factor,

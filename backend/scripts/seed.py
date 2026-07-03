@@ -23,6 +23,7 @@ from app.core.security import hash_password  # noqa: E402
 from app.models.core import (  # noqa: E402
     Country,
     Currency,
+    HsnCode,
     Role,
     RolePermission,
     UOM,
@@ -185,6 +186,38 @@ async def seed_masters(db: AsyncSession) -> None:
         if row["name"] not in existing_roles:
             db.add(Role(**row))
     await db.flush()
+
+    await _seed_hsn_codes(db)
+
+
+async def _seed_hsn_codes(db: AsyncSession) -> None:
+    """Load the global HSN → GST-rate reference master (~7.5k rows).
+
+    Two sources: ``hsn_codes.json`` (parsed from the official rate schedule PDF)
+    plus ``hsn_codes_supplement.json`` (curated rows for chapters that PDF omits —
+    textiles/apparel, footwear, jewellery, misc, fertilizers). Idempotent on
+    (hsn_code, description): only missing rows are inserted, so a re-run after
+    adding codes tops up without duplicating. Uses a Core bulk INSERT (server
+    defaults fill id/creation/modified) — fast enough to run on every bootstrap."""
+    existing = set(
+        (await db.execute(select(HsnCode.hsn_code, HsnCode.description))).all()
+    )
+    new_rows = [
+        {
+            "hsn_code": row["hsn_code"],
+            "description": row["description"],
+            "gst_rate": row["gst_rate"],
+            "gst_treatment": row["gst_treatment"],
+            "chapter": row["chapter"],
+            "schedule": row["schedule"],
+        }
+        for name in ("hsn_codes.json", "hsn_codes_supplement.json")
+        for row in _load(name)
+        if (row["hsn_code"], row["description"]) not in existing
+    ]
+    if new_rows:
+        await db.execute(HsnCode.__table__.insert(), new_rows)
+        print(f"Seeded {len(new_rows)} HSN codes")
 
 
 async def _grant(db: AsyncSession, role: str, doctype: str, actions) -> None:

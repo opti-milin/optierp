@@ -38,6 +38,7 @@ class InvoiceItemResponse(DocumentMeta):
     idx: int
     item_code: str | None
     item_name: str
+    hsn_sac_code: str | None = None
     qty: Decimal
     uom: str | None
     conversion_factor: Decimal
@@ -91,6 +92,8 @@ class InvoiceResponseBase(DocumentMeta):
     is_return: bool
     tax_withholding_amount: Decimal
     tax_withholding_category_id: uuid.UUID | None
+    place_of_supply: str | None = None
+    is_reverse_charge: bool = False
     status: str
     remarks: str | None
     workflow_state: str | None

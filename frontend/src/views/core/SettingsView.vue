@@ -58,5 +58,17 @@ const { nextName, loading, error, preview } = useNamingSeries();
         <RouterLink to="/settings/print" class="btn-secondary">Configure</RouterLink>
       </div>
     </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900">GST / India Compliance</h2>
+          <p class="mt-1 text-sm text-gray-500">
+            Registration type, filing cadence, and e-invoice / e-way-bill applicability.
+          </p>
+        </div>
+        <RouterLink to="/gst-settings" class="btn-secondary">Configure</RouterLink>
+      </div>
+    </section>
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
@@ -94,6 +94,10 @@ const controlAccountOptions = computed(() =>
 );
 const postingDate = ref(new Date().toISOString().slice(0, 10));
 const dueDate = ref("");
+// India GST: place of supply ("NN-State") defaults on the server from the party/company
+// GSTIN when left blank; reverse charge = recipient pays the GST.
+const placeOfSupply = ref("");
+const isReverseCharge = ref(false);
 const items = ref<InvoiceItemIn[]>([{ item_name: "", qty: 1, rate: 0 }]);
 const taxes = ref<TaxRowIn[]>([]);
 const taxTemplateId = ref("");
@@ -132,6 +136,61 @@ const discount = ref<DiscountModel>({
   additional_discount_percentage: 0,
   discount_amount: 0,
 });
+
+// Live GST preview (sales): the server computes the taxes create() will apply —
+// from each line's Item Tax Template / HSN — so the totals show CGST/SGST/IGST
+// while drafting, before anything is saved. Display-only; NOT sent on save (the
+// backend recomputes). Skipped once the user manually fills the tax rows.
+const previewTaxes = ref<TaxRowIn[]>([]);
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function refreshTaxPreview(): Promise<void> {
+  const lines = items.value.filter((i) => i.item_name);
+  if (!partyId.value || !lines.length || taxes.value.length) {
+    previewTaxes.value = [];
+    return;
+  }
+  const partyKey = props.kind === "sales" ? "customer_id" : "supplier_id";
+  try {
+    const { data } = await api.post<{
+      taxes: Array<{ description: string; rate: string; tax_amount: string }>;
+    }>(`${endpoint.value}/preview`, {
+      [partyKey]: partyId.value,
+      posting_date: postingDate.value,
+      place_of_supply: placeOfSupply.value || null,
+      // reverse charge (purchase): self-assessed GST nets the payable to the base
+      is_reverse_charge: isReverseCharge.value,
+      apply_discount_on: discount.value.apply_discount_on,
+      additional_discount_percentage: discount.value.additional_discount_percentage || 0,
+      discount_amount: discount.value.discount_amount || 0,
+      items: lines,
+    });
+    previewTaxes.value = data.taxes.map((t) => ({
+      charge_type: "Actual",
+      account_head_id: "",
+      description: t.description,
+      rate: Number(t.rate),
+      tax_amount: Number(t.tax_amount),
+    })) as unknown as TaxRowIn[];
+  } catch {
+    previewTaxes.value = [];
+  }
+}
+
+watch(
+  [items, partyId, placeOfSupply, isReverseCharge, discount, () => taxes.value.length],
+  () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => void refreshTaxPreview(), 400);
+  },
+  { deep: true },
+);
+
+// The manually-entered tax rows win; otherwise show the server GST preview so
+// the totals block reflects the GST that will be charged.
+const effectiveTaxes = computed(() =>
+  taxes.value.length ? taxes.value : previewTaxes.value,
+);
 const currencyModel = ref<CurrencyModel>({ currency: "", conversion_rate: 1 });
 const isReturn = ref(false);
 const returnAgainstId = ref("");
@@ -158,7 +217,7 @@ async function fetchPaymentTermsTemplates(): Promise<void> {
 const liveGrandTotal = computed(() => {
   const t = computeTotals(
     items.value as unknown as Parameters<typeof computeTotals>[0],
-    taxes.value as unknown as Parameters<typeof computeTotals>[1],
+    effectiveTaxes.value as unknown as Parameters<typeof computeTotals>[1],
     discount.value as unknown as Parameters<typeof computeTotals>[2],
   );
   return t.roundedTotal || t.grandTotal;
@@ -235,12 +294,13 @@ function stockQtyLabel(row: Record<string, unknown>): string {
 }
 
 const gridColumns = computed<GridColumn[]>(() => [
-  { key: "item_id", label: "Item / Service", type: "item", required: true },
+  { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" },
   { key: "qty", label: "Quantity", type: "number", align: "right", required: true },
   { key: "uom", label: "UOM", type: "text" },
   { key: "stock_qty", label: "Stock Qty", type: "computed", align: "right", compute: stockQtyLabel },
   { key: "rate", label: "Rate", type: "number", align: "right", required: true },
   { key: "discount_percentage", label: "Discount %", type: "number", align: "right" },
+  { key: "hsn_sac_code", label: "HSN/SAC", type: "hsn" },
   {
     key: "account_id",
     label: props.kind === "sales" ? "Income Account" : "Expense Account",
@@ -272,7 +332,7 @@ const gridRows = computed<Record<string, unknown>[]>({
 function newItemRow(): Record<string, unknown> {
   return {
     item_id: "", item_name: "", qty: 1, rate: 0, uom: "",
-    discount_percentage: 0, account_id: null, cost_center_id: null, _rowKey: rowKey(),
+    discount_percentage: 0, hsn_sac_code: "", account_id: null, cost_center_id: null, _rowKey: rowKey(),
   };
 }
 
@@ -296,6 +356,8 @@ async function onItemChange(index: number): Promise<void> {
           ...r,
           item_name: item?.item_name ?? r.item_name,
           item_code: item?.item_code ?? r.item_code,
+          // snapshot HSN/SAC from the master, but keep a manual override the user already typed
+          hsn_sac_code: r.hsn_sac_code || item?.hsn_sac_code || null,
           uom,
           rate,
         }
@@ -391,6 +453,8 @@ async function save(): Promise<void> {
       payment_terms_template_id: paymentTermsTemplateId.value || null,
       is_return: isReturn.value,
       return_against_id: isReturn.value ? returnAgainstId.value || null : null,
+      place_of_supply: placeOfSupply.value || null,
+      is_reverse_charge: isReverseCharge.value,
     };
     if (props.kind === "sales") {
       payload.customer_id = partyId.value;
@@ -423,6 +487,27 @@ async function action(name: "submit" | "cancel"): Promise<void> {
   try {
     doc.value = await store.docAction<InvoiceDetail>(endpoint.value, doc.value.id, name);
     await loadAdvances();
+  } catch (e) {
+    error.value = e as ErrorEnvelope;
+  }
+}
+
+// India GST e-documents: download the e-invoice / e-way-bill JSON for a submitted
+// sales invoice (gated per-company by GST Settings; a 422 explains if it's off).
+async function downloadEdoc(kind: "e-invoice" | "e-way-bill"): Promise<void> {
+  if (!doc.value) return;
+  error.value = null;
+  try {
+    const data = (
+      await api.get(`/e-documents/sales-invoices/${doc.value.id}/${kind}`)
+    ).data;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${kind}_${doc.value.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   } catch (e) {
     error.value = e as ErrorEnvelope;
   }
@@ -662,6 +747,18 @@ onMounted(async () => {
             @click="createServiceCredit"
           >Create Service Credit</button>
           <button v-if="doc.docstatus === 1" class="btn-secondary" @click="action('cancel')">Cancel</button>
+          <button
+            v-if="kind === 'sales' && doc.docstatus === 1"
+            class="btn-secondary"
+            title="Download the NIC e-invoice JSON (needs E-Invoice enabled in GST Settings)"
+            @click="downloadEdoc('e-invoice')"
+          >e-Invoice JSON</button>
+          <button
+            v-if="kind === 'sales' && doc.docstatus === 1"
+            class="btn-secondary"
+            title="Download the e-way-bill JSON (needs E-Way Bill enabled in GST Settings)"
+            @click="downloadEdoc('e-way-bill')"
+          >e-Way Bill JSON</button>
           <PrintButton :path="`${endpoint}/${doc.id}/pdf`" :title="`${doc.name} — Preview`" />
           <SendEmailButton :doctype="meta.title" :doc-id="doc.id" :doc-name="doc.name" />
         </div>
@@ -875,6 +972,16 @@ onMounted(async () => {
             <label class="form-label">Company</label>
             <div class="form-input bg-gray-50 text-gray-600">{{ companyName || "—" }}</div>
           </div>
+          <div>
+            <label class="form-label">Place of Supply (GST)</label>
+            <input v-model="placeOfSupply" class="form-input" placeholder="Auto from GSTIN (e.g. 27-Maharashtra)" />
+          </div>
+          <div class="flex items-end pb-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+              <input v-model="isReverseCharge" type="checkbox" class="rounded border-gray-300" />
+              Reverse charge
+            </label>
+          </div>
           <div class="flex items-end pb-2">
             <label class="flex items-center gap-2 text-sm text-gray-700">
               <input v-model="isReturn" type="checkbox" class="rounded border-gray-300" />
@@ -937,6 +1044,19 @@ onMounted(async () => {
         </div>
         <TaxesCharges v-model="taxes" :account-options="store.accountOptions" />
 
+        <!-- Auto GST preview (sales): what the server will charge from each line's
+             HSN / Item Tax Template. Shown until the user fills the rows manually. -->
+        <div
+          v-if="!taxes.length && previewTaxes.length"
+          class="mt-2 max-w-sm rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
+        >
+          <div class="mb-1 font-medium">GST (auto, from item HSN)</div>
+          <div v-for="(t, i) in previewTaxes" :key="i" class="flex justify-between">
+            <span>{{ t.description }}<span v-if="Number(t.rate) > 0"> @ {{ Number(t.rate) }}%</span></span>
+            <span class="tabular-nums">{{ formatCurrency(String(t.tax_amount ?? 0), currencyModel.currency || companyCurrency) }}</span>
+          </div>
+        </div>
+
         <!-- India TDS (purchase) / TCS (sales) -->
         <div v-if="tdsCategories.length" class="mt-3 max-w-sm">
           <label class="form-label">{{ kind === "sales" ? "TCS — Tax Collected at Source" : "TDS — Tax Withholding" }}</label>
@@ -959,7 +1079,7 @@ onMounted(async () => {
         <!-- totals -->
         <DocumentTotals
           :items="items"
-          :taxes="taxes"
+          :taxes="effectiveTaxes"
           :discount="discount"
           :currency="currencyModel.currency || companyCurrency"
           :withholding="withholdingPreview"

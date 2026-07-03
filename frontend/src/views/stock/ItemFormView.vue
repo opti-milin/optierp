@@ -4,7 +4,7 @@
 // simplified to our model. ItemUpdate can't change item_code / UOM / the is_*
 // flags / valuation method, so those are read-only when editing.
 
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import { useStockStore } from "@/stores/stock";
@@ -57,6 +57,8 @@ const form = reactive({
   lead_time_days: 0,
   brand: "",
   barcode: "",
+  hsn_sac_code: "",
+  gst_treatment: "Taxable",
   is_fixed_asset: false,
   asset_category_id: "",
   disabled: false,
@@ -78,6 +80,80 @@ const totalStock = computed(() =>
 const totalValue = computed(() =>
   balance.value.reduce((s, r) => s + Number(r.stock_value), 0),
 );
+
+// --- HSN / GST auto-fetch: type a product name → pick a match → fill code + rate.
+interface HsnMatch {
+  hsn_code: string;
+  description: string;
+  gst_rate: string | number;
+  gst_treatment: string;
+  chapter: number | null;
+  schedule: string | null;
+}
+const hsnQuery = ref("");
+const hsnResults = ref<HsnMatch[]>([]);
+const hsnOpen = ref(false);
+const hsnLoading = ref(false);
+const hsnApplied = ref("");
+let hsnDebounce: ReturnType<typeof setTimeout> | undefined;
+
+function fmtRate(rate: string | number): string {
+  const n = Number(rate);
+  return n === 0 ? "Nil (0%)" : `${n}% GST`;
+}
+
+async function runHsnSearch(): Promise<void> {
+  const q = hsnQuery.value.trim();
+  if (q.length < 2) {
+    hsnResults.value = [];
+    hsnOpen.value = false;
+    return;
+  }
+  hsnLoading.value = true;
+  try {
+    const { data } = await api.get<HsnMatch[]>("/hsn-codes", {
+      params: { search: q, limit: 12 },
+    });
+    hsnResults.value = data;
+    hsnOpen.value = true;
+  } catch {
+    hsnResults.value = [];
+  } finally {
+    hsnLoading.value = false;
+  }
+}
+
+watch(hsnQuery, () => {
+  clearTimeout(hsnDebounce);
+  hsnDebounce = setTimeout(() => void runHsnSearch(), 300);
+});
+
+function searchFromName(): void {
+  hsnQuery.value = form.item_name || form.item_code;
+  void runHsnSearch();
+}
+
+function applyHsn(m: HsnMatch): void {
+  form.hsn_sac_code = m.hsn_code;
+  form.gst_treatment = m.gst_treatment;
+  const rate = Number(m.gst_rate);
+  // Map the slab onto the "GST {rate}%" Item Tax Template (keyed by title) so the
+  // rate actually flows onto invoices, not just the HSN code onto the item.
+  const slab = `gst ${rate}%`;
+  const tpl = itemTaxTemplates.value.find(
+    (t) => t.title.replace(/\s+/g, " ").trim().toLowerCase() === slab,
+  );
+  if (tpl) {
+    form.item_tax_template_id = tpl.id;
+    hsnApplied.value = `Applied HSN ${m.hsn_code} · ${fmtRate(rate)} via "${tpl.title}".`;
+  } else {
+    hsnApplied.value =
+      `Set HSN ${m.hsn_code} · standard ${fmtRate(rate)}. No "GST ${rate}%" tax ` +
+      `template exists yet — pick an Item Tax Template above to apply the rate on invoices.`;
+  }
+  hsnOpen.value = false;
+  hsnResults.value = [];
+}
 
 async function loadItem(): Promise<void> {
   if (!itemId.value) return;
@@ -111,6 +187,8 @@ async function loadItem(): Promise<void> {
       lead_time_days: data.lead_time_days,
       brand: data.brand ?? "",
       barcode: data.barcode ?? "",
+      hsn_sac_code: data.hsn_sac_code ?? "",
+      gst_treatment: data.gst_treatment ?? "Taxable",
       is_fixed_asset: data.is_fixed_asset ?? false,
       asset_category_id: data.asset_category_id ?? "",
       disabled: data.disabled,
@@ -154,6 +232,8 @@ async function save(): Promise<void> {
         lead_time_days: form.lead_time_days || 0,
         brand: form.brand || null,
         barcode: form.barcode || null,
+        hsn_sac_code: form.hsn_sac_code || null,
+        gst_treatment: form.gst_treatment,
         is_fixed_asset: form.is_fixed_asset,
         asset_category_id: form.is_fixed_asset ? form.asset_category_id || null : null,
         disabled: form.disabled,
@@ -187,6 +267,8 @@ async function save(): Promise<void> {
         lead_time_days: form.lead_time_days || 0,
         brand: form.brand || null,
         barcode: form.barcode || null,
+        hsn_sac_code: form.hsn_sac_code || null,
+        gst_treatment: form.gst_treatment,
         is_fixed_asset: form.is_fixed_asset,
         asset_category_id: form.is_fixed_asset ? form.asset_category_id || null : null,
       });
@@ -419,6 +501,78 @@ onMounted(async () => {
             <option v-for="t in itemTaxTemplates" :key="t.id" :value="t.id">{{ t.title }}</option>
           </select>
         </template>
+        <!-- Auto-fetch HSN + GST rate by product name (or code) -->
+        <label class="form-label">Auto-fetch HSN &amp; GST rate</label>
+        <div class="relative mb-2">
+          <div class="flex gap-2">
+            <input
+              v-model="hsnQuery"
+              type="search"
+              class="form-input"
+              placeholder="Type a product name — e.g. refrigerator, cotton shirt, rice…"
+              @focus="hsnResults.length && (hsnOpen = true)"
+              @keydown.escape="hsnOpen = false"
+            />
+            <button
+              type="button"
+              class="btn-secondary whitespace-nowrap"
+              :disabled="!form.item_name && !form.item_code"
+              title="Search using the item name entered above"
+              @click="searchFromName"
+            >
+              Use name
+            </button>
+          </div>
+          <p v-if="hsnLoading" class="mt-1 text-xs text-gray-400">Searching HSN directory…</p>
+          <ul
+            v-if="hsnOpen && hsnResults.length"
+            class="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg"
+          >
+            <li
+              v-for="m in hsnResults"
+              :key="m.hsn_code + m.description"
+              class="cursor-pointer border-b border-gray-50 px-3 py-2 text-sm last:border-0 hover:bg-primary/5"
+              @click="applyHsn(m)"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-mono text-xs text-gray-500">{{ m.hsn_code }}</span>
+                <span
+                  class="rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="Number(m.gst_rate) === 0 ? 'bg-gray-100 text-gray-600' : 'bg-emerald-50 text-emerald-700'"
+                >{{ fmtRate(m.gst_rate) }}</span>
+              </div>
+              <div class="mt-0.5 text-gray-700">{{ m.description }}</div>
+            </li>
+          </ul>
+          <p
+            v-else-if="hsnOpen && !hsnLoading && hsnQuery.trim().length >= 2"
+            class="mt-1 text-xs text-gray-400"
+          >
+            No HSN match — try a simpler commodity word, or fill the code manually below.
+          </p>
+        </div>
+        <p v-if="hsnApplied" class="mb-2 rounded-md bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
+          {{ hsnApplied }}
+        </p>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">HSN / SAC code</label>
+            <input v-model="form.hsn_sac_code" maxlength="8" class="form-input" placeholder="e.g. 8418" />
+          </div>
+          <div>
+            <label class="form-label">GST treatment</label>
+            <select v-model="form.gst_treatment" class="form-input">
+              <option value="Taxable">Taxable</option>
+              <option value="Nil-Rated">Nil-Rated</option>
+              <option value="Exempt">Exempt</option>
+              <option value="Non-GST">Non-GST</option>
+            </select>
+          </div>
+        </div>
+        <p class="mt-1 text-xs text-gray-400">
+          Auto-filled from the lookup — edit either field to override.
+        </p>
         <label v-if="isEdit" class="form-label">Last Purchase Rate</label>
         <input v-if="isEdit" :value="formatCurrency(lastPurchaseRate, companyCurrency)" disabled class="form-input" />
       </div>

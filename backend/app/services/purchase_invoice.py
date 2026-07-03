@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.gst_states import gst_state_label_of
 from app.core.naming import get_next_name
 from app.core.security import CurrentUser
 from app.models.accounts import PurchaseInvoice, PurchaseInvoiceItem, PurchaseInvoiceTax, TaxTemplate
@@ -21,13 +22,17 @@ from app.schemas.accounts import PurchaseInvoiceCreate, TaxRowIn
 from app.services import gl
 from app.services.accounts_common import (
     NAMING_SERIES,
+    auto_gst_from_items,
+    _line_key,
     base_payable_total,
+    compute_doc_tax_preview,
     get_company,
     get_payable_account,
     get_supplier,
     item_tax_rates,
     require_draft,
     require_submitted,
+    reverse_charge_tax_rows,
     set_invoice_status,
 )
 from app.services.audit import log_audit
@@ -148,6 +153,21 @@ async def _load_tax_rows(
     ]
 
 
+async def preview_purchase_invoice(db: AsyncSession, payload: PurchaseInvoiceCreate, user: CurrentUser):
+    """Compute taxes + totals for a DRAFT purchase invoice (no persistence) so the
+    form previews the GST that ``create_purchase_invoice`` will apply."""
+    company = await get_company(db, user.company_id)
+    supplier = await get_supplier(db, payload.supplier_id, company.id)
+    return await compute_doc_tax_preview(
+        db, company=company, party=supplier, kind="purchase", items=payload.items,
+        place_of_supply=payload.place_of_supply, conversion_rate=payload.conversion_rate,
+        apply_discount_on=payload.apply_discount_on,
+        additional_discount_percentage=payload.additional_discount_percentage,
+        discount_amount=payload.discount_amount,
+        is_reverse_charge=payload.is_reverse_charge,
+    )
+
+
 async def create_purchase_invoice(
     db: AsyncSession, payload: PurchaseInvoiceCreate, user: CurrentUser
 ) -> PurchaseInvoice:
@@ -168,6 +188,33 @@ async def create_purchase_invoice(
     # outstanding payable against the Temporary Opening account.
     tax_rows_in = [] if payload.is_opening else await _load_tax_rows(db, payload, supplier)
     item_rates = await item_tax_rates(db, payload.items)
+    # India RCM: a reverse-charge inward supply self-assesses GST — the buyer books it as
+    # both ITC (Input GST, an Add row → Dr) and a liability (Output CGST/SGST/IGST, Deduct
+    # rows → Cr), netting the payable to the base. It overrides the normal tax resolution
+    # (the supplier charges no GST) whenever the caller didn't pass explicit tax rows.
+    if payload.is_reverse_charge and not payload.is_opening and not payload.taxes:
+        rcm_rows, rcm_overrides = await reverse_charge_tax_rows(
+            db, company=company, party_gstin=supplier.tax_id,
+            place_of_supply=payload.place_of_supply, payload_items=payload.items,
+            item_rates=item_rates,
+        )
+        if rcm_rows:
+            tax_rows_in = rcm_rows
+            for iid, heads in rcm_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
+    # No tax template resolved (supplier with no GST category and no default): fall
+    # back to the line items' own GST (Input GST from the item's HSN / template),
+    # so purchase GST applies too. Only fires on the otherwise-zero-tax path.
+    if not tax_rows_in and not payload.is_opening:
+        auto_rows, auto_overrides = await auto_gst_from_items(
+            db, company=company, party_gstin=supplier.tax_id,
+            place_of_supply=payload.place_of_supply, payload_items=payload.items,
+            item_rates=item_rates, is_sales=False,
+        )
+        if auto_rows:
+            tax_rows_in = auto_rows
+            for iid, heads in auto_overrides.items():
+                item_rates.setdefault(iid, {}).update(heads)
     engine_items = [
         ItemRow(
             qty=item.qty,
@@ -175,9 +222,9 @@ async def create_purchase_invoice(
             price_list_rate=(item.price_list_rate if item.price_list_rate is not None else item.rate),
             discount_percentage=item.discount_percentage,
             discount_amount=item.discount_amount,
-            item_tax_rate=item_rates.get(item.item_id, {}),
+            item_tax_rate=item_rates.get(_line_key(item, idx), {}),
         )
-        for item in payload.items
+        for idx, item in enumerate(payload.items)
     ]
     engine_taxes = [
         TaxRow(
@@ -240,6 +287,9 @@ async def create_purchase_invoice(
         remarks=payload.remarks,
         is_return=payload.is_return,
         is_opening=payload.is_opening,
+        # India GST place of supply for an inward supply = our (company's) state; overridable.
+        place_of_supply=payload.place_of_supply or gst_state_label_of(company.tax_id),
+        is_reverse_charge=payload.is_reverse_charge,
         return_against_id=payload.return_against_id,
         apply_discount_on=payload.apply_discount_on,
         additional_discount_percentage=payload.additional_discount_percentage,
@@ -304,6 +354,7 @@ async def create_purchase_invoice(
                 idx=idx,
                 item_code=item_in.item_code,
                 item_name=item_in.item_name,
+                hsn_sac_code=item_in.hsn_sac_code or (item_master.hsn_sac_code if item_master else None),
                 description=item_in.description,
                 qty=engine_item.qty * sign,
                 uom=item_in.uom,

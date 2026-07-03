@@ -136,6 +136,12 @@ class InvoiceMixin(VoucherMixin, TotalsMixin):
     )
     advance_paid: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=0, server_default=text("0"))
     is_return: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # India GST: place of supply, recorded as the portal "NN-State" label (e.g.
+    # "27-Maharashtra"). Phase 1 stores + prints it (and feeds the GSTR-1 POS column);
+    # the CGST+SGST-vs-IGST split is still derived from the GSTIN prefixes in
+    # resolve_tax_template, not from this field. String(64): longest label is 43 chars.
+    place_of_supply: Mapped[str | None] = mapped_column(String(64))
+    is_reverse_charge: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     # Opening (migration-in) invoice: posts the outstanding against Temporary
     # Opening instead of income/expense, and is excluded from sales/purchase registers.
     is_opening: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
@@ -162,6 +168,9 @@ class InvoiceItemMixin:
     item_code: Mapped[str | None] = mapped_column(String(140))
     item_name: Mapped[str] = mapped_column(String(140), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # India GST: HSN/SAC code snapshotted from the item at billing (legally required on a
+    # tax invoice line; the GSTR-1 HSN summary groups by it).
+    hsn_sac_code: Mapped[str | None] = mapped_column(String(8))
     qty: Mapped[Decimal] = mapped_column(Numeric(21, 6), nullable=False, default=1, server_default=text("1"))
     uom: Mapped[str | None] = mapped_column(String(140))
     # Multi-UOM (Phase 4): qty is in the transaction UOM; stock_qty = qty *

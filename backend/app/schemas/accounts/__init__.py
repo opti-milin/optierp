@@ -7,6 +7,7 @@ every schema is re-exported here so `from app.schemas.accounts import X` works.
 from app.schemas.accounts.common import TaxRowIn
 from app.schemas.accounts.common import InvoiceItemIn
 from app.schemas.accounts.common import InvoiceCreateBase
+from app.schemas.accounts.common import InvoiceTaxLinePreview, InvoiceTaxPreview
 from app.schemas.accounts.masters import CustomerCreate
 from app.schemas.accounts.masters import CustomerResponse
 from app.schemas.accounts.masters import SupplierCreate
@@ -106,6 +107,8 @@ __all__ = [
     "TaxRowIn",
     "InvoiceItemIn",
     "InvoiceCreateBase",
+    "InvoiceTaxLinePreview",
+    "InvoiceTaxPreview",
     "CustomerCreate",
     "CustomerResponse",
     "SupplierCreate",

@@ -27,6 +27,8 @@ export interface InvoiceItemIn {
   discount_percentage?: number | null;
   discount_amount?: number | null;
   account_id?: string | null;
+  // India GST: HSN/SAC override; defaults from the item master when omitted
+  hsn_sac_code?: string | null;
   // Module 03-05 cycle links
   item_id?: string | null;
   sales_order_item_id?: string | null;

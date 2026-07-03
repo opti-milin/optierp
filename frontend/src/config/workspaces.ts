@@ -360,6 +360,9 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS", to: "/m/tax-withholding-category" },
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
       ],
     },
     {
@@ -436,6 +439,9 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS Category", to: "/m/tax-withholding-category" },
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
       ],
     },
     {
