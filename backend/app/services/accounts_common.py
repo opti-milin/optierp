@@ -189,6 +189,14 @@ async def auto_gst_from_items(
     from app.models.stock import Item
     from app.schemas.accounts import TaxRowIn
 
+    # Composition dealer → Bill of Supply, no HSN-derived output GST on the sales side.
+    # (Mirrors resolve_tax_template so preview == create; purchase/RCM stays taxed.)
+    if is_sales:
+        from app.services.gst_settings import is_composition
+
+        if await is_composition(db, company.id):
+            return [], {}
+
     item_ids = {i.item_id for i in payload_items if getattr(i, "item_id", None) is not None}
     # a free-text line (no item_id) still gets HSN-derived GST if it carries its own HSN
     free_text_hsn = any(

@@ -33,6 +33,8 @@ from app.models.accounts import Account, PurchaseInvoice, SalesInvoice
 from app.models.core import Company
 from app.models.stock import Item
 from app.schemas.compliance import (
+    Cmp08Report,
+    CompositionTaxRow,
     Gstr1B2B,
     Gstr1B2CS,
     Gstr1DocSummary,
@@ -44,8 +46,11 @@ from app.schemas.compliance import (
     Gstr3bItcRow,
     Gstr3bReport,
     Gstr3bTaxRow,
+    Gstr4Report,
+    composition_rate_for,
 )
 from app.services.accounts_common import _hsn_rates
+from app.services.gst_settings import get_gst_settings
 
 ZERO = Decimal("0")
 Q2 = Decimal("0.01")
@@ -75,6 +80,27 @@ def _component(name: str | None) -> str | None:
 
 def _filing_period(from_date: date) -> str:
     return f"{from_date.month:02d}{from_date.year}"
+
+
+def _fy_quarter(d: date) -> int:
+    """Indian financial-year quarter (Q1 Apr–Jun … Q4 Jan–Mar) of a date."""
+    return {1: 4, 2: 4, 3: 4, 4: 1, 5: 1, 6: 1, 7: 2, 8: 2, 9: 2, 10: 3, 11: 3, 12: 3}[d.month]
+
+
+def _fy_start_year(d: date) -> int:
+    """Starting calendar year of the Indian FY (Apr–Mar) a date falls in."""
+    return d.year if d.month >= 4 else d.year - 1
+
+
+def _quarter_label(d: date) -> str:
+    """CMP-08 quarter label, e.g. 'Q1-2026' (FY starting-year based)."""
+    return f"Q{_fy_quarter(d)}-{_fy_start_year(d)}"
+
+
+def _fy_label(d: date) -> str:
+    """Financial-year label, e.g. '2026-27'."""
+    start = _fy_start_year(d)
+    return f"{start}-{(start + 1) % 100:02d}"
 
 
 @dataclass
@@ -575,6 +601,123 @@ def _purchase_split(inv, acct_names: dict, *, inter: bool) -> tuple[_Split, _Spl
             inp.cgst += inp_unclassified / 2
             inp.sgst += inp_unclassified / 2
     return inp, outp
+
+
+# --------------------------------------------------------------------------------------
+# Composition scheme — CMP-08 (quarterly) + GSTR-4 (annual).
+#
+# A composition dealer's outward supplies carry NO output GST (Bill of Supply — the tax
+# engine suppresses it). Their liability is a flat composite tax on turnover plus the
+# reverse-charge tax self-assessed on inward supplies. Both reuse `_load_docs` (outward
+# turnover, net of returns) and `_purchase_itc` (inward RCM liability).
+# --------------------------------------------------------------------------------------
+
+
+def _composition_tax(turnover: Decimal, rate: Decimal) -> tuple[Decimal, Decimal]:
+    """Composite tax on turnover, split equally CGST/SGST (composition = intra-state only)."""
+    half = turnover * rate / 100 / 2
+    return half, half
+
+
+async def cmp08(db: AsyncSession, company: Company, *, from_date: date, to_date: date) -> Cmp08Report:
+    """CMP-08 — quarterly self-assessed composition tax: 3(1) composite tax on outward
+    turnover, 3(2) tax on inward reverse-charge supplies, 3(3) total payable."""
+    settings = await get_gst_settings(db, company.id)
+    rate = composition_rate_for(settings.composition_category)
+
+    docs, _hsn_rate, _treat = await _load_docs(db, company, from_date, to_date)
+    turnover = sum((d.taxable for d in docs), ZERO)  # net of returns
+    out_cgst, out_sgst = _composition_tax(turnover, rate)
+
+    rcm, _itc_rcm, _itc_other = await _purchase_itc(db, company, from_date, to_date)
+    rs = rcm["s"]
+
+    rows = [
+        CompositionTaxRow(
+            label="3(1) Outward supplies (composition levy)",
+            taxable_value=_q(turnover), igst=ZERO, cgst=_q(out_cgst), sgst=_q(out_sgst), cess=ZERO,
+        ),
+        CompositionTaxRow(
+            label="3(2) Inward supplies attracting reverse charge",
+            taxable_value=_q(rcm["val"]), igst=_q(rs.igst), cgst=_q(rs.cgst), sgst=_q(rs.sgst), cess=_q(rs.cess),
+        ),
+    ]
+    payable = CompositionTaxRow(
+        label="3(3) Tax payable",
+        taxable_value=ZERO,
+        igst=_q(rs.igst),
+        cgst=_q(out_cgst + rs.cgst),
+        sgst=_q(out_sgst + rs.sgst),
+        cess=_q(rs.cess),
+    )
+    rows.append(payable)
+    total_tax = payable.igst + payable.cgst + payable.sgst + payable.cess
+
+    return Cmp08Report(
+        gstin=company.tax_id or None,
+        filing_period=_quarter_label(from_date),
+        from_date=from_date,
+        to_date=to_date,
+        composition_category=settings.composition_category,
+        composition_rate=rate,
+        rows=rows,
+        total_tax=_q(total_tax),
+    )
+
+
+async def gstr4(db: AsyncSession, company: Company, *, from_date: date, to_date: date) -> Gstr4Report:
+    """GSTR-4 — the composition dealer's annual return: outward turnover + composite tax
+    (Table 6), inward reverse-charge (Table 4B), a per-quarter breakdown (the CMP-08s),
+    and the total annual tax."""
+    settings = await get_gst_settings(db, company.id)
+    rate = composition_rate_for(settings.composition_category)
+
+    docs, _hsn_rate, _treat = await _load_docs(db, company, from_date, to_date)
+    turnover = sum((d.taxable for d in docs), ZERO)
+    out_cgst, out_sgst = _composition_tax(turnover, rate)
+
+    rcm, _itc_rcm, _itc_other = await _purchase_itc(db, company, from_date, to_date)
+    rs = rcm["s"]
+
+    outward = CompositionTaxRow(
+        label="Table 6 — Outward supplies (composition levy)",
+        taxable_value=_q(turnover), igst=ZERO, cgst=_q(out_cgst), sgst=_q(out_sgst), cess=ZERO,
+    )
+    inward = CompositionTaxRow(
+        label="Table 4B — Inward supplies (reverse charge)",
+        taxable_value=_q(rcm["val"]), igst=_q(rs.igst), cgst=_q(rs.cgst), sgst=_q(rs.sgst), cess=_q(rs.cess),
+    )
+    total = CompositionTaxRow(
+        label="Total tax payable",
+        taxable_value=ZERO,
+        igst=_q(rs.igst), cgst=_q(out_cgst + rs.cgst), sgst=_q(out_sgst + rs.sgst), cess=_q(rs.cess),
+    )
+
+    # per-quarter turnover → composite tax (what each CMP-08 declared)
+    q_turnover: dict[int, Decimal] = defaultdict(lambda: ZERO)
+    for d in docs:
+        q_turnover[_fy_quarter(d.inv.posting_date)] += d.taxable
+    quarters = []
+    for q in sorted(q_turnover):
+        c, s = _composition_tax(q_turnover[q], rate)
+        quarters.append(
+            CompositionTaxRow(
+                label=f"Q{q}", taxable_value=_q(q_turnover[q]), igst=ZERO, cgst=_q(c), sgst=_q(s), cess=ZERO,
+            )
+        )
+
+    total_tax = total.igst + total.cgst + total.sgst + total.cess
+    return Gstr4Report(
+        gstin=company.tax_id or None,
+        filing_period=_fy_label(from_date),
+        from_date=from_date,
+        to_date=to_date,
+        composition_category=settings.composition_category,
+        composition_rate=rate,
+        rows=[outward, inward, total],
+        quarters=quarters,
+        total_tax=_q(total_tax),
+    )
 
 
 # --------------------------------------------------------------------------------------

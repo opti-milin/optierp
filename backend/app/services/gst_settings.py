@@ -11,10 +11,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from decimal import Decimal
+
 from app.core.gst_states import gst_state_label_of
 from app.core.security import CurrentUser
 from app.models.core import Company, SystemSetting
-from app.schemas.compliance import GstSettings
+from app.schemas.compliance import GstSettings, composition_rate_for
 from app.schemas.core import SystemSettingUpsert
 from app.services import settings as settings_service
 
@@ -53,6 +55,21 @@ async def get_gst_settings(db: AsyncSession, company_id: uuid.UUID | None) -> Gs
     stored.gstin = gstin
     stored.gst_state = gst_state_label_of(gstin)
     return stored
+
+
+async def is_composition(db: AsyncSession, company_id: uuid.UUID | None) -> bool:
+    """True when the company is registered under the composition scheme — the GST engine
+    reads this to suppress output GST (Bill of Supply) on the SALES side only."""
+    if company_id is None:
+        return False
+    settings = await get_gst_settings(db, company_id)
+    return settings.registration_type == "Composition"
+
+
+async def composition_rate(db: AsyncSession, company_id: uuid.UUID | None) -> Decimal:
+    """The composite tax rate (%) on turnover for the company's composition category."""
+    settings = await get_gst_settings(db, company_id)
+    return composition_rate_for(settings.composition_category)
 
 
 async def save_gst_settings(

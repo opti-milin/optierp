@@ -280,6 +280,15 @@ async def resolve_tax_template(
     *contradicts* the GSTIN's state — a consistent manual choice (e.g. a specific
     Reverse-Charge category on the same side) is honoured.
     """
+    # A composition dealer issues a Bill of Supply — NO output GST on the sales side.
+    # Suppress the sales tax template here so nothing downstream adds GST (purchases,
+    # incl. reverse charge, are unaffected — composition dealers still self-assess RCM).
+    if kind == "sales":
+        from app.services.gst_settings import is_composition
+
+        if await is_composition(db, company_id):
+            return None
+
     # the party's manual tax category, if set and enabled
     manual = await db.get(TaxCategory, tax_category_id) if tax_category_id is not None else None
     if manual is not None and manual.disabled:

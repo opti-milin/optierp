@@ -10,6 +10,22 @@ from pydantic import BaseModel, field_validator
 REGISTRATION_TYPES = ("Regular", "Composition")
 FILING_CADENCES = ("Monthly", "QRMP")
 
+# Composition-scheme categories → the fixed composite tax rate on turnover.
+# Traders & manufacturers 1% (0.5% CGST + 0.5% SGST), restaurants 5% (2.5%+2.5%),
+# other service providers 6% (3%+3%, sec 10(2A)). Split equally CGST/SGST — a
+# composition dealer makes only intra-state outward supplies (no IGST).
+COMPOSITION_CATEGORIES = {
+    "Trader": Decimal("1"),
+    "Manufacturer": Decimal("1"),
+    "Restaurant": Decimal("5"),
+    "Service Provider": Decimal("6"),
+}
+
+
+def composition_rate_for(category: str | None) -> Decimal:
+    """The composite tax rate (%) on turnover for a composition category (default 1%)."""
+    return COMPOSITION_CATEGORIES.get(category or "", Decimal("1"))
+
 
 class HsnCodeMatch(BaseModel):
     """One match from the HSN "search by product name / code" lookup.
@@ -36,10 +52,18 @@ class GstSettings(BaseModel):
     # --- stored policy ---
     registration_type: str = "Regular"  # Regular | Composition
     filing_cadence: str = "Monthly"  # Monthly | QRMP — only meaningful for Regular dealers
-    # (Composition files CMP-08/GSTR-4; that flow lands in a later phase)
+    # Composition dealers file CMP-08 (quarterly) + GSTR-4 (annual), issue a Bill of Supply
+    # (no output GST), and pay a flat composite tax on turnover per this category:
+    composition_category: str = "Trader"  # Trader/Manufacturer 1%, Restaurant 5%, Service 6%
     e_invoice_applicable: bool = False  # generate e-invoice (IRN/QR) for B2B
     e_way_bill_applicable: bool = False  # generate e-way bills for goods movement
     is_sez: bool = False  # company is an SEZ unit
+    # Book output GST on advances received for SERVICES at receipt (Regular dealers only;
+    # goods advances are exempt per Notf. 66/2017). Reported in GSTR-1 Table 11 + 3B 3.1(a).
+    collect_gst_on_advances: bool = True
+    # This company is itself an e-commerce OPERATOR that collects TCS u/s 52 and files GSTR-8.
+    is_ecommerce_operator: bool = False
+    tcs_rate: Decimal = Decimal("0.5")  # ECO TCS rate u/s 52 (0.5%)
     # GSP/IRP/NIC integration (Phase 5). The provider NAME selects a pluggable adapter;
     # its per-tenant CREDENTIALS live in a secure store (env / secret manager), never in
     # this settings blob. Empty / "none" ⇒ JSON-only (the offline-tool export).
@@ -62,6 +86,13 @@ class GstSettings(BaseModel):
     def _valid_cadence(cls, v: str) -> str:
         if v not in FILING_CADENCES:
             raise ValueError(f"filing_cadence must be one of {FILING_CADENCES}")
+        return v
+
+    @field_validator("composition_category")
+    @classmethod
+    def _valid_composition_category(cls, v: str) -> str:
+        if v not in COMPOSITION_CATEGORIES:
+            raise ValueError(f"composition_category must be one of {tuple(COMPOSITION_CATEGORIES)}")
         return v
 
 
@@ -209,6 +240,56 @@ class Gstr3bReport(BaseModel):
     inter_state_unreg: list[Gstr3bInterStateRow]  # section 3.2
     itc: list[Gstr3bItcRow]  # section 4 (eligible ITC)
     net_tax_payable: Gstr3bTaxRow  # 3.1 output tax − eligible ITC (informational)
+
+
+# ---------------------------------------------------------------------------
+# Composition scheme — CMP-08 (quarterly statement-cum-challan) + GSTR-4
+# (annual return) — Phase 6.3.
+#
+# A composition dealer issues a Bill of Supply (NO output GST — suppressed at the
+# tax engine) and instead pays a flat composite tax on turnover. CMP-08 declares the
+# quarterly self-assessed tax; GSTR-4 is the annual summary. Both reuse the outward
+# turnover (submitted sales, net of returns) and the inward reverse-charge liability
+# (from purchases) already computed for the regular returns.
+# ---------------------------------------------------------------------------
+
+
+class CompositionTaxRow(BaseModel):
+    """A labelled composition tax line (turnover + the CGST/SGST/IGST/Cess on it)."""
+
+    label: str
+    taxable_value: Decimal
+    igst: Decimal
+    cgst: Decimal
+    sgst: Decimal
+    cess: Decimal
+
+
+class Cmp08Report(BaseModel):
+    """CMP-08 — quarterly statement-cum-challan of self-assessed composition tax."""
+
+    gstin: str | None = None
+    filing_period: str  # quarter label, e.g. "Q1-2026"
+    from_date: date
+    to_date: date
+    composition_category: str
+    composition_rate: Decimal  # composite % on turnover
+    rows: list[CompositionTaxRow]  # 3(1) outward, 3(2) inward RCM, 3(3) tax payable
+    total_tax: Decimal
+
+
+class Gstr4Report(BaseModel):
+    """GSTR-4 — the composition dealer's annual return."""
+
+    gstin: str | None = None
+    filing_period: str  # financial-year label, e.g. "2026-27"
+    from_date: date
+    to_date: date
+    composition_category: str
+    composition_rate: Decimal
+    rows: list[CompositionTaxRow]  # outward (Table 6), inward RCM (4B), total
+    quarters: list[CompositionTaxRow]  # per-quarter composition tax (as filed via CMP-08)
+    total_tax: Decimal
 
 
 # ---------------------------------------------------------------------------
