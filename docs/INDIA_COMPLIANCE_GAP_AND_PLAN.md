@@ -6,11 +6,13 @@ bills**, **reverse charge**, **GSTR-2B reconciliation**, and the TDS/TCS already
 covering the full GST spectrum** (regular + composition, monthly + QRMP, B2B/B2C, SEZ/export, e-commerce
 TCS), **configurable per tenant**, and with **live portal/GSP automation** as a planned phase. Modelled on
 ERPNext + the Frappe **India Compliance** app.
-**Status:** 🟢 **building — Phases 0–5 done (2026-07-02).** HSN + GST-invoice completeness, GST Settings,
-GSTR-1/3B returns (+JSON), reverse-charge posting, e-invoice/e-way-bill JSON, and a pluggable GSP provider
-abstraction (JSON fallback) are built + tested. Remaining: the concrete live GSP adapter (needs creds) and
-the Phase-6 long tail.
-**Designed:** 2026-06-23. **Built:** 2026-06-28 → 2026-07-02.
+**Status:** 🟢 **building — Phases 0–5 + 6.1/6.2/6.3 done (2026-07-03).** HSN + GST-invoice completeness, GST
+Settings, GSTR-1/3B returns (+JSON), reverse-charge posting, e-invoice/e-way-bill JSON, a pluggable GSP
+provider abstraction (JSON fallback), GSTR-2B reconciliation, TDS 26Q/16A, and now **Composition (CMP-08/
+GSTR-4), QRMP + IFF, e-commerce TCS u/s 52 (Table 14), and GST-on-advances (Table 11)** are built + tested +
+live-verified. Remaining: the concrete live GSP adapter (needs creds) and a smaller long tail (SEZ/export,
+TCS 27EQ, e-commerce operator GSTR-8/9(5), deductor TAN).
+**Designed:** 2026-06-23. **Built:** 2026-06-28 → 2026-07-03.
 
 > **SaaS framing (owner, 2026-06-23):** this is a product for *many* MSMEs, so we **cannot permanently skip**
 > a GST case — some tenant will need each one. The lever is **per-tenant configuration + sensible
@@ -245,8 +247,30 @@ read** (single source of truth) via a new `app/core/gst_states.py` (the 37 GST s
   (`/tds-returns`, quarter picker, 26Q table + inline Form-16A certificate). Test `test_tds_returns.py`;
   verified live (194C, Duff Components, PAN BBBBB0001B, ₹50,000 → TDS ₹1,000). **Not captured yet:** the
   deductor **TAN** (Company has no TAN field — the filer completes it); **TCS 27EQ** is a separate return.
-- Remaining long tail: **Composition** scheme flows, **QRMP**, **SEZ/Export** (with/without payment),
-  **e-commerce TCS u/s 52**, **TCS 27EQ**, **GST on advances**.
+- **Composition scheme (CMP-08 + GSTR-4)** — 🟢 **DONE (2026-07-03, slice 6.3).** `GstSettings.composition_category`
+  (Trader/Mfr 1%, Restaurant 5%, Service 6%). Output GST is suppressed on the **sales side** at both engine
+  chokepoints (`resolve_tax_template` → None, `auto_gst_from_items` → `[],{}` for composition), so create AND live
+  preview issue a **Bill of Supply**; purchase RCM stays active. `gst_returns.cmp08` (quarterly: 3(1) composite levy
+  on turnover + 3(2) inward RCM + 3(3) payable) + `gstr4` (annual + per-quarter). `GET /gst-returns/cmp-08`, `/gstr-4`;
+  GSTR-1/3B **rejected (422)** for composition tenants. Test `test_gst_composition.py`; verified live on the demo
+  (CMP-08 Q2 inward RCM ₹141.08+₹141.08; GSTR-4 turnover ₹6,35,998.70 → ₹6,642.14 payable).
+- **QRMP + IFF** — 🟢 **DONE (2026-07-03, slice 6.3).** Filing period now derives from the window's **last month**
+  (quarter → last month; monthly unchanged). `gst_returns.iff` = GSTR-1 restricted to B2B/B2CL/CDNR (derived from
+  `gstr1()`, no duplicated bucketing) + `iff_json`; `GET /gst-returns/iff`, `/iff/json`. QRMP filers file GSTR-1/3B
+  over a **quarter range** (endpoints already take from/to). Frontend period-MODE picker (month/quarter/annual).
+  Test `test_gst_qrmp.py`.
+- **E-commerce TCS u/s 52 (seller Table 14a)** — 🟢 **DONE (2026-07-03, slice 6.3).** `sales_invoices.ecommerce_gstin`
+  (migration 0062); `gstr1()` **Table 14(a)** aggregates supplies per operator (**additive** — they still appear in
+  B2B/B2C, no double count) + `gstr1_json` `supeco.clttx`. GSTR-3B unchanged (u/s 52 = ordinary taxable for the
+  seller). Test `test_gst_ecommerce.py`. **Deferred:** the operator side (GSTR-8) + u/s 9(5).
+- **GST on advances (Table 11)** — 🟢 **DONE (2026-07-03, slice 6.3).** Payment Entry gains advance-GST columns + a new
+  `AdvanceGstAdjustment` ledger (migration 0063). A **service** advance (goods exempt per Notf. 66/2017; Composition
+  skipped) books **inclusive** output GST at receipt (Dr 'GST on Advances' control / Cr Output GST); reconciliation
+  **reverses** it proportionally (capped at the remaining tax) — posted under the payment voucher so cancel
+  auto-reverses both legs and the control **nets to zero**. `_load_advances` → GSTR-1 **Table 11A/11B** + `at`/`txpd`
+  JSON; GSTR-3B **3.1(a)** adds the net advance (11A−11B) so 3B ties to Table 11. Test `test_gst_advances.py`.
+- Remaining long tail: **SEZ/Export** (with/without payment), **TCS 27EQ**, **e-commerce OPERATOR** (GSTR-8) & u/s
+  **9(5)**, and the deductor **TAN** capture.
 
 ### Out of scope (no module yet)
 - Payroll statutory (PF / ESI / Professional Tax) — needs an HR/Payroll module first.
