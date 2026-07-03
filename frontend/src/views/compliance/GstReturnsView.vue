@@ -504,4 +504,10 @@ onMounted(run);
   padding: 0.375rem 0.75rem;
   color: #1f2937;
 }
+/* numeric columns: right-align the header too, so it lines up with its values
+   (the base `th { text-align:left }` rule outspecifies the `text-right` utility) */
+.report-table th.text-right,
+.report-table td.text-right {
+  text-align: right;
+}
 </style>
