@@ -24,6 +24,8 @@ const gstr1 = ref<Gstr1Report | null>(null);
 const gstr3b = ref<Gstr3bReport | null>(null);
 const recon = ref<Gstr2bReconReport | null>(null);
 const recon2bFileName = ref("");
+// remember the last uploaded 2B so Refresh / a period change can re-reconcile without re-uploading
+const lastGstr2b = ref<unknown | null>(null);
 
 const range = computed(() => {
   const [y, m] = period.value.split("-").map(Number);
@@ -33,7 +35,12 @@ const range = computed(() => {
 });
 
 async function run(): Promise<void> {
-  if (tab.value === "gstr-2b") return; // recon is driven by a file upload, not the period fetch
+  // On the GSTR-2B tab, Refresh / a period change re-reconciles the last uploaded 2B
+  // (the recon needs an uploaded file; do nothing until one is provided).
+  if (tab.value === "gstr-2b") {
+    if (lastGstr2b.value) await runRecon(lastGstr2b.value);
+    return;
+  }
   loading.value = true;
   error.value = null;
   try {
@@ -49,16 +56,10 @@ async function run(): Promise<void> {
   }
 }
 
-// GSTR-2B reconciliation: upload the portal 2B JSON → match against the purchase register.
-async function reconcile2b(ev: Event): Promise<void> {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  recon2bFileName.value = file.name;
+async function runRecon(gstr2b: unknown): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const gstr2b = JSON.parse(await file.text());
     recon.value = (
       await api.post<Gstr2bReconReport>("/gst-returns/gstr-2b/reconcile", {
         ...range.value,
@@ -66,12 +67,28 @@ async function reconcile2b(ev: Event): Promise<void> {
       })
     ).data;
   } catch (e) {
+    error.value = e as ErrorEnvelope;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// GSTR-2B reconciliation: upload the portal 2B JSON → match against the purchase register.
+async function reconcile2b(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  recon2bFileName.value = file.name;
+  try {
+    const gstr2b = JSON.parse(await file.text());
+    lastGstr2b.value = gstr2b;
+    await runRecon(gstr2b);
+  } catch (e) {
     error.value =
       e instanceof SyntaxError
         ? ({ detail: "That file isn't valid JSON — upload the GSTR-2B JSON downloaded from the portal." } as ErrorEnvelope)
         : (e as ErrorEnvelope);
   } finally {
-    loading.value = false;
     input.value = ""; // allow re-uploading the same file
   }
 }
