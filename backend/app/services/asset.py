@@ -51,13 +51,7 @@ from app.schemas.assets import (
     DepreciateResult,
 )
 from app.services import gl
-from app.services.accounts_common import (
-    NAMING_SERIES,
-    get_company,
-    get_customer,
-    require_draft,
-    require_submitted,
-)
+from app.services.accounts_common import NAMING_SERIES, get_company, require_draft, require_submitted
 from app.services.audit import log_audit
 from app.services.pagination import paginate
 
@@ -553,17 +547,11 @@ async def dispose_asset(
     db: AsyncSession, asset_id: uuid.UUID, payload: AssetDisposeIn, user: CurrentUser
 ) -> Asset:
     """Sell or scrap an asset: remove its cost + accumulated depreciation and book the
-    gain/loss vs book value. Depreciation then halts (the job/manual trigger skip
-    Sold/Scrapped assets).
+    gain/loss vs book value as a Journal Entry. Depreciation then halts (the job/manual
+    trigger skip Sold/Scrapped assets).
 
-    Sell — two ways:
-      * **with an invoice** (``customer_id`` set): raise a GST Sales Invoice for the proceeds
-        whose line income account is the Gain/Loss account (SI: Dr Debtors + GST / Cr Gain-Loss),
-        then a removal JE Dr Accumulated Dep + Dr Gain-Loss (book value) / Cr Fixed Asset. The
-        Gain-Loss account nets to sale − book value (= the gain/loss), no core-invoicing change.
-      * **without an invoice** (``proceeds_account_id`` set): Dr Accumulated Dep, Dr Bank
-        (proceeds), Cr Fixed Asset, ± Gain/Loss (plug).
-    Scrap: Dr Accumulated Dep, Dr Gain/Loss (loss = book value), Cr Fixed Asset.
+    Sale:   Dr Accumulated Dep, Dr Bank (proceeds), Cr Fixed Asset, ± Gain/Loss (plug).
+    Scrap:  Dr Accumulated Dep, Dr Gain/Loss (the loss = book value), Cr Fixed Asset.
     """
     asset = await get_asset(db, asset_id, user.company_id)
     require_submitted(asset.docstatus)
@@ -580,13 +568,12 @@ async def dispose_asset(
             field="asset_category_id",
         )
 
-    via_invoice = payload.disposal_type == "Sell" and payload.customer_id is not None
     if payload.disposal_type == "Sell":
         if payload.sale_amount <= ZERO:
             raise ValidationError("A sale needs a sale amount above 0", field="sale_amount")
-        if payload.customer_id is None and payload.proceeds_account_id is None:
+        if payload.proceeds_account_id is None:
             raise ValidationError(
-                "A sale needs either a customer (to raise a tax invoice) or a proceeds account",
+                "A sale needs a proceeds account (the bank/cash account that received the money)",
                 field="proceeds_account_id",
             )
         proceeds = payload.sale_amount
@@ -597,57 +584,22 @@ async def dispose_asset(
     book_value = asset.gross_purchase_amount - accumulated
     gain_loss = proceeds - book_value  # positive = gain, negative = loss
 
+    lines: list[tuple[uuid.UUID, Decimal, Decimal]] = []
+    if accumulated > ZERO:
+        lines.append((category.accumulated_depreciation_account_id, accumulated, ZERO))  # Dr
+    if proceeds > ZERO:
+        lines.append((payload.proceeds_account_id, proceeds, ZERO))  # Dr bank/cash
+    lines.append((category.fixed_asset_account_id, ZERO, asset.gross_purchase_amount))  # Cr asset
+    if gain_loss > ZERO:
+        lines.append((payload.gain_loss_account_id, ZERO, gain_loss))  # Cr gain (income)
+    elif gain_loss < ZERO:
+        lines.append((payload.gain_loss_account_id, -gain_loss, ZERO))  # Dr loss
+
     await set_company_context(db, asset.company_id)
     remark = (
         f"Disposal ({payload.disposal_type}) of {asset.asset_name} ({asset.name}) — "
         f"book value {book_value}, proceeds {proceeds}"
     )
-
-    sales_invoice_id: uuid.UUID | None = None
-    if via_invoice:
-        # lazy import keeps the (purchase_invoice → asset) hook cycle out of import time
-        from app.schemas.accounts.common import InvoiceItemIn
-        from app.schemas.accounts.invoicing import SalesInvoiceCreate
-        from app.services import sales_invoice
-
-        customer = await get_customer(db, payload.customer_id, asset.company_id)
-        si = await sales_invoice.create_sales_invoice(
-            db,
-            SalesInvoiceCreate(
-                customer_id=customer.id,
-                posting_date=payload.disposal_date,
-                items=[InvoiceItemIn(
-                    item_name=f"Sale of asset: {asset.asset_name}",
-                    qty=Decimal("1"), rate=payload.sale_amount,
-                    account_id=payload.gain_loss_account_id,  # SI credits Gain/Loss, not income
-                )],
-                tax_template_id=payload.tax_template_id,
-                remarks=remark,
-            ),
-            user,
-        )
-        si = await sales_invoice.submit_sales_invoice(db, si.id, user)
-        sales_invoice_id = si.id
-        # removal JE: Dr Accum + Dr Gain/Loss (book value) / Cr Fixed Asset
-        await set_company_context(db, asset.company_id)
-        lines: list[tuple[uuid.UUID, Decimal, Decimal]] = []
-        if accumulated > ZERO:
-            lines.append((category.accumulated_depreciation_account_id, accumulated, ZERO))
-        if book_value > ZERO:
-            lines.append((payload.gain_loss_account_id, book_value, ZERO))
-        lines.append((category.fixed_asset_account_id, ZERO, asset.gross_purchase_amount))
-    else:
-        lines = []
-        if accumulated > ZERO:
-            lines.append((category.accumulated_depreciation_account_id, accumulated, ZERO))  # Dr
-        if proceeds > ZERO:
-            lines.append((payload.proceeds_account_id, proceeds, ZERO))  # Dr bank/cash
-        lines.append((category.fixed_asset_account_id, ZERO, asset.gross_purchase_amount))  # Cr asset
-        if gain_loss > ZERO:
-            lines.append((payload.gain_loss_account_id, ZERO, gain_loss))  # Cr gain (income)
-        elif gain_loss < ZERO:
-            lines.append((payload.gain_loss_account_id, -gain_loss, ZERO))  # Dr loss
-
     je = await _post_journal(
         db, company_id=asset.company_id, posting_date=payload.disposal_date,
         voucher_type="Asset Disposal", lines=lines, remark=remark, actor=user,
@@ -658,7 +610,6 @@ async def dispose_asset(
     asset.disposal_amount = proceeds
     asset.gain_loss_amount = gain_loss
     asset.disposal_journal_entry_id = je.id
-    asset.disposal_sales_invoice_id = sales_invoice_id
     asset.modified_by = user.id
     await db.flush()
     await log_audit(

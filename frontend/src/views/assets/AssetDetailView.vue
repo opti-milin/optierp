@@ -50,14 +50,11 @@ interface Asset {
   disposal_amount: string;
   gain_loss_amount: string | null;
   disposal_journal_entry_id: string | null;
-  disposal_sales_invoice_id: string | null;
   schedule: ScheduleRow[];
   movements: MovementRow[];
 }
 interface AccountOpt { value: string; label: string }
 interface LocationOpt { id: string; location_name: string }
-interface CustomerOpt { id: string; customer_name: string }
-interface TaxTemplateOpt { id: string; title: string }
 
 const asset = ref<Asset | null>(null);
 const loading = ref(false);
@@ -67,8 +64,6 @@ const notice = ref<string | null>(null);
 
 const accounts = ref<AccountOpt[]>([]);
 const locations = ref<LocationOpt[]>([]);
-const customers = ref<CustomerOpt[]>([]);
-const taxTemplates = ref<TaxTemplateOpt[]>([]);
 const showAllRows = ref(false);
 const visibleSchedule = computed(() =>
   showAllRows.value ? asset.value?.schedule ?? [] : (asset.value?.schedule ?? []).slice(0, 12),
@@ -85,8 +80,6 @@ const dDate = ref(today);
 const dAmount = ref<number | null>(null);
 const dProceeds = ref("");
 const dGainLoss = ref("");
-const dCustomer = ref("");
-const dTaxTemplate = ref("");
 
 // move form
 const showMove = ref(false);
@@ -120,18 +113,12 @@ async function fetchAsset(): Promise<void> {
 
 async function fetchPickers(): Promise<void> {
   try {
-    const [acc, loc, cust, tax] = await Promise.all([
+    const [acc, loc] = await Promise.all([
       api.get<AccountOpt[]>("/registry/account/options"),
       api.get<ListResponse<LocationOpt>>("/registry/location", { params: { page_size: 200 } }),
-      api.get<ListResponse<CustomerOpt>>("/registry/customer", { params: { page_size: 200 } }),
-      // optional GST templates; never let this blank the other pickers
-      api.get<TaxTemplateOpt[]>("/tax-templates", { params: { kind: "sales" } })
-        .catch(() => ({ data: [] as TaxTemplateOpt[] })),
     ]);
     accounts.value = acc.data;
     locations.value = loc.data.items;
-    customers.value = cust.data.items;
-    taxTemplates.value = tax.data;
     // sensible default for the gain/loss account
     const gl = accounts.value.find((a) => /gain.*loss.*disposal/i.test(a.label));
     if (gl) dGainLoss.value = gl.value;
@@ -193,16 +180,12 @@ async function dispose(): Promise<void> {
   error.value = null;
   notice.value = null;
   try {
-    const selling = dType.value === "Sell";
-    const viaInvoice = selling && !!dCustomer.value;
     await api.post(`/assets/${props.id}/dispose`, {
       disposal_type: dType.value,
       disposal_date: dDate.value,
-      sale_amount: selling ? dAmount.value || 0 : 0,
-      proceeds_account_id: selling && !viaInvoice ? dProceeds.value || null : null,
+      sale_amount: dType.value === "Sell" ? dAmount.value || 0 : 0,
+      proceeds_account_id: dType.value === "Sell" ? dProceeds.value || null : null,
       gain_loss_account_id: dGainLoss.value,
-      customer_id: viaInvoice ? dCustomer.value : null,
-      tax_template_id: viaInvoice ? dTaxTemplate.value || null : null,
     });
     showDispose.value = false;
     notice.value = `Asset ${dType.value === "Sell" ? "sold" : "scrapped"}.`;
@@ -337,20 +320,6 @@ onMounted(async () => {
           <input v-model.number="dAmount" type="number" min="0" step="any" class="form-input" />
         </div>
         <div v-if="dType === 'Sell'">
-          <label class="form-label">Customer (raise GST invoice)</label>
-          <select v-model="dCustomer" class="form-input">
-            <option value="">— none (book to a bank/cash account) —</option>
-            <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.customer_name }}</option>
-          </select>
-        </div>
-        <div v-if="dType === 'Sell' && dCustomer">
-          <label class="form-label">Tax template (GST)</label>
-          <select v-model="dTaxTemplate" class="form-input">
-            <option value="">— no tax —</option>
-            <option v-for="t in taxTemplates" :key="t.id" :value="t.id">{{ t.title }}</option>
-          </select>
-        </div>
-        <div v-if="dType === 'Sell' && !dCustomer">
           <label class="form-label">Proceeds account (bank/cash)</label>
           <select v-model="dProceeds" class="form-input">
             <option value="">Select…</option>
@@ -460,12 +429,6 @@ onMounted(async () => {
           <span :class="Number(asset.gain_loss_amount) >= 0 ? 'text-green-700' : 'text-red-600'">
             {{ formatCurrency(Math.abs(Number(asset.gain_loss_amount ?? 0))) }}
           </span>
-        </div>
-        <div v-if="asset.disposal_sales_invoice_id">
-          <span class="text-gray-400">Invoice:</span>
-          <RouterLink :to="`/sales-invoices/${asset.disposal_sales_invoice_id}`" class="text-blue-600 hover:underline">
-            view tax invoice →
-          </RouterLink>
         </div>
       </div>
     </div>

@@ -308,58 +308,6 @@ async def test_dispose_sell_books_gain_loss(ctx):
     assert r.json()["detail"] == "Asset has been disposed"
 
 
-async def test_dispose_sell_via_sales_invoice(ctx):
-    """Selling an asset to a customer raises a Sales Invoice (Cr Gain/Loss) + a removal JE;
-    the Gain/Loss account nets to proceeds − book value, and the asset links the invoice."""
-    client, company, headers = ctx
-    cat = await _category(client, company, headers, name="Sellable Plant")
-    fy_start = _fy_start(date.today())
-    asset = (
-        await client.post(
-            f"{API}/assets",
-            json={
-                "asset_name": "Used Forklift", "asset_category_id": cat["id"],
-                "gross_purchase_amount": "100000", "opening_accumulated_depreciation": "40000",
-                "available_for_use_date": str(fy_start),
-            },
-            headers=headers,
-        )
-    ).json()  # book value = 60000
-    await client.post(f"{API}/assets/{asset['id']}/submit", headers=headers)
-
-    customer = (
-        await client.post(f"{API}/customers", json={"customer_name": "Reseller Co"}, headers=headers)
-    ).json()
-    gain_loss = await coa_account(client, company, headers, "Gain/Loss on Asset Disposal")
-    r = await client.post(
-        f"{API}/assets/{asset['id']}/dispose",
-        json={
-            "disposal_type": "Sell", "disposal_date": str(date.today()),
-            "sale_amount": "75000", "customer_id": customer["id"],
-            "gain_loss_account_id": gain_loss["id"],
-        },
-        headers=headers,
-    )
-    assert r.status_code == 200, r.text
-    sold = r.json()
-    assert sold["status"] == "Sold"
-    assert Decimal(sold["gain_loss_amount"]) == Decimal("15000.000000")  # 75000 − 60000 gain
-    assert sold["disposal_sales_invoice_id"] is not None
-
-    # the Sales Invoice exists for the proceeds, raised to the customer
-    si = (await client.get(f"{API}/sales-invoices/{sold['disposal_sales_invoice_id']}", headers=headers)).json()
-    assert Decimal(si["grand_total"]) == Decimal("75000.00")
-    assert si["docstatus"] == 1
-
-    # the asset-removal JE is balanced (Dr Accum 40k + Dr Gain/Loss 60k / Cr Fixed Asset 100k)
-    je = (await client.get(f"{API}/journal-entries/{sold['disposal_journal_entry_id']}", headers=headers)).json()
-    assert je["voucher_type"] == "Asset Disposal"
-    assert Decimal(je["total_debit"]) == Decimal("100000.000000")
-
-    # depreciation halts
-    assert (await client.post(f"{API}/assets/{asset['id']}/depreciate", headers=headers)).json()["posted_count"] == 0
-
-
 async def test_dispose_scrap_writes_off_book_value(ctx):
     client, company, headers = ctx
     cat = await _category(client, company, headers, name="Old Tools")

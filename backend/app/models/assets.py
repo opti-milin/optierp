@@ -168,10 +168,6 @@ class Asset(Base, DocumentMixin, CompanyScopedMixin):
     disposal_journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id")
     )
-    # set when a Sell disposal is raised as a GST Sales Invoice (Phase 5 follow-up)
-    disposal_sales_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("sales_invoices.id")
-    )
 
     category = relationship("AssetCategory", lazy="joined", viewonly=True)
     location = relationship("Location", lazy="joined", viewonly=True)

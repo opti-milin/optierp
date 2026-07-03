@@ -39,12 +39,8 @@ class AssetDisposeIn(BaseModel):
     disposal_type: str  # Sell | Scrap
     disposal_date: date
     sale_amount: Decimal = Field(ge=0, default=Decimal("0"))  # required > 0 for Sell
-    proceeds_account_id: uuid.UUID | None = None  # bank/cash account — for a Sell WITHOUT an invoice
+    proceeds_account_id: uuid.UUID | None = None  # bank/cash/receivable — required for Sell
     gain_loss_account_id: uuid.UUID  # Gain/Loss on Asset Disposal account
-    # Sell via a GST tax invoice: set a customer (and optional tax template) → a Sales
-    # Invoice is raised for the proceeds; proceeds_account_id is then not needed.
-    customer_id: uuid.UUID | None = None
-    tax_template_id: uuid.UUID | None = None
 
 
 class AssetMoveIn(BaseModel):
@@ -122,7 +118,6 @@ class AssetResponse(DocumentMeta):
     disposal_amount: Decimal
     gain_loss_amount: Decimal | None
     disposal_journal_entry_id: uuid.UUID | None
-    disposal_sales_invoice_id: uuid.UUID | None
     company_id: uuid.UUID
     schedule: list[AssetScheduleRowResponse]
     movements: list[AssetMovementResponse]

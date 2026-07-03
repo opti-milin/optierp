@@ -87,14 +87,12 @@ Plus these ERPNext *capabilities* (not separate DocTypes):
 - ✅ **CWIP** — covered *by* capitalization: an asset under construction accrues cost in a CWIP
   account (via normal purchases/JEs), then you capitalize crediting that CWIP account → Fixed Asset.
   No separate flag/lifecycle needed (lean).
-- ✅ **Disposal via Sales Invoice** (Sell with a `customer_id`): raises a **GST Sales Invoice** for the
-  proceeds whose line income account is the **Gain/Loss on Asset Disposal** account (SI: Dr Debtors + GST /
-  Cr Gain-Loss), then an **Asset Disposal** removal JE (Dr Accumulated Dep + Dr Gain-Loss by book value /
-  Cr Fixed Asset). The Gain-Loss account nets to *sale − book value* (the gain/loss) — achieved **without
-  any change to the core Sales-Invoice GL** (the per-line `account_id` override already exists). The asset
-  links the invoice (`disposal_sales_invoice_id`, migration 0058); the detail page shows a "view tax
-  invoice" link. A Sell *without* a customer still books to a bank/cash account as before.
-  *Verified live:* a ₹2L asset sold to a customer for ₹2.5L → ₹50k gain, SI raised, removal JE balanced.
+- ⏸️ **Disposal via Sales Invoice** — **deferred with rationale.** The existing Sell disposal already
+  books the receivable/proceeds + gain/loss vs book value correctly. Wiring the *asset removal* into a
+  GST Sales Invoice requires modifying the **core Sales-Invoice GL** to special-case fixed-asset-sale
+  lines (credit the asset, not income) — a cross-module change with real regression risk, for an
+  occasional event. Recommendation: for GST on a used-asset sale, raise a normal Sales Invoice and use
+  the Dispose (Sell) action for the asset removal; revisit a wired SI-disposal only if it becomes routine.
 - *Tests:* +1 integration (capitalize from 2 components → asset + balanced "Asset Capitalization" JE).
   Verified live (₹2L Cold Storage Unit from ₹180k parts + ₹20k labour). Also added a "show first 12 /
   show all" collapse to the depreciation-schedule table (long schedules like a 30-year building).
@@ -129,10 +127,11 @@ Plus these ERPNext *capabilities* (not separate DocTypes):
 ## ✅ Recommended BUILD set complete
 
 All four phases of the agreed scope are built, tested, verified live and pushed on
-`feat/assets-phase-1`: **P4 Reports**, **P6 depreciation accuracy**, **P5 capitalization (+CWIP) +
-Sales-Invoice disposal**, **P7 maintenance scheduling**. Deliberately skipped (enterprise ceremony):
-multiple finance books, shift-based depreciation, maintenance teams/SLAs, location tree+geo,
-asset-activity timeline, multi-asset movement, Double Declining Balance.
+`feat/assets-phase-1`: **P4 Reports**, **P6 depreciation accuracy**, **P5 capitalization (+CWIP)**,
+**P7 maintenance scheduling**. Deliberately skipped (enterprise ceremony): multiple finance books,
+shift-based depreciation, maintenance teams/SLAs, location tree+geo, asset-activity timeline,
+multi-asset movement, Double Declining Balance. Deferred with rationale: disposal via Sales Invoice
+(cross-module GL risk for an occasional event).
 
 ### Deliberately SKIPPED (enterprise ceremony — revisit only on a real need)
 - **Multiple Finance Books** + Asset Category Account child (dual-book parallel depreciation).
