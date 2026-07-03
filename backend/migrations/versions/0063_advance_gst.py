@@ -6,7 +6,7 @@ to invoices. ``payment_entries`` gains the advance-GST state; ``advance_gst_adju
 records each adjustment (GSTR-1 Table 11B + the GSTR-3B 3.1(a) netting source).
 
 Revision ID: 0063_advance_gst
-Revises: 0062_sales_invoice_ecommerce_gstin
+Revises: 0062_si_ecommerce_gstin
 Create Date: 2026-07-03
 """
 
@@ -17,7 +17,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision: str = "0063_advance_gst"
-down_revision: Union[str, None] = "0062_sales_invoice_ecommerce_gstin"
+down_revision: Union[str, None] = "0062_si_ecommerce_gstin"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -4,7 +4,7 @@
 the supply was made. Reported in GSTR-1 Table 14(a); the operator collects TCS u/s 52 and
 files GSTR-8. A pure reporting tag — it does not change the invoice's own GST.
 
-Revision ID: 0062_sales_invoice_ecommerce_gstin
+Revision ID: 0062_si_ecommerce_gstin
 Revises: 0061_gst_2_0_rates
 Create Date: 2026-07-03
 """
@@ -14,7 +14,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0062_sales_invoice_ecommerce_gstin"
+revision: str = "0062_si_ecommerce_gstin"
 down_revision: Union[str, None] = "0061_gst_2_0_rates"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
