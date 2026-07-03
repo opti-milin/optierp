@@ -200,6 +200,22 @@ class Gstr1Report(BaseModel):
     totals: Gstr1Totals
 
 
+class IffReport(BaseModel):
+    """IFF (Invoice Furnishing Facility) — the QRMP monthly upload for the first two
+    months of a quarter. A subset of GSTR-1: B2B, B2C-Large and credit/debit notes only
+    (B2CS, HSN and the document summary are furnished with the quarterly GSTR-1)."""
+
+    gstin: str | None = None
+    filing_period: str  # month "MMYYYY"
+    from_date: date
+    to_date: date
+    b2b: list[Gstr1B2B]
+    b2cl: list[Gstr1Invoice]
+    cdnr: list[Gstr1Invoice]
+    cdnur: list[Gstr1Invoice]
+    totals: Gstr1Totals  # over the furnished (B2B + B2CL + CDN) documents only
+
+
 class Gstr3bTaxRow(BaseModel):
     """A section-3.1 outward row (or the net-payable line)."""
 

@@ -47,6 +47,7 @@ from app.schemas.compliance import (
     Gstr3bReport,
     Gstr3bTaxRow,
     Gstr4Report,
+    IffReport,
     composition_rate_for,
 )
 from app.services.accounts_common import _hsn_rates
@@ -78,8 +79,11 @@ def _component(name: str | None) -> str | None:
     return None
 
 
-def _filing_period(from_date: date) -> str:
-    return f"{from_date.month:02d}{from_date.year}"
+def _filing_period(to_date: date) -> str:
+    """Portal filing period 'MMYYYY'. Derived from the window's LAST month so a monthly
+    return reads as that month and a **quarterly** (QRMP) return reads as the quarter's
+    last month — the GST portal's convention for a quarterly GSTR-1/GSTR-3B."""
+    return f"{to_date.month:02d}{to_date.year}"
 
 
 def _fy_quarter(d: date) -> int:
@@ -356,7 +360,7 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
 
     return Gstr1Report(
         gstin=company.tax_id or None,
-        filing_period=_filing_period(from_date),
+        filing_period=_filing_period(to_date),
         from_date=from_date,
         to_date=to_date,
         b2b=b2b,
@@ -514,7 +518,7 @@ async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date
 
     return Gstr3bReport(
         gstin=company.tax_id or None,
-        filing_period=_filing_period(from_date),
+        filing_period=_filing_period(to_date),
         from_date=from_date,
         to_date=to_date,
         outward=outward,
@@ -601,6 +605,83 @@ def _purchase_split(inv, acct_names: dict, *, inter: bool) -> tuple[_Split, _Spl
             inp.cgst += inp_unclassified / 2
             inp.sgst += inp_unclassified / 2
     return inp, outp
+
+
+# --------------------------------------------------------------------------------------
+# IFF — Invoice Furnishing Facility (QRMP months 1 & 2 of a quarter).
+#
+# A QRMP filer furnishes B2B (+ B2CL + credit/debit notes) monthly via IFF, then the full
+# quarterly GSTR-1 (with B2CS/HSN/docs) at quarter end. IFF is therefore GSTR-1 restricted
+# to the invoice-wise sections, so it is derived from `gstr1()` — no duplicated bucketing.
+# --------------------------------------------------------------------------------------
+
+
+async def iff(db: AsyncSession, company: Company, *, from_date: date, to_date: date) -> IffReport:
+    """IFF for a month: the B2B / B2C-Large / credit-debit-note sections of GSTR-1, with
+    totals over only those furnished documents."""
+    g1 = await gstr1(db, company, from_date=from_date, to_date=to_date)
+
+    tx = _Split()
+    taxable = ZERO
+    count = 0
+
+    def _acc(inv: Gstr1Invoice) -> None:
+        nonlocal taxable, count
+        tx.cgst += inv.cgst
+        tx.sgst += inv.sgst
+        tx.igst += inv.igst
+        tx.cess += inv.cess
+        taxable += inv.taxable_value
+        count += 1
+
+    for blk in g1.b2b:
+        for inv in blk.invoices:
+            _acc(inv)
+    for inv in g1.b2cl:
+        _acc(inv)
+    for inv in g1.cdnr:
+        _acc(inv)
+    for inv in g1.cdnur:
+        _acc(inv)
+
+    return IffReport(
+        gstin=g1.gstin,
+        filing_period=g1.filing_period,
+        from_date=from_date,
+        to_date=to_date,
+        b2b=g1.b2b,
+        b2cl=g1.b2cl,
+        cdnr=g1.cdnr,
+        cdnur=g1.cdnur,
+        totals=Gstr1Totals(
+            taxable_value=_q(taxable),
+            cgst=_q(tx.cgst),
+            sgst=_q(tx.sgst),
+            igst=_q(tx.igst),
+            cess=_q(tx.cess),
+            invoice_count=count,
+        ),
+    )
+
+
+def iff_json(report: IffReport) -> dict:
+    """Serialise IFF to the portal JSON — the GSTR-1 schema with only the furnished
+    (b2b / b2cl / cdnr / cdnur) sections."""
+    shell = Gstr1Report(
+        gstin=report.gstin,
+        filing_period=report.filing_period,
+        from_date=report.from_date,
+        to_date=report.to_date,
+        b2b=report.b2b,
+        b2cl=report.b2cl,
+        b2cs=[],
+        cdnr=report.cdnr,
+        cdnur=report.cdnur,
+        hsn=[],
+        docs=[],
+        totals=report.totals,
+    )
+    return gstr1_json(shell)
 
 
 # --------------------------------------------------------------------------------------

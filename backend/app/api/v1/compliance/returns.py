@@ -21,6 +21,7 @@ from app.schemas.compliance import (
     Gstr2bReconRequest,
     Gstr3bReport,
     Gstr4Report,
+    IffReport,
 )
 from app.services import gst_returns, gst_settings, gstr2b_recon
 from app.services.accounts_common import get_company
@@ -78,6 +79,41 @@ async def get_gstr1_json(
     await _reject_if_composition(db, company.id)
     report = await gst_returns.gstr1(db, company, from_date=from_date, to_date=to_date)
     return gst_returns.gstr1_json(report)
+
+
+@router.get(
+    "/iff",
+    response_model=IffReport,
+    summary="IFF (QRMP — monthly B2B upload)",
+    description="Invoice Furnishing Facility — the monthly B2B / B2C-Large / credit-note upload "
+    "for the first two months of a quarter under the QRMP scheme (a subset of GSTR-1).",
+)
+async def get_iff(
+    current_user: Annotated[CurrentUser, Depends(require_permission("Sales Invoice", "report"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    from_date: date,
+    to_date: date,
+) -> IffReport:
+    company = await get_company(db, _company(current_user))
+    await _reject_if_composition(db, company.id)
+    return await gst_returns.iff(db, company, from_date=from_date, to_date=to_date)
+
+
+@router.get(
+    "/iff/json",
+    summary="IFF portal JSON",
+    description="The IFF furnished sections serialised to the GST portal's offline-tool JSON schema.",
+)
+async def get_iff_json(
+    current_user: Annotated[CurrentUser, Depends(require_permission("Sales Invoice", "report"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    from_date: date,
+    to_date: date,
+) -> dict:
+    company = await get_company(db, _company(current_user))
+    await _reject_if_composition(db, company.id)
+    report = await gst_returns.iff(db, company, from_date=from_date, to_date=to_date)
+    return gst_returns.iff_json(report)
 
 
 @router.get(
