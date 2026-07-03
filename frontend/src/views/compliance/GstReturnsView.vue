@@ -7,32 +7,99 @@ import { api } from "@/api/client";
 import { formatCurrency, formatDate, formatNumber } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type {
+  Cmp08Report,
   Gstr1Report,
   Gstr2bReconReport,
   Gstr3bReport,
+  Gstr4Report,
+  IffReport,
 } from "@/types/compliance";
 
-type Tab = "gstr-1" | "gstr-3b" | "gstr-2b";
+type Tab = "gstr-1" | "gstr-3b" | "gstr-2b" | "iff" | "cmp-08" | "gstr-4";
+type PeriodMode = "month" | "quarter" | "annual";
+interface TabDesc { key: Tab; label: string; mode: PeriodMode }
+
+// A single source of truth for tabs — the period picker, the endpoint and the rendered
+// section all key off the active descriptor (no parallel switch statements to keep in sync).
+const REGULAR_TABS: TabDesc[] = [
+  { key: "gstr-1", label: "GSTR-1", mode: "month" },
+  { key: "gstr-3b", label: "GSTR-3B", mode: "month" },
+  { key: "gstr-2b", label: "GSTR-2B recon", mode: "month" },
+];
+const IFF_TAB: TabDesc = { key: "iff", label: "IFF", mode: "month" };
+const COMPOSITION_TABS: TabDesc[] = [
+  { key: "cmp-08", label: "CMP-08", mode: "quarter" },
+  { key: "gstr-4", label: "GSTR-4", mode: "annual" },
+];
+
+// Composition dealers file CMP-08/GSTR-4 (not GSTR-1/3B); QRMP filers also get the IFF.
+const isComposition = ref(false);
+const isQrmp = ref(false);
+const tabs = computed<TabDesc[]>(() => {
+  if (isComposition.value) return COMPOSITION_TABS;
+  return isQrmp.value ? [REGULAR_TABS[0], REGULAR_TABS[1], IFF_TAB, REGULAR_TABS[2]] : REGULAR_TABS;
+});
 
 const tab = ref<Tab>("gstr-1");
-// default to the current month
+const activeDesc = computed<TabDesc>(() => tabs.value.find((t) => t.key === tab.value) ?? tabs.value[0]);
+// QRMP filers furnish GSTR-1/3B quarterly (the same endpoints over a quarter range).
+const effectiveMode = computed<PeriodMode>(() =>
+  (tab.value === "gstr-1" || tab.value === "gstr-3b") && isQrmp.value ? "quarter" : activeDesc.value.mode,
+);
+
 const now = new Date();
-const period = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+function fyQuarter(d: Date): 1 | 2 | 3 | 4 {
+  const m = d.getMonth() + 1;
+  return (m >= 4 && m <= 6 ? 1 : m >= 7 && m <= 9 ? 2 : m >= 10 && m <= 12 ? 3 : 4) as 1 | 2 | 3 | 4;
+}
+const fyYear = ref(now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1); // FY start year
+const quarter = ref<1 | 2 | 3 | 4>(fyQuarter(now));
+
 const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 const gstr1 = ref<Gstr1Report | null>(null);
 const gstr3b = ref<Gstr3bReport | null>(null);
+const iff = ref<IffReport | null>(null);
+const cmp08 = ref<Cmp08Report | null>(null);
+const gstr4 = ref<Gstr4Report | null>(null);
 const recon = ref<Gstr2bReconReport | null>(null);
 const recon2bFileName = ref("");
 // remember the last uploaded 2B so Refresh / a period change can re-reconcile without re-uploading
 const lastGstr2b = ref<unknown | null>(null);
 
 const range = computed(() => {
-  const [y, m] = period.value.split("-").map(Number);
-  const from = `${y}-${String(m).padStart(2, "0")}-01`;
-  const to = new Date(y, m, 0).toISOString().slice(0, 10); // last day of month
-  return { from_date: from, to_date: to };
+  if (effectiveMode.value === "annual") {
+    return { from_date: `${fyYear.value}-04-01`, to_date: `${fyYear.value + 1}-03-31` };
+  }
+  if (effectiveMode.value === "quarter") {
+    const startMonth = { 1: 4, 2: 7, 3: 10, 4: 1 }[quarter.value];
+    const y = quarter.value === 4 ? fyYear.value + 1 : fyYear.value;
+    const from = `${y}-${String(startMonth).padStart(2, "0")}-01`;
+    const to = new Date(y, startMonth + 2, 0).toISOString().slice(0, 10); // last day of the quarter's 3rd month
+    return { from_date: from, to_date: to };
+  }
+  const [y, m] = month.value.split("-").map(Number);
+  return { from_date: `${y}-${String(m).padStart(2, "0")}-01`, to_date: new Date(y, m, 0).toISOString().slice(0, 10) };
 });
+
+// Human label for the current period (used in the GSTR-2B copy).
+const periodLabel = computed(() => {
+  if (effectiveMode.value === "annual") return `FY ${fyYear.value}-${String((fyYear.value + 1) % 100).padStart(2, "0")}`;
+  if (effectiveMode.value === "quarter") return `Q${quarter.value}-${fyYear.value}`;
+  return month.value;
+});
+
+async function loadSettings(): Promise<void> {
+  try {
+    const s = (await api.get("/gst-settings")).data as { registration_type: string; filing_cadence: string };
+    isComposition.value = s.registration_type === "Composition";
+    isQrmp.value = s.filing_cadence === "QRMP";
+    if (!tabs.value.some((t) => t.key === tab.value)) tab.value = tabs.value[0].key;
+  } catch {
+    /* fall back to Regular/Monthly tabs */
+  }
+}
 
 async function run(): Promise<void> {
   // On the GSTR-2B tab, Refresh / a period change re-reconciles the last uploaded 2B
@@ -44,11 +111,12 @@ async function run(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    if (tab.value === "gstr-1") {
-      gstr1.value = (await api.get<Gstr1Report>("/gst-returns/gstr-1", { params: range.value })).data;
-    } else {
-      gstr3b.value = (await api.get<Gstr3bReport>("/gst-returns/gstr-3b", { params: range.value })).data;
-    }
+    const params = range.value;
+    if (tab.value === "gstr-1") gstr1.value = (await api.get<Gstr1Report>("/gst-returns/gstr-1", { params })).data;
+    else if (tab.value === "gstr-3b") gstr3b.value = (await api.get<Gstr3bReport>("/gst-returns/gstr-3b", { params })).data;
+    else if (tab.value === "iff") iff.value = (await api.get<IffReport>("/gst-returns/iff", { params })).data;
+    else if (tab.value === "cmp-08") cmp08.value = (await api.get<Cmp08Report>("/gst-returns/cmp-08", { params })).data;
+    else if (tab.value === "gstr-4") gstr4.value = (await api.get<Gstr4Report>("/gst-returns/gstr-4", { params })).data;
   } catch (e) {
     error.value = e as ErrorEnvelope;
   } finally {
@@ -109,14 +177,14 @@ function select(t: Tab): void {
   run();
 }
 
-async function downloadJson(): Promise<void> {
+async function downloadJson(kind: "gstr-1" | "iff"): Promise<void> {
   try {
-    const data = (await api.get("/gst-returns/gstr-1/json", { params: range.value })).data;
+    const data = (await api.get(`/gst-returns/${kind}/json`, { params: range.value })).data;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `GSTR1_${(data as { fp?: string }).fp ?? period.value}.json`;
+    a.download = `${kind === "iff" ? "IFF" : "GSTR1"}_${(data as { fp?: string }).fp ?? periodLabel.value}.json`;
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
@@ -124,7 +192,10 @@ async function downloadJson(): Promise<void> {
   }
 }
 
-onMounted(run);
+onMounted(async () => {
+  await loadSettings();
+  await run();
+});
 </script>
 
 <template>
@@ -133,13 +204,37 @@ onMounted(run);
       <div>
         <h1 class="text-xl font-semibold text-gray-900">GST Returns</h1>
         <p class="text-sm text-gray-500">
-          GSTR-1 (outward supplies) and GSTR-3B (summary) for a filing period, from submitted invoices.
+          <template v-if="isComposition">
+            Composition scheme — CMP-08 (quarterly) and GSTR-4 (annual), from submitted documents.
+          </template>
+          <template v-else>
+            GSTR-1 (outward supplies) and GSTR-3B (summary)<template v-if="isQrmp"> — filed quarterly under QRMP, with the monthly IFF</template>, from submitted invoices.
+          </template>
         </p>
       </div>
       <div class="flex items-end gap-2">
-        <label class="text-sm">
-          <span class="mb-1 block text-gray-500">Period</span>
-          <input v-model="period" type="month" class="form-input" @change="run" />
+        <label v-if="effectiveMode === 'month'" class="text-sm">
+          <span class="mb-1 block text-gray-500">Month</span>
+          <input v-model="month" type="month" class="form-input" @change="run" />
+        </label>
+        <template v-else-if="effectiveMode === 'quarter'">
+          <label class="text-sm">
+            <span class="mb-1 block text-gray-500">Quarter</span>
+            <select v-model.number="quarter" class="form-input" @change="run">
+              <option :value="1">Q1 (Apr–Jun)</option>
+              <option :value="2">Q2 (Jul–Sep)</option>
+              <option :value="3">Q3 (Oct–Dec)</option>
+              <option :value="4">Q4 (Jan–Mar)</option>
+            </select>
+          </label>
+          <label class="text-sm">
+            <span class="mb-1 block text-gray-500">FY start</span>
+            <input v-model.number="fyYear" type="number" class="form-input w-24" @change="run" />
+          </label>
+        </template>
+        <label v-else class="text-sm">
+          <span class="mb-1 block text-gray-500">FY start</span>
+          <input v-model.number="fyYear" type="number" class="form-input w-24" @change="run" />
         </label>
         <button class="btn-primary" :disabled="loading" @click="run">
           {{ loading ? "Loading…" : "Refresh" }}
@@ -149,13 +244,13 @@ onMounted(run);
 
     <div class="flex gap-1 border-b border-gray-200">
       <button
-        v-for="t in (['gstr-1', 'gstr-3b', 'gstr-2b'] as Tab[])"
-        :key="t"
+        v-for="t in tabs"
+        :key="t.key"
         class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
-        :class="tab === t ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
-        @click="select(t)"
+        :class="tab === t.key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+        @click="select(t.key)"
       >
-        {{ { "gstr-1": "GSTR-1", "gstr-3b": "GSTR-3B", "gstr-2b": "GSTR-2B recon" }[t] }}
+        {{ t.label }}
       </button>
     </div>
 
@@ -171,7 +266,7 @@ onMounted(run);
         <span>SGST <strong>{{ formatCurrency(gstr1.totals.sgst) }}</strong></span>
         <span>IGST <strong>{{ formatCurrency(gstr1.totals.igst) }}</strong></span>
         <span>Invoices <strong>{{ gstr1.totals.invoice_count }}</strong></span>
-        <button class="btn-secondary ml-auto" @click="downloadJson">Download portal JSON</button>
+        <button class="btn-secondary ml-auto" @click="downloadJson('gstr-1')">Download portal JSON</button>
       </div>
 
       <!-- B2B -->
@@ -330,6 +425,65 @@ onMounted(run);
           </tbody>
         </table>
       </section>
+
+      <!-- Table 11 — advances (received / adjusted) -->
+      <section v-if="gstr1.advances.length || gstr1.advances_adjusted.length">
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">11 — Tax on advances (received / adjusted)</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Part</th><th>POS</th><th>Type</th><th class="text-right">Rate %</th>
+              <th class="text-right">Taxable</th><th class="text-right">CGST</th>
+              <th class="text-right">SGST</th><th class="text-right">IGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in gstr1.advances" :key="`a${i}`">
+              <td>11A received</td>
+              <td class="text-xs">{{ row.place_of_supply }}</td>
+              <td>{{ row.supply_type }}</td>
+              <td class="text-right">{{ formatNumber(row.rate) }}</td>
+              <td class="text-right">{{ formatCurrency(row.gross_advance) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.sgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.igst) }}</td>
+            </tr>
+            <tr v-for="(row, i) in gstr1.advances_adjusted" :key="`b${i}`" class="text-gray-500">
+              <td>11B adjusted</td>
+              <td class="text-xs">{{ row.place_of_supply }}</td>
+              <td>{{ row.supply_type }}</td>
+              <td class="text-right">{{ formatNumber(row.rate) }}</td>
+              <td class="text-right">−{{ formatCurrency(row.gross_advance) }}</td>
+              <td class="text-right">−{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">−{{ formatCurrency(row.sgst) }}</td>
+              <td class="text-right">−{{ formatCurrency(row.igst) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Table 14 — supplies through e-commerce operators (u/s 52) -->
+      <section v-if="gstr1.eco.length">
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">14 — Supplies through e-commerce operators (TCS u/s 52)</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Operator GSTIN</th><th class="text-right">Invoices</th><th class="text-right">Taxable</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">IGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in gstr1.eco" :key="i">
+              <td class="font-mono text-xs">{{ row.ecommerce_gstin }}</td>
+              <td class="text-right">{{ row.invoice_count }}</td>
+              <td class="text-right">{{ formatCurrency(row.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.sgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.igst) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </div>
 
     <!-- ===================== GSTR-3B ===================== -->
@@ -412,7 +566,7 @@ onMounted(run);
     <div v-if="tab === 'gstr-2b'" class="space-y-5">
       <div class="rounded-lg border border-gray-200 bg-white p-4 text-sm">
         <p class="mb-2 text-gray-600">
-          Reconcile your purchase register for <strong>{{ period }}</strong> against the GST portal's
+          Reconcile your purchase register for <strong>{{ periodLabel }}</strong> against the GST portal's
           <strong>GSTR-2B</strong> — so you only claim Input Tax Credit that your suppliers actually filed.
           Download the 2B JSON from the portal and upload it here.
         </p>
@@ -482,6 +636,160 @@ onMounted(run);
           </tbody>
         </table>
       </template>
+    </div>
+
+    <!-- ===================== IFF (QRMP) ===================== -->
+    <div v-if="tab === 'iff' && iff" class="space-y-6">
+      <div class="flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 text-sm">
+        <span>GSTIN <strong class="font-mono">{{ iff.gstin || "—" }}</strong></span>
+        <span>Period <strong>{{ iff.filing_period }}</strong></span>
+        <span>Taxable <strong>{{ formatCurrency(iff.totals.taxable_value) }}</strong></span>
+        <span>CGST <strong>{{ formatCurrency(iff.totals.cgst) }}</strong></span>
+        <span>SGST <strong>{{ formatCurrency(iff.totals.sgst) }}</strong></span>
+        <span>IGST <strong>{{ formatCurrency(iff.totals.igst) }}</strong></span>
+        <span>Invoices <strong>{{ iff.totals.invoice_count }}</strong></span>
+        <button class="btn-secondary ml-auto" @click="downloadJson('iff')">Download portal JSON</button>
+      </div>
+      <p class="text-xs text-gray-500">
+        The IFF furnishes B2B, B2C-Large and credit/debit notes for the first two months of a quarter;
+        B2C-Small, HSN and the document summary are furnished with the quarterly GSTR-1.
+      </p>
+
+      <section>
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">B2B — registered recipients</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>GSTIN</th><th>Party</th><th>Invoice</th><th>Date</th><th>POS</th>
+              <th class="text-right">Rate %</th><th class="text-right">Taxable</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">IGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="blk in iff.b2b" :key="blk.gstin">
+              <tr v-for="inv in blk.invoices" :key="inv.invoice_id">
+                <td class="font-mono text-xs">{{ blk.gstin }}</td>
+                <td>{{ blk.party_name }}</td>
+                <td>{{ inv.name }}</td>
+                <td>{{ formatDate(inv.posting_date) }}</td>
+                <td class="text-xs">{{ inv.place_of_supply }}</td>
+                <td class="text-right">{{ formatNumber(inv.rate) }}</td>
+                <td class="text-right">{{ formatCurrency(inv.taxable_value) }}</td>
+                <td class="text-right">{{ formatCurrency(inv.cgst) }}</td>
+                <td class="text-right">{{ formatCurrency(inv.sgst) }}</td>
+                <td class="text-right">{{ formatCurrency(inv.igst) }}</td>
+              </tr>
+            </template>
+            <tr v-if="!iff.b2b.length"><td colspan="10" class="py-3 text-center text-gray-400">No B2B supplies</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section v-if="iff.b2cl.length || iff.cdnr.length || iff.cdnur.length">
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">B2C-Large &amp; credit / debit notes</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Document</th><th>Date</th><th>POS</th><th class="text-right">Taxable</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">IGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="inv in [...iff.b2cl, ...iff.cdnr, ...iff.cdnur]" :key="inv.invoice_id">
+              <td>{{ inv.name }}</td>
+              <td>{{ formatDate(inv.posting_date) }}</td>
+              <td class="text-xs">{{ inv.place_of_supply }}</td>
+              <td class="text-right">{{ formatCurrency(inv.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(inv.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(inv.sgst) }}</td>
+              <td class="text-right">{{ formatCurrency(inv.igst) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- ===================== CMP-08 (composition) ===================== -->
+    <div v-if="tab === 'cmp-08' && cmp08" class="space-y-6">
+      <div class="flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 text-sm">
+        <span>GSTIN <strong class="font-mono">{{ cmp08.gstin || "—" }}</strong></span>
+        <span>Quarter <strong>{{ cmp08.filing_period }}</strong></span>
+        <span>Category <strong>{{ cmp08.composition_category }}</strong></span>
+        <span>Rate <strong>{{ formatNumber(cmp08.composition_rate) }}%</strong></span>
+        <span class="ml-auto">Tax payable <strong>{{ formatCurrency(cmp08.total_tax) }}</strong></span>
+      </div>
+      <section>
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">Table 3 — Summary of self-assessed liability</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Nature</th><th class="text-right">Value</th><th class="text-right">IGST</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">Cess</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in cmp08.rows" :key="i" :class="{ 'border-t-2 font-semibold': i === cmp08.rows.length - 1 }">
+              <td>{{ row.label }}</td>
+              <td class="text-right">{{ formatCurrency(row.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(row.igst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.sgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cess) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- ===================== GSTR-4 (composition annual) ===================== -->
+    <div v-if="tab === 'gstr-4' && gstr4" class="space-y-6">
+      <div class="flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 text-sm">
+        <span>GSTIN <strong class="font-mono">{{ gstr4.gstin || "—" }}</strong></span>
+        <span>Year <strong>{{ gstr4.filing_period }}</strong></span>
+        <span>Category <strong>{{ gstr4.composition_category }}</strong></span>
+        <span>Rate <strong>{{ formatNumber(gstr4.composition_rate) }}%</strong></span>
+        <span class="ml-auto">Tax payable <strong>{{ formatCurrency(gstr4.total_tax) }}</strong></span>
+      </div>
+      <section>
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">Annual summary</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Nature</th><th class="text-right">Value</th><th class="text-right">IGST</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">Cess</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in gstr4.rows" :key="i" :class="{ 'border-t-2 font-semibold': i === gstr4.rows.length - 1 }">
+              <td>{{ row.label }}</td>
+              <td class="text-right">{{ formatCurrency(row.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(row.igst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.sgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cess) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section v-if="gstr4.quarters.length">
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">Quarter-wise turnover &amp; composite tax (CMP-08)</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Quarter</th><th class="text-right">Turnover</th>
+              <th class="text-right">CGST</th><th class="text-right">SGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in gstr4.quarters" :key="i">
+              <td>{{ row.label }}</td>
+              <td class="text-right">{{ formatCurrency(row.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(row.cgst) }}</td>
+              <td class="text-right">{{ formatCurrency(row.sgst) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </div>
   </div>
 </template>

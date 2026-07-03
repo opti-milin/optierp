@@ -9,9 +9,13 @@ import type { ErrorEnvelope } from "@/types/core";
 interface GstSettings {
   registration_type: string;
   filing_cadence: string;
+  composition_category: string;
   e_invoice_applicable: boolean;
   e_way_bill_applicable: boolean;
   is_sez: boolean;
+  collect_gst_on_advances: boolean;
+  is_ecommerce_operator: boolean;
+  tcs_rate: string;
   gsp_provider: string | null;
   gstin: string | null;
   gst_state: string | null;
@@ -20,9 +24,13 @@ interface GstSettings {
 const form = reactive<GstSettings>({
   registration_type: "Regular",
   filing_cadence: "Monthly",
+  composition_category: "Trader",
   e_invoice_applicable: false,
   e_way_bill_applicable: false,
   is_sez: false,
+  collect_gst_on_advances: true,
+  is_ecommerce_operator: false,
+  tcs_rate: "0.5",
   gsp_provider: null,
   gstin: null,
   gst_state: null,
@@ -103,12 +111,25 @@ onMounted(load);
         </div>
         <div>
           <label class="form-label">Filing cadence</label>
-          <select v-model="form.filing_cadence" class="form-input">
+          <select v-model="form.filing_cadence" class="form-input" :disabled="form.registration_type === 'Composition'">
             <option value="Monthly">Monthly (GSTR-1 + 3B)</option>
-            <option value="QRMP">QRMP (quarterly)</option>
+            <option value="QRMP">QRMP (quarterly + IFF)</option>
+          </select>
+        </div>
+        <div v-if="form.registration_type === 'Composition'">
+          <label class="form-label">Composition category</label>
+          <select v-model="form.composition_category" class="form-input">
+            <option value="Trader">Trader (1%)</option>
+            <option value="Manufacturer">Manufacturer (1%)</option>
+            <option value="Restaurant">Restaurant (5%)</option>
+            <option value="Service Provider">Service Provider (6%)</option>
           </select>
         </div>
       </div>
+      <p v-if="form.registration_type === 'Composition'" class="mt-3 text-xs text-gray-500">
+        Composition dealers issue a Bill of Supply (no output GST), pay a flat composite tax on turnover,
+        and file <strong>CMP-08</strong> (quarterly) + <strong>GSTR-4</strong> (annual) — not GSTR-1/3B.
+      </p>
     </section>
 
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -135,6 +156,24 @@ onMounted(load);
             <span class="block text-xs text-gray-500">This company operates in a Special Economic Zone (affects place-of-supply / tax treatment).</span>
           </span>
         </label>
+        <label v-if="form.registration_type !== 'Composition'" class="flex items-start gap-3">
+          <input v-model="form.collect_gst_on_advances" type="checkbox" class="mt-0.5 rounded border-gray-300" />
+          <span>
+            <span class="font-medium text-gray-800">GST on advances (services)</span>
+            <span class="block text-xs text-gray-500">Book output GST when a service advance is received (reported in GSTR-1 Table 11 + 3B 3.1a). Goods advances are exempt.</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3">
+          <input v-model="form.is_ecommerce_operator" type="checkbox" class="mt-0.5 rounded border-gray-300" />
+          <span>
+            <span class="font-medium text-gray-800">E-commerce operator (TCS u/s 52)</span>
+            <span class="block text-xs text-gray-500">This company is a marketplace that collects TCS from sellers and files GSTR-8.</span>
+          </span>
+        </label>
+        <div v-if="form.is_ecommerce_operator" class="ml-7 max-w-[10rem]">
+          <label class="form-label">TCS rate %</label>
+          <input v-model="form.tcs_rate" type="number" step="0.01" class="form-input" />
+        </div>
       </div>
       <div class="mt-4 max-w-sm">
         <label class="form-label">GSP / IRP provider (for live push)</label>

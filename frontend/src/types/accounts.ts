@@ -139,6 +139,7 @@ export interface InvoiceDetail extends DocumentMeta {
 export interface SalesInvoiceDetail extends InvoiceDetail {
   customer_id: string;
   customer_name: string | null;
+  ecommerce_gstin?: string | null;
 }
 
 export interface PurchaseInvoiceDetail extends InvoiceDetail {

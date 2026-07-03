@@ -58,6 +58,9 @@ const docPartyName = computed(() => {
 const docBillNo = computed(() =>
   props.kind === "purchase" ? (doc.value as PurchaseInvoiceDetail | null)?.bill_no : null,
 );
+const docEcommerceGstin = computed(() =>
+  props.kind === "sales" ? (doc.value as SalesInvoiceDetail | null)?.ecommerce_gstin : null,
+);
 const money = (value: string | number | null | undefined): string =>
   formatCurrency(value, doc.value?.currency ?? "INR");
 
@@ -242,6 +245,7 @@ function applyTermsTemplate(): void {
 
 const poNo = ref("");
 const poDate = ref("");
+const ecommerceGstin = ref(""); // e-commerce operator GSTIN if sold through a marketplace (u/s 52)
 const billNo = ref(""); // supplier's invoice number (purchase)
 const billDate = ref("");
 const addressContact = ref<AddressContactModel>({
@@ -461,6 +465,7 @@ async function save(): Promise<void> {
       payload.debit_to_id = controlAccountId.value || null;
       payload.po_no = poNo.value || null;
       payload.po_date = poDate.value || null;
+      payload.ecommerce_gstin = ecommerceGstin.value || null;
       payload.terms = terms.value || null;
       Object.assign(payload, acPayload("customer"));
     } else {
@@ -792,6 +797,10 @@ onMounted(async () => {
             {{ doc.po_no }}<span v-if="doc.po_date" class="text-gray-500"> · {{ formatDate(doc.po_date) }}</span>
           </div>
         </div>
+        <div v-if="docEcommerceGstin">
+          <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">E-commerce operator</div>
+          <div class="mt-0.5 font-mono text-sm text-gray-900">{{ docEcommerceGstin }}</div>
+        </div>
         <div v-if="doc.remarks" class="col-span-2 md:col-span-3">
           <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Remarks</div>
           <div class="mt-0.5 text-sm text-gray-700">{{ doc.remarks }}</div>
@@ -1004,6 +1013,10 @@ onMounted(async () => {
           <div v-if="kind === 'sales'">
             <label class="form-label">Customer's PO Date</label>
             <DateField v-model="poDate" />
+          </div>
+          <div v-if="kind === 'sales'">
+            <label class="form-label">E-commerce operator GSTIN</label>
+            <input v-model="ecommerceGstin" class="form-input" maxlength="15" placeholder="if sold via a marketplace (u/s 52)" />
           </div>
           <div v-if="kind === 'purchase'">
             <label class="form-label">Supplier Invoice No.</label>

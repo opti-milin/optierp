@@ -59,6 +59,27 @@ export interface Gstr1DocSummary {
   net_issued: number;
 }
 
+export interface Gstr1Eco {
+  ecommerce_gstin: string;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  cess: string;
+  invoice_count: number;
+}
+
+export interface Gstr1Advance {
+  place_of_supply: string;
+  supply_type: string;
+  rate: string;
+  gross_advance: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  cess: string;
+}
+
 export interface Gstr1Totals {
   taxable_value: string;
   cgst: string;
@@ -80,7 +101,56 @@ export interface Gstr1Report {
   cdnur: Gstr1Invoice[];
   hsn: Gstr1Hsn[];
   docs: Gstr1DocSummary[];
+  eco: Gstr1Eco[];
+  advances: Gstr1Advance[];
+  advances_adjusted: Gstr1Advance[];
   totals: Gstr1Totals;
+}
+
+// IFF — QRMP monthly B2B upload (a GSTR-1 subset)
+export interface IffReport {
+  gstin: string | null;
+  filing_period: string;
+  from_date: string;
+  to_date: string;
+  b2b: Gstr1B2B[];
+  b2cl: Gstr1Invoice[];
+  cdnr: Gstr1Invoice[];
+  cdnur: Gstr1Invoice[];
+  totals: Gstr1Totals;
+}
+
+// Composition — CMP-08 (quarterly) + GSTR-4 (annual)
+export interface CompositionTaxRow {
+  label: string;
+  taxable_value: string;
+  igst: string;
+  cgst: string;
+  sgst: string;
+  cess: string;
+}
+
+export interface Cmp08Report {
+  gstin: string | null;
+  filing_period: string;
+  from_date: string;
+  to_date: string;
+  composition_category: string;
+  composition_rate: string;
+  rows: CompositionTaxRow[];
+  total_tax: string;
+}
+
+export interface Gstr4Report {
+  gstin: string | null;
+  filing_period: string;
+  from_date: string;
+  to_date: string;
+  composition_category: string;
+  composition_rate: string;
+  rows: CompositionTaxRow[];
+  quarters: CompositionTaxRow[];
+  total_tax: string;
 }
 
 export interface Gstr3bTaxRow {

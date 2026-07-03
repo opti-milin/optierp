@@ -31,6 +31,10 @@ const postingDate = ref(new Date().toISOString().slice(0, 10));
 const paidAmount = ref<number | null>(null); // null = follow allocations
 const openInvoices = ref<InvoiceListItem[]>([]);
 const allocations = ref<Record<string, number>>({});
+// GST on advances: a Receive with an unallocated remainder can carry output GST if it is a
+// service advance (a bare advance has no HSN, so the rate is explicit).
+const advanceSupplyType = ref<"Goods" | "Services">("Goods");
+const advanceGstRate = ref<number | null>(null);
 const error = ref<ErrorEnvelope | null>(null);
 const saving = ref(false);
 
@@ -95,14 +99,22 @@ async function save(): Promise<void> {
       paid_amount: effectiveAmount.value,
       references,
     };
-    if (paymentType.value === "Receive") payload.paid_to_id = bankAccountId.value;
-    else payload.paid_from_id = bankAccountId.value;
+    if (paymentType.value === "Receive") {
+      payload.paid_to_id = bankAccountId.value;
+      // book GST on a service advance (only when there's an unallocated remainder)
+      if (advanceSupplyType.value === "Services" && unallocatedPreview.value > 0.005 && advanceGstRate.value) {
+        payload.advance_supply_type = "Services";
+        payload.advance_gst_rate = advanceGstRate.value;
+      }
+    } else payload.paid_from_id = bankAccountId.value;
 
     const resp = await api.post("/payment-entries", payload);
     await api.post(`/payment-entries/${(resp.data as { id: string }).id}/submit`);
     showForm.value = false;
     allocations.value = {};
     paidAmount.value = null;
+    advanceSupplyType.value = "Goods";
+    advanceGstRate.value = null;
     await fetchList();
   } catch (e) {
     error.value = e as ErrorEnvelope;
@@ -226,6 +238,30 @@ onMounted(async () => {
         No open invoices for this party — the payment will be recorded on account
         (reconcile it later from the Reconciliation page).
       </p>
+
+      <div
+        v-if="paymentType === 'Receive' && unallocatedPreview > 0.005"
+        class="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3"
+      >
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">Advance ({{ formatCurrency(unallocatedPreview, companyCurrency) }} on account)</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="form-label">Supply type</label>
+            <select v-model="advanceSupplyType" class="form-input">
+              <option value="Goods">Goods (no GST on advance)</option>
+              <option value="Services">Services (GST on advance)</option>
+            </select>
+          </div>
+          <div v-if="advanceSupplyType === 'Services'">
+            <label class="form-label">GST rate %</label>
+            <input v-model.number="advanceGstRate" type="number" min="0" step="0.01" placeholder="e.g. 18" class="form-input" />
+          </div>
+        </div>
+        <p class="mt-2 text-xs text-gray-500">
+          A service advance is treated as GST-inclusive — output GST is booked now and reported in
+          GSTR-1 Table 11, then reversed when the advance is adjusted to an invoice.
+        </p>
+      </div>
 
       <div class="mt-3 flex items-center justify-between text-sm">
         <p :class="amountTooLow ? 'text-red-600' : 'text-gray-600'">
