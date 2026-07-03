@@ -125,7 +125,19 @@ function patchMany(index: number, changes: Record<string, unknown>): void {
 // Mirrors the HSN typeahead: the cell shows the picked item's label / the typed
 // free-text name; while focused it becomes a search box over itemOptions. Typing
 // stores the name and clears item_id (free text); picking sets item_id + prefills.
-const itemBox = ref<{ index: number; query: string } | null>(null);
+// The dropdown is rendered in a <Teleport to="body"> with FIXED positioning so it
+// escapes the grid's `overflow-x-auto` wrapper (which would otherwise clip it to the
+// row height). `anchor` is the input's viewport rect, captured on focus/type.
+interface Anchor { left: number; top: number; width: number }
+const itemBox = ref<{ index: number; query: string; anchor: Anchor } | null>(null);
+
+function anchorOf(el: HTMLElement): Anchor {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.bottom, width: r.width };
+}
+function dropStyle(a: Anchor): Record<string, string> {
+  return { left: `${a.left}px`, top: `${a.top}px`, width: `${Math.max(a.width, 224)}px` };
+}
 
 function itemLabelOf(value: string): string {
   return props.itemOptions.find((o) => o.value === value)?.label ?? "";
@@ -141,14 +153,14 @@ function itemSuggestions(): { value: string; label: string }[] {
   const opts = props.itemOptions;
   return (q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts).slice(0, 12);
 }
-function onItemFocus(index: number, col: GridColumn, row: Row): void {
-  itemBox.value = { index, query: itemCellValue(index, col, row) };
+function onItemFocus(index: number, col: GridColumn, row: Row, event: Event): void {
+  itemBox.value = { index, query: itemCellValue(index, col, row), anchor: anchorOf(event.target as HTMLElement) };
 }
 function onItemText(index: number, col: GridColumn, event: Event): void {
-  const q = (event.target as HTMLInputElement).value;
-  itemBox.value = { index, query: q };
+  const el = event.target as HTMLInputElement;
+  itemBox.value = { index, query: el.value, anchor: anchorOf(el) };
   // typing = free text: store the name + clear the master link in ONE emit
-  patchMany(index, { [col.nameKey ?? "item_name"]: q, [col.key]: null });
+  patchMany(index, { [col.nameKey ?? "item_name"]: el.value, [col.key]: null });
 }
 function pickItem(index: number, col: GridColumn, opt: { value: string; label: string }): void {
   patch(index, col.key, opt.value);
@@ -169,15 +181,17 @@ interface HsnMatch {
   gst_rate: string | number;
   gst_treatment: string;
 }
-const hsnBox = ref<{ index: number; query: string; results: HsnMatch[]; loading: boolean } | null>(null);
+const hsnBox = ref<{ index: number; query: string; results: HsnMatch[]; loading: boolean; anchor: Anchor } | null>(null);
 let hsnTimer: ReturnType<typeof setTimeout> | undefined;
 
 function hsnCellValue(index: number, key: string, row: Row): string {
   return hsnBox.value?.index === index ? hsnBox.value.query : ((row[key] as string) ?? "");
 }
 function onHsnInput(index: number, event: Event): void {
-  const q = (event.target as HTMLInputElement).value;
-  hsnBox.value = { index, query: q, results: hsnBox.value?.index === index ? hsnBox.value.results : [], loading: false };
+  const el = event.target as HTMLInputElement;
+  const q = el.value;
+  const anchor = anchorOf(el);
+  hsnBox.value = { index, query: q, results: hsnBox.value?.index === index ? hsnBox.value.results : [], loading: false, anchor };
   clearTimeout(hsnTimer);
   if (q.trim().length < 2) {
     hsnBox.value.results = [];
@@ -187,9 +201,9 @@ function onHsnInput(index: number, event: Event): void {
   hsnTimer = setTimeout(async () => {
     try {
       const { data } = await api.get<HsnMatch[]>("/hsn-codes", { params: { search: q.trim(), limit: 8 } });
-      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: data, loading: false };
+      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: data, loading: false, anchor };
     } catch {
-      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: [], loading: false };
+      if (hsnBox.value?.index === index) hsnBox.value = { index, query: q, results: [], loading: false, anchor };
     }
   }, 300);
 }
@@ -312,25 +326,29 @@ function confirmMulti(): void {
                     :value="itemCellValue(i, col, row)"
                     class="form-input py-1.5 pr-7"
                     placeholder="Type or pick an item…"
-                    @focus="onItemFocus(i, col, row)"
+                    @focus="onItemFocus(i, col, row, $event)"
                     @input="onItemText(i, col, $event)"
                     @blur="closeItemBox"
                   />
                   <!-- dropdown affordance: signals this is a picker (click focuses the input → opens the list) -->
                   <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-400">▾</span>
-                  <ul
-                    v-if="itemBox && itemBox.index === i && itemSuggestions().length"
-                    class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
-                  >
-                    <li
-                      v-for="o in itemSuggestions()"
-                      :key="o.value"
-                      class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
-                      @mousedown.prevent="pickItem(i, col, o)"
+                  <!-- Teleported to body so the grid's overflow-x-auto wrapper can't clip it -->
+                  <Teleport to="body">
+                    <ul
+                      v-if="itemBox && itemBox.index === i && itemSuggestions().length"
+                      class="fixed z-50 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
+                      :style="dropStyle(itemBox.anchor)"
                     >
-                      {{ o.label }}
-                    </li>
-                  </ul>
+                      <li
+                        v-for="o in itemSuggestions()"
+                        :key="o.value"
+                        class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
+                        @mousedown.prevent="pickItem(i, col, o)"
+                      >
+                        {{ o.label }}
+                      </li>
+                    </ul>
+                  </Teleport>
                 </div>
               </template>
               <DateField
@@ -361,29 +379,32 @@ function confirmMulti(): void {
                   @focus="onHsnInput(i, $event)"
                   @blur="closeHsn"
                 />
-                <ul
-                  v-if="hsnBox && hsnBox.index === i && (hsnBox.results.length || hsnBox.loading)"
-                  class="absolute z-20 mt-1 max-h-64 w-72 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
-                >
-                  <li v-if="hsnBox.loading && !hsnBox.results.length" class="px-3 py-2 text-xs text-gray-400">
-                    Searching…
-                  </li>
-                  <li
-                    v-for="m in hsnBox.results"
-                    :key="m.hsn_code + m.description"
-                    class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
-                    @mousedown.prevent="pickHsn(i, col.key, m)"
+                <Teleport to="body">
+                  <ul
+                    v-if="hsnBox && hsnBox.index === i && (hsnBox.results.length || hsnBox.loading)"
+                    class="fixed z-50 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white text-left shadow-lg"
+                    :style="dropStyle(hsnBox.anchor)"
                   >
-                    <div class="flex justify-between gap-2">
-                      <span class="font-mono text-gray-500">{{ m.hsn_code }}</span>
-                      <span
-                        class="font-medium"
-                        :class="Number(m.gst_rate) === 0 ? 'text-gray-500' : 'text-emerald-700'"
-                      >{{ Number(m.gst_rate) }}%</span>
-                    </div>
-                    <div class="text-gray-700">{{ m.description }}</div>
-                  </li>
-                </ul>
+                    <li v-if="hsnBox.loading && !hsnBox.results.length" class="px-3 py-2 text-xs text-gray-400">
+                      Searching…
+                    </li>
+                    <li
+                      v-for="m in hsnBox.results"
+                      :key="m.hsn_code + m.description"
+                      class="cursor-pointer border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 hover:bg-primary/5"
+                      @mousedown.prevent="pickHsn(i, col.key, m)"
+                    >
+                      <div class="flex justify-between gap-2">
+                        <span class="font-mono text-gray-500">{{ m.hsn_code }}</span>
+                        <span
+                          class="font-medium"
+                          :class="Number(m.gst_rate) === 0 ? 'text-gray-500' : 'text-emerald-700'"
+                        >{{ Number(m.gst_rate) }}%</span>
+                      </div>
+                      <div class="text-gray-700">{{ m.description }}</div>
+                    </li>
+                  </ul>
+                </Teleport>
               </div>
               <input
                 v-else
