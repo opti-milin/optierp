@@ -8,12 +8,20 @@ import { formatCurrency, formatDate, formatNumber } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type {
   Cmp08Report,
+  Gstr1Invoice,
   Gstr1Report,
   Gstr2bReconReport,
   Gstr3bReport,
   Gstr4Report,
   IffReport,
 } from "@/types/compliance";
+
+// B2B invoice-type label: SEZ (with/without payment) or Deemed Export, else Regular.
+function b2bType(inv: Gstr1Invoice): string {
+  if (inv.gst_category === "SEZ") return inv.export_with_payment ? "SEZ · IGST" : "SEZ · LUT";
+  if (inv.gst_category === "Deemed Export") return "Deemed Exp";
+  return "Regular";
+}
 
 type Tab = "gstr-1" | "gstr-3b" | "gstr-2b" | "iff" | "cmp-08" | "gstr-4";
 type PeriodMode = "month" | "quarter" | "annual";
@@ -275,7 +283,7 @@ onMounted(async () => {
         <table class="report-table">
           <thead>
             <tr>
-              <th>GSTIN</th><th>Party</th><th>Invoice</th><th>Date</th><th>POS</th>
+              <th>GSTIN</th><th>Party</th><th>Invoice</th><th>Date</th><th>POS</th><th>Type</th>
               <th class="text-right">Rate %</th><th class="text-right">Taxable</th>
               <th class="text-right">CGST</th><th class="text-right">SGST</th><th class="text-right">IGST</th>
             </tr>
@@ -288,6 +296,7 @@ onMounted(async () => {
                 <td>{{ inv.name }}</td>
                 <td>{{ formatDate(inv.posting_date) }}</td>
                 <td class="text-xs">{{ inv.place_of_supply }}</td>
+                <td class="text-xs">{{ b2bType(inv) }}</td>
                 <td class="text-right">{{ formatNumber(inv.rate) }}</td>
                 <td class="text-right">{{ formatCurrency(inv.taxable_value) }}</td>
                 <td class="text-right">{{ formatCurrency(inv.cgst) }}</td>
@@ -295,7 +304,7 @@ onMounted(async () => {
                 <td class="text-right">{{ formatCurrency(inv.igst) }}</td>
               </tr>
             </template>
-            <tr v-if="!gstr1.b2b.length"><td colspan="10" class="py-3 text-center text-gray-400">No B2B supplies</td></tr>
+            <tr v-if="!gstr1.b2b.length"><td colspan="11" class="py-3 text-center text-gray-400">No B2B supplies</td></tr>
           </tbody>
         </table>
       </section>
@@ -345,6 +354,32 @@ onMounted(async () => {
               <td class="text-right">{{ formatCurrency(row.igst) }}</td>
             </tr>
             <tr v-if="!gstr1.b2cs.length"><td colspan="7" class="py-3 text-center text-gray-400">None</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Exports (Table 6A) -->
+      <section v-if="gstr1.exp.length">
+        <h2 class="mb-2 text-sm font-semibold text-gray-900">6A — Exports (zero-rated)</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Invoice</th><th>Date</th><th>Type</th><th>Shipping Bill</th><th>Bill Date</th><th>Port</th>
+              <th class="text-right">Rate %</th><th class="text-right">Taxable</th><th class="text-right">IGST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="inv in gstr1.exp" :key="inv.invoice_id">
+              <td>{{ inv.name }}</td>
+              <td>{{ formatDate(inv.posting_date) }}</td>
+              <td>{{ inv.export_type === "WPAY" ? "With IGST" : "LUT / bond" }}</td>
+              <td>{{ inv.shipping_bill_no || "—" }}</td>
+              <td>{{ inv.shipping_bill_date ? formatDate(inv.shipping_bill_date) : "—" }}</td>
+              <td class="text-xs">{{ inv.port_code || "—" }}</td>
+              <td class="text-right">{{ formatNumber(inv.rate) }}</td>
+              <td class="text-right">{{ formatCurrency(inv.taxable_value) }}</td>
+              <td class="text-right">{{ formatCurrency(inv.igst) }}</td>
+            </tr>
           </tbody>
         </table>
       </section>

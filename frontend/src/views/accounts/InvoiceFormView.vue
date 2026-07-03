@@ -61,6 +61,9 @@ const docBillNo = computed(() =>
 const docEcommerceGstin = computed(() =>
   props.kind === "sales" ? (doc.value as SalesInvoiceDetail | null)?.ecommerce_gstin : null,
 );
+const salesDoc = computed(() =>
+  props.kind === "sales" ? (doc.value as SalesInvoiceDetail | null) : null,
+);
 const money = (value: string | number | null | undefined): string =>
   formatCurrency(value, doc.value?.currency ?? "INR");
 
@@ -101,6 +104,13 @@ const dueDate = ref("");
 // GSTIN when left blank; reverse charge = recipient pays the GST.
 const placeOfSupply = ref("");
 const isReverseCharge = ref(false);
+// SEZ / Export (zero-rated u/s 16 IGST Act) — sales only. Declared here (before the tax
+// preview + its watch) since toggling them re-computes the live GST.
+const gstCategory = ref<"Regular" | "SEZ" | "Export" | "Deemed Export">("Regular");
+const exportWithPayment = ref(false); // false = LUT/bond (no GST); true = pay IGST & claim refund
+const shippingBillNo = ref("");
+const shippingBillDate = ref("");
+const portCode = ref("");
 const items = ref<InvoiceItemIn[]>([{ item_name: "", qty: 1, rate: 0 }]);
 const taxes = ref<TaxRowIn[]>([]);
 const taxTemplateId = ref("");
@@ -163,6 +173,10 @@ async function refreshTaxPreview(): Promise<void> {
       place_of_supply: placeOfSupply.value || null,
       // reverse charge (purchase): self-assessed GST nets the payable to the base
       is_reverse_charge: isReverseCharge.value,
+      // SEZ/Export (sales): drives zero-rated (LUT) vs IGST so preview mirrors create
+      ...(props.kind === "sales"
+        ? { gst_category: gstCategory.value, export_with_payment: exportWithPayment.value }
+        : {}),
       apply_discount_on: discount.value.apply_discount_on,
       additional_discount_percentage: discount.value.additional_discount_percentage || 0,
       discount_amount: discount.value.discount_amount || 0,
@@ -181,7 +195,7 @@ async function refreshTaxPreview(): Promise<void> {
 }
 
 watch(
-  [items, partyId, placeOfSupply, isReverseCharge, discount, () => taxes.value.length],
+  [items, partyId, placeOfSupply, isReverseCharge, discount, gstCategory, exportWithPayment, () => taxes.value.length],
   () => {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => void refreshTaxPreview(), 400);
@@ -466,6 +480,14 @@ async function save(): Promise<void> {
       payload.po_no = poNo.value || null;
       payload.po_date = poDate.value || null;
       payload.ecommerce_gstin = ecommerceGstin.value || null;
+      // SEZ/Export: guard stale hidden-field values (with-payment only for zero-rated
+      // categories; shipping bill/port only for physical Exports).
+      const zeroRated = gstCategory.value === "SEZ" || gstCategory.value === "Export";
+      payload.gst_category = gstCategory.value;
+      payload.export_with_payment = zeroRated ? exportWithPayment.value : false;
+      payload.shipping_bill_no = gstCategory.value === "Export" ? shippingBillNo.value || null : null;
+      payload.shipping_bill_date = gstCategory.value === "Export" ? shippingBillDate.value || null : null;
+      payload.port_code = gstCategory.value === "Export" ? portCode.value || null : null;
       payload.terms = terms.value || null;
       Object.assign(payload, acPayload("customer"));
     } else {
@@ -801,6 +823,21 @@ onMounted(async () => {
           <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">E-commerce operator</div>
           <div class="mt-0.5 font-mono text-sm text-gray-900">{{ docEcommerceGstin }}</div>
         </div>
+        <div v-if="salesDoc?.gst_category && salesDoc.gst_category !== 'Regular'">
+          <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">GST Category</div>
+          <div class="mt-0.5 text-sm text-gray-900">
+            {{ salesDoc.gst_category }}
+            <span v-if="salesDoc.gst_category === 'SEZ' || salesDoc.gst_category === 'Export'" class="text-gray-500">
+              — {{ salesDoc.export_with_payment ? "with IGST" : "LUT / bond (zero-rated)" }}
+            </span>
+          </div>
+        </div>
+        <div v-if="salesDoc?.shipping_bill_no">
+          <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Shipping Bill</div>
+          <div class="mt-0.5 text-sm text-gray-900">
+            {{ salesDoc.shipping_bill_no }}<span v-if="salesDoc.shipping_bill_date" class="text-gray-500"> · {{ formatDate(salesDoc.shipping_bill_date) }}</span><span v-if="salesDoc.port_code" class="text-gray-500"> · {{ salesDoc.port_code }}</span>
+          </div>
+        </div>
         <div v-if="doc.remarks" class="col-span-2 md:col-span-3">
           <div class="text-xs font-semibold uppercase tracking-wide text-gray-400">Remarks</div>
           <div class="mt-0.5 text-sm text-gray-700">{{ doc.remarks }}</div>
@@ -1017,6 +1054,34 @@ onMounted(async () => {
           <div v-if="kind === 'sales'">
             <label class="form-label">E-commerce operator GSTIN</label>
             <input v-model="ecommerceGstin" class="form-input" maxlength="15" placeholder="if sold via a marketplace (u/s 52)" />
+          </div>
+          <div v-if="kind === 'sales'">
+            <label class="form-label">GST Category</label>
+            <select v-model="gstCategory" class="form-input">
+              <option value="Regular">Regular (domestic)</option>
+              <option value="SEZ">SEZ supply</option>
+              <option value="Export">Export</option>
+              <option value="Deemed Export">Deemed Export</option>
+            </select>
+          </div>
+          <div v-if="kind === 'sales' && (gstCategory === 'SEZ' || gstCategory === 'Export')">
+            <label class="form-label">Zero-rated mechanism</label>
+            <select v-model="exportWithPayment" class="form-input">
+              <option :value="false">Under LUT / bond (no GST)</option>
+              <option :value="true">With payment of IGST (refund)</option>
+            </select>
+          </div>
+          <div v-if="kind === 'sales' && gstCategory === 'Export'">
+            <label class="form-label">Shipping Bill No.</label>
+            <input v-model="shippingBillNo" class="form-input" maxlength="20" placeholder="customs shipping bill" />
+          </div>
+          <div v-if="kind === 'sales' && gstCategory === 'Export'">
+            <label class="form-label">Shipping Bill Date</label>
+            <DateField v-model="shippingBillDate" />
+          </div>
+          <div v-if="kind === 'sales' && gstCategory === 'Export'">
+            <label class="form-label">Port Code</label>
+            <input v-model="portCode" class="form-input" maxlength="10" placeholder="e.g. INMAA1" />
           </div>
           <div v-if="kind === 'purchase'">
             <label class="form-label">Supplier Invoice No.</label>

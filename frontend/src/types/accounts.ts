@@ -140,6 +140,11 @@ export interface SalesInvoiceDetail extends InvoiceDetail {
   customer_id: string;
   customer_name: string | null;
   ecommerce_gstin?: string | null;
+  gst_category?: string | null;
+  export_with_payment?: boolean | null;
+  shipping_bill_no?: string | null;
+  shipping_bill_date?: string | null;
+  port_code?: string | null;
 }
 
 export interface PurchaseInvoiceDetail extends InvoiceDetail {

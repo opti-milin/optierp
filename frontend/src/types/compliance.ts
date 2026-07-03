@@ -16,6 +16,23 @@ export interface Gstr1Invoice {
   igst: string;
   cess: string;
   is_return: boolean;
+  gst_category?: string;
+  export_with_payment?: boolean;
+}
+
+export interface Gstr1Export {
+  invoice_id: string;
+  name: string;
+  posting_date: string;
+  export_type: string; // WPAY | WOPAY
+  shipping_bill_no: string | null;
+  shipping_bill_date: string | null;
+  port_code: string | null;
+  invoice_value: string;
+  rate: string;
+  taxable_value: string;
+  igst: string;
+  cess: string;
 }
 
 export interface Gstr1B2B {
@@ -99,6 +116,7 @@ export interface Gstr1Report {
   b2cs: Gstr1B2CS[];
   cdnr: Gstr1Invoice[];
   cdnur: Gstr1Invoice[];
+  exp: Gstr1Export[];
   hsn: Gstr1Hsn[];
   docs: Gstr1DocSummary[];
   eco: Gstr1Eco[];
