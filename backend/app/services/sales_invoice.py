@@ -277,6 +277,7 @@ async def create_sales_invoice(
         return_against_id=payload.return_against_id,
         po_no=payload.po_no,
         po_date=payload.po_date,
+        ecommerce_gstin=(payload.ecommerce_gstin or None),
         terms=payload.terms,
         customer_address_id=payload.customer_address_id,
         shipping_address_id=payload.shipping_address_id,

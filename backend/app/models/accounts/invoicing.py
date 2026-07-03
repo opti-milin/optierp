@@ -31,6 +31,10 @@ class SalesInvoice(Base, DocumentMixin, CompanyScopedMixin, InvoiceMixin):
     update_stock: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     po_no: Mapped[str | None] = mapped_column(String(140))  # customer's PO reference
     po_date: Mapped[date | None] = mapped_column(Date)
+    # E-commerce (u/s 52): GSTIN of the e-commerce operator THROUGH which this supply was
+    # made. Reported in GSTR-1 Table 14; the operator collects TCS and files GSTR-8. Purely
+    # a reporting tag — it does not change the invoice's own GST (the seller still charges it).
+    ecommerce_gstin: Mapped[str | None] = mapped_column(String(15))
     terms: Mapped[str | None] = mapped_column(Text)
     customer_address_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("addresses.id", ondelete="SET NULL")

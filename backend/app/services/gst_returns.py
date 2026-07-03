@@ -38,6 +38,7 @@ from app.schemas.compliance import (
     Gstr1B2B,
     Gstr1B2CS,
     Gstr1DocSummary,
+    Gstr1Eco,
     Gstr1Hsn,
     Gstr1Invoice,
     Gstr1Report,
@@ -141,6 +142,7 @@ class _Doc:
     rate: Decimal
     is_return: bool
     line_tax: list = field(default_factory=list)  # [(line, treatment, rate, _Split), ...]
+    ecommerce_gstin: str | None = None  # ECO GSTIN this supply was made through (Table 14a)
 
 
 def _split_invoice(inv, acct_names: dict, *, inter: bool) -> _Split:
@@ -254,6 +256,8 @@ async def _load_docs(
         )
         pos_code = pos[:2] if pos[:2].isdigit() else None
         inter = bool(company_code and pos_code and company_code != pos_code)
+        eco_gstin = (inv.ecommerce_gstin or "").strip()
+        eco_gstin = eco_gstin if len(eco_gstin) == 15 else None
         split = _split_invoice(inv, acct_names, inter=inter)
         taxable = Decimal(inv.base_net_total or 0)
         rate = (split.tax / taxable * 100) if taxable else ZERO
@@ -271,9 +275,35 @@ async def _load_docs(
                 rate=rate,
                 is_return=bool(inv.is_return),
                 line_tax=_allocate_lines(inv, split, hsn_rate, treat),
+                ecommerce_gstin=eco_gstin,
             )
         )
     return docs, hsn_rate, treat
+
+
+def _eco_table14(docs: list[_Doc]) -> list[Gstr1Eco]:
+    """GSTR-1 Table 14(a): supplies made through each e-commerce operator (u/s 52),
+    aggregated per operator GSTIN (net of returns)."""
+    agg: dict[str, dict] = {}
+    for d in docs:
+        if not d.ecommerce_gstin:
+            continue
+        e = agg.setdefault(d.ecommerce_gstin, {"s": _Split(), "taxable": ZERO, "count": 0})
+        e["s"].add(d.split)
+        e["taxable"] += d.taxable
+        e["count"] += 1
+    return [
+        Gstr1Eco(
+            ecommerce_gstin=gstin,
+            taxable_value=_q(e["taxable"]),
+            cgst=_q(e["s"].cgst),
+            sgst=_q(e["s"].sgst),
+            igst=_q(e["s"].igst),
+            cess=_q(e["s"].cess),
+            invoice_count=e["count"],
+        )
+        for gstin, e in sorted(agg.items())
+    ]
 
 
 def _to_invoice(d: _Doc) -> Gstr1Invoice:
@@ -349,6 +379,7 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
 
     hsn = _hsn_summary(docs)
     report_docs = _doc_summary(docs)
+    eco = _eco_table14(docs)
 
     tx = _Split()
     taxable_total = ZERO
@@ -370,6 +401,7 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
         cdnur=cdnur,
         hsn=hsn,
         docs=report_docs,
+        eco=eco,
         totals=Gstr1Totals(
             taxable_value=_q(taxable_total),
             cgst=_q(tx.cgst),
@@ -966,4 +998,19 @@ def gstr1_json(report: Gstr1Report) -> dict:
         out["hsn"] = hsn
     if doc_issue["doc_det"]:
         out["doc_issue"] = doc_issue
+    if report.eco:
+        # Table 14(a) — supplies through e-commerce operators, TCS collected u/s 52.
+        out["supeco"] = {
+            "clttx": [
+                {
+                    "etin": r.ecommerce_gstin,
+                    "suppval": float(r.taxable_value),
+                    "igst": float(r.igst),
+                    "cgst": float(r.cgst),
+                    "sgst": float(r.sgst),
+                    "cess": float(r.cess),
+                }
+                for r in report.eco
+            ]
+        }
     return out

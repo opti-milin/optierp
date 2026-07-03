@@ -174,6 +174,20 @@ class Gstr1DocSummary(BaseModel):
     net_issued: int
 
 
+class Gstr1Eco(BaseModel):
+    """GSTR-1 Table 14(a) — supplies made THROUGH an e-commerce operator on which the
+    operator collects TCS (u/s 52), aggregated per operator GSTIN. Additive/informational:
+    these supplies also appear in B2B / B2C; the seller still charges their own GST."""
+
+    ecommerce_gstin: str
+    taxable_value: Decimal
+    cgst: Decimal
+    sgst: Decimal
+    igst: Decimal
+    cess: Decimal
+    invoice_count: int
+
+
 class Gstr1Totals(BaseModel):
     taxable_value: Decimal
     cgst: Decimal
@@ -197,6 +211,7 @@ class Gstr1Report(BaseModel):
     cdnur: list[Gstr1Invoice]  # credit/debit notes to unregistered recipients
     hsn: list[Gstr1Hsn]
     docs: list[Gstr1DocSummary]
+    eco: list[Gstr1Eco] = []  # Table 14(a): supplies through e-commerce operators (u/s 52)
     totals: Gstr1Totals
 
 

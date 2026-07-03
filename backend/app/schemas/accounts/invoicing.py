@@ -14,6 +14,7 @@ class SalesInvoiceCreate(InvoiceCreateBase):
     debit_to_id: uuid.UUID | None = None  # defaults from customer/company
     po_no: str | None = None
     po_date: date | None = None
+    ecommerce_gstin: str | None = None  # ECO GSTIN if sold through an e-commerce operator (u/s 52)
     terms: str | None = None
     customer_address_id: uuid.UUID | None = None
     shipping_address_id: uuid.UUID | None = None
@@ -110,6 +111,7 @@ class SalesInvoiceResponse(InvoiceResponseBase):
     return_against_id: uuid.UUID | None
     po_no: str | None = None
     po_date: date | None = None
+    ecommerce_gstin: str | None = None
     terms: str | None = None
     customer_address_id: uuid.UUID | None = None
     shipping_address_id: uuid.UUID | None = None
