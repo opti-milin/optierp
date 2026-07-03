@@ -122,6 +122,27 @@ class Gstr1Invoice(BaseModel):
     igst: Decimal
     cess: Decimal
     is_return: bool = False  # credit/debit note
+    # SEZ / Deemed Export tagging (drives the portal inv_typ SEZWP/SEZWOP/DE on B2B rows).
+    gst_category: str = "Regular"
+    export_with_payment: bool = False
+
+
+class Gstr1Export(BaseModel):
+    """GSTR-1 Table 6A — an export invoice, sub-typed WPAY (IGST paid) / WOPAY (LUT/bond,
+    zero-rated). Carries the customs shipping bill + port for the portal."""
+
+    invoice_id: uuid.UUID
+    name: str
+    posting_date: date
+    export_type: str  # WPAY | WOPAY
+    shipping_bill_no: str | None = None
+    shipping_bill_date: date | None = None
+    port_code: str | None = None
+    invoice_value: Decimal
+    rate: Decimal
+    taxable_value: Decimal
+    igst: Decimal
+    cess: Decimal
 
 
 class Gstr1B2B(BaseModel):
@@ -224,6 +245,7 @@ class Gstr1Report(BaseModel):
     b2cs: list[Gstr1B2CS]
     cdnr: list[Gstr1Invoice]  # credit/debit notes to registered recipients
     cdnur: list[Gstr1Invoice]  # credit/debit notes to unregistered recipients
+    exp: list[Gstr1Export] = []  # Table 6A: exports (EXPWP/EXPWOP)
     hsn: list[Gstr1Hsn]
     docs: list[Gstr1DocSummary]
     eco: list[Gstr1Eco] = []  # Table 14(a): supplies through e-commerce operators (u/s 52)

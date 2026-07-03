@@ -147,14 +147,20 @@ async def _load_tax_rows(db: AsyncSession, payload: SalesInvoiceCreate, customer
 
 async def _resolve_invoice_taxes(db: AsyncSession, payload: SalesInvoiceCreate, company, customer):
     """Shared tax resolution: template rows (or HSN-derived auto-GST) + the
-    per-item rate overrides the engine applies. Returns (tax_rows_in, item_rates)."""
-    tax_rows_in = [] if payload.is_opening else await _load_tax_rows(db, payload, customer)
+    per-item rate overrides the engine applies. Returns (tax_rows_in, item_rates).
+
+    Zero-rated sales (SEZ/Export u/s 16 IGST Act): under LUT/bond → NO tax; with payment →
+    IGST (always inter-state, force_inter), bypassing the party's tax template."""
+    zero_rated = payload.gst_category in ("SEZ", "Export")
     item_rates = await item_tax_rates(db, payload.items)
+    if zero_rated and not payload.export_with_payment:
+        return [], item_rates  # LUT / bond — a Bill of Export with no GST
+    tax_rows_in = [] if (payload.is_opening or zero_rated) else await _load_tax_rows(db, payload, customer)
     if not tax_rows_in and not payload.is_opening:
         auto_rows, auto_overrides = await auto_gst_from_items(
             db, company=company, party_gstin=customer.tax_id,
             place_of_supply=payload.place_of_supply, payload_items=payload.items,
-            item_rates=item_rates,
+            item_rates=item_rates, force_inter=(zero_rated and payload.export_with_payment),
         )
         if auto_rows:
             tax_rows_in = auto_rows
@@ -176,6 +182,7 @@ async def preview_sales_invoice(db: AsyncSession, payload: SalesInvoiceCreate, u
         apply_discount_on=payload.apply_discount_on,
         additional_discount_percentage=payload.additional_discount_percentage,
         discount_amount=payload.discount_amount,
+        gst_category=payload.gst_category, export_with_payment=payload.export_with_payment,
     )
 
 
@@ -278,6 +285,11 @@ async def create_sales_invoice(
         po_no=payload.po_no,
         po_date=payload.po_date,
         ecommerce_gstin=(payload.ecommerce_gstin or None),
+        gst_category=payload.gst_category,
+        export_with_payment=payload.export_with_payment,
+        shipping_bill_no=(payload.shipping_bill_no or None),
+        shipping_bill_date=payload.shipping_bill_date,
+        port_code=(payload.port_code or None),
         terms=payload.terms,
         customer_address_id=payload.customer_address_id,
         shipping_address_id=payload.shipping_address_id,

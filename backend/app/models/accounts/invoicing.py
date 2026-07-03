@@ -35,6 +35,19 @@ class SalesInvoice(Base, DocumentMixin, CompanyScopedMixin, InvoiceMixin):
     # made. Reported in GSTR-1 Table 14; the operator collects TCS and files GSTR-8. Purely
     # a reporting tag — it does not change the invoice's own GST (the seller still charges it).
     ecommerce_gstin: Mapped[str | None] = mapped_column(String(15))
+    # India GST supply category. SEZ/Export are zero-rated (sec 16 IGST Act): without payment
+    # (LUT) → no GST; with payment → IGST (always inter-state, even for an SEZ in the same
+    # state). Deemed Export is taxed normally but reported apart. Drives GSTR-1 routing
+    # (exports → Table 6A; SEZ/DE → B2B with a special invoice type) and GSTR-3B 3.1(b).
+    gst_category: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="Regular", server_default=text("'Regular'")
+    )
+    export_with_payment: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    shipping_bill_no: Mapped[str | None] = mapped_column(String(20))  # export: shipping bill / bill of export
+    shipping_bill_date: Mapped[date | None] = mapped_column(Date)
+    port_code: Mapped[str | None] = mapped_column(String(10))  # export: customs port code
     terms: Mapped[str | None] = mapped_column(Text)
     customer_address_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("addresses.id", ondelete="SET NULL")

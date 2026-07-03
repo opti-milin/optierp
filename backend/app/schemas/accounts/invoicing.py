@@ -4,10 +4,16 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+from pydantic import field_validator
 
 from app.schemas.common import DocumentMeta, ORMModel
 
 from app.schemas.accounts.common import InvoiceCreateBase
+
+# India GST supply categories. Regular = domestic; SEZ/Export = zero-rated (sec 16 IGST);
+# Deemed Export = taxed normally but reported separately.
+GST_CATEGORIES = ("Regular", "SEZ", "Export", "Deemed Export")
+
 
 class SalesInvoiceCreate(InvoiceCreateBase):
     customer_id: uuid.UUID
@@ -15,10 +21,23 @@ class SalesInvoiceCreate(InvoiceCreateBase):
     po_no: str | None = None
     po_date: date | None = None
     ecommerce_gstin: str | None = None  # ECO GSTIN if sold through an e-commerce operator (u/s 52)
+    # Zero-rated / special supplies (SEZ, Export, Deemed Export).
+    gst_category: str = "Regular"
+    export_with_payment: bool = False  # SEZ/Export: True = charge IGST, False = LUT (no GST)
+    shipping_bill_no: str | None = None
+    shipping_bill_date: date | None = None
+    port_code: str | None = None
     terms: str | None = None
     customer_address_id: uuid.UUID | None = None
     shipping_address_id: uuid.UUID | None = None
     contact_person_id: uuid.UUID | None = None
+
+    @field_validator("gst_category")
+    @classmethod
+    def _valid_gst_category(cls, v: str) -> str:
+        if v not in GST_CATEGORIES:
+            raise ValueError(f"gst_category must be one of {GST_CATEGORIES}")
+        return v
 
 
 class PurchaseInvoiceCreate(InvoiceCreateBase):
@@ -112,6 +131,11 @@ class SalesInvoiceResponse(InvoiceResponseBase):
     po_no: str | None = None
     po_date: date | None = None
     ecommerce_gstin: str | None = None
+    gst_category: str = "Regular"
+    export_with_payment: bool = False
+    shipping_bill_no: str | None = None
+    shipping_bill_date: date | None = None
+    port_code: str | None = None
     terms: str | None = None
     customer_address_id: uuid.UUID | None = None
     shipping_address_id: uuid.UUID | None = None

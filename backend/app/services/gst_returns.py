@@ -41,6 +41,7 @@ from app.schemas.compliance import (
     Gstr1B2CS,
     Gstr1DocSummary,
     Gstr1Eco,
+    Gstr1Export,
     Gstr1Hsn,
     Gstr1Invoice,
     Gstr1Report,
@@ -145,6 +146,17 @@ class _Doc:
     is_return: bool
     line_tax: list = field(default_factory=list)  # [(line, treatment, rate, _Split), ...]
     ecommerce_gstin: str | None = None  # ECO GSTIN this supply was made through (Table 14a)
+    # SEZ / Export (zero-rated u/s 16 IGST Act) classification, driving GSTR-1 routing +
+    # GSTR-3B 3.1(b). ``zero_rated`` = {SEZ, Export} only (Deemed Export is taxed normally).
+    gst_category: str = "Regular"
+    export_with_payment: bool = False
+    shipping_bill_no: str | None = None
+    shipping_bill_date: date | None = None
+    port_code: str | None = None
+
+    @property
+    def zero_rated(self) -> bool:
+        return self.gst_category in ("SEZ", "Export")
 
 
 def _split_invoice(inv, acct_names: dict, *, inter: bool) -> _Split:
@@ -278,6 +290,11 @@ async def _load_docs(
                 is_return=bool(inv.is_return),
                 line_tax=_allocate_lines(inv, split, hsn_rate, treat),
                 ecommerce_gstin=eco_gstin,
+                gst_category=(inv.gst_category or "Regular"),
+                export_with_payment=bool(inv.export_with_payment),
+                shipping_bill_no=inv.shipping_bill_no,
+                shipping_bill_date=inv.shipping_bill_date,
+                port_code=inv.port_code,
             )
         )
     return docs, hsn_rate, treat
@@ -422,6 +439,26 @@ def _to_invoice(d: _Doc) -> Gstr1Invoice:
         igst=_q(d.split.igst),
         cess=_q(d.split.cess),
         is_return=d.is_return,
+        gst_category=d.gst_category,
+        export_with_payment=d.export_with_payment,
+    )
+
+
+def _to_export(d: _Doc) -> Gstr1Export:
+    """GSTR-1 Table 6A row for an export invoice (WPAY = IGST paid, WOPAY = LUT/bond)."""
+    return Gstr1Export(
+        invoice_id=d.inv.id,
+        name=d.inv.name,
+        posting_date=d.inv.posting_date,
+        export_type="WPAY" if d.export_with_payment else "WOPAY",
+        shipping_bill_no=d.shipping_bill_no,
+        shipping_bill_date=d.shipping_bill_date,
+        port_code=d.port_code,
+        invoice_value=_q(d.invoice_value),
+        rate=_q(d.rate),
+        taxable_value=_q(d.taxable),
+        igst=_q(d.split.igst),  # WOPAY → 0
+        cess=_q(d.split.cess),
     )
 
 
@@ -436,10 +473,16 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
     b2cs_taxable: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
     cdnr: list[Gstr1Invoice] = []
     cdnur: list[Gstr1Invoice] = []
+    exp: list[Gstr1Export] = []
 
     for d in docs:
         if d.is_return:
             (cdnr if d.gstin else cdnur).append(_to_invoice(d))
+            continue
+        # Exports → Table 6A (an export has no recipient GSTIN and must NOT fall into
+        # B2C-Large/Small). SEZ / Deemed Export keep their GSTIN → B2B, tagged at JSON time.
+        if d.gst_category == "Export":
+            exp.append(_to_export(d))
             continue
         if d.gstin:
             b2b_map[d.gstin].append(d)
@@ -500,6 +543,7 @@ async def gstr1(db: AsyncSession, company: Company, *, from_date: date, to_date:
         b2cs=b2cs,
         cdnr=cdnr,
         cdnur=cdnur,
+        exp=sorted(exp, key=lambda e: e.name),
         hsn=hsn,
         docs=report_docs,
         eco=eco,
@@ -592,11 +636,21 @@ async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date
 
     taxable = _Split()  # 3.1(a) tax
     taxable_value = ZERO
+    zero_rated = _Split()  # 3.1(b) tax (IGST only, with-payment exports/SEZ)
+    zero_rated_value = ZERO
     nil_exempt_value = ZERO
     non_gst_value = ZERO
     inter_unreg: dict[str, dict] = {}
 
     for d in docs:
+        # Zero-rated (SEZ / Export u/s 16 IGST Act) is a DOCUMENT-level category, not a per-line
+        # treatment: the whole document → 3.1(b), and is excluded from 3.1(a)/(c)/(e) and the 3.2
+        # memo. Under LUT d.split is empty (no tax); with payment it carries IGST. Returns net in
+        # via their negative d.taxable/d.split. (Deemed Export is NOT zero-rated → falls through.)
+        if d.zero_rated:
+            zero_rated_value += d.taxable
+            zero_rated.add(d.split)
+            continue
         for li, treatment, _rate, s in d.line_tax:
             val = Decimal(li.base_net_amount or 0)
             if treatment in ("Nil-Rated", "Exempt"):
@@ -638,7 +692,9 @@ async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date
         ),
         Gstr3bTaxRow(
             label="(b) Outward taxable supplies (zero-rated)",
-            taxable_value=ZERO, igst=ZERO, cgst=ZERO, sgst=ZERO, cess=ZERO,
+            taxable_value=_q(zero_rated_value),
+            # zero-rated supplies are always inter-state → IGST only (never CGST/SGST)
+            igst=_q(zero_rated.igst), cgst=ZERO, sgst=ZERO, cess=_q(zero_rated.cess),
         ),
         Gstr3bTaxRow(
             label="(c) Other outward supplies (nil-rated, exempt)",
@@ -666,14 +722,16 @@ async def gstr3b(db: AsyncSession, company: Company, *, from_date: date, to_date
         ),
     ]
 
-    # net payable = output tax (3.1a + 3.1d reverse-charge liability) − eligible ITC
+    # net payable = output tax (3.1a + 3.1b zero-rated-with-payment IGST + 3.1d reverse-charge
+    # liability) − eligible ITC. With-payment export IGST is a genuine liability discharged then
+    # separately refunded, so it is added here; under LUT zero_rated.igst is 0 (no effect).
     net = Gstr3bTaxRow(
         label="Net tax payable",
         taxable_value=ZERO,
-        igst=_q(taxable.igst + rcm["s"].igst - itc_rcm.igst - itc_other.igst),
+        igst=_q(taxable.igst + zero_rated.igst + rcm["s"].igst - itc_rcm.igst - itc_other.igst),
         cgst=_q(taxable.cgst + rcm["s"].cgst - itc_rcm.cgst - itc_other.cgst),
         sgst=_q(taxable.sgst + rcm["s"].sgst - itc_rcm.sgst - itc_other.sgst),
-        cess=_q(taxable.cess + rcm["s"].cess - itc_rcm.cess - itc_other.cess),
+        cess=_q(taxable.cess + zero_rated.cess + rcm["s"].cess - itc_rcm.cess - itc_other.cess),
     )
 
     return Gstr3bReport(
@@ -970,6 +1028,22 @@ def _idt(d: date) -> str:
     return d.strftime("%d-%m-%Y")
 
 
+def _b2b_inv_typ(inv: Gstr1Invoice) -> str:
+    """Portal B2B invoice type: SEZ with/without payment, Deemed Export, else Regular."""
+    if inv.gst_category == "SEZ":
+        return "SEZWP" if inv.export_with_payment else "SEZWOP"
+    if inv.gst_category == "Deemed Export":
+        return "DE"
+    return "R"
+
+
+def _cdnur_typ(inv: Gstr1Invoice) -> str:
+    """Portal CDNUR note type: export credit/debit notes are EXPWP/EXPWOP, else B2CL."""
+    if inv.gst_category == "Export":
+        return "EXPWP" if inv.export_with_payment else "EXPWOP"
+    return "B2CL"
+
+
 def gstr1_json(report: Gstr1Report) -> dict:
     """Serialise a GSTR-1 report to the GST portal's JSON schema (subset: b2b, b2cl,
     b2cs, cdnr, cdnur, hsn, doc_issue) — the offline-tool upload format."""
@@ -996,7 +1070,7 @@ def gstr1_json(report: Gstr1Report) -> dict:
                     "val": float(inv.invoice_value),
                     "pos": inv.place_of_supply[:2],
                     "rchrg": "Y" if inv.reverse_charge else "N",
-                    "inv_typ": "R",
+                    "inv_typ": _b2b_inv_typ(inv),
                     "itms": _itms(inv),
                 }
                 for inv in blk.invoices
@@ -1025,6 +1099,29 @@ def gstr1_json(report: Gstr1Report) -> dict:
         for pos, invs in sorted(b2cl_map.items())
     ]
 
+    exp_map: dict[str, list[Gstr1Export]] = defaultdict(list)
+    for e in report.exp:
+        exp_map[e.export_type].append(e)
+    exp = [
+        {
+            "exp_typ": exp_typ,
+            "inv": [
+                {
+                    "inum": e.name,
+                    "idt": _idt(e.posting_date),
+                    "val": float(e.invoice_value),
+                    "sbpcode": e.port_code or "",
+                    "sbnum": e.shipping_bill_no or "",
+                    "sbdt": _idt(e.shipping_bill_date) if e.shipping_bill_date else "",
+                    "itms": [{"txval": float(e.taxable_value), "rt": float(e.rate),
+                              "iamt": float(e.igst), "csamt": float(e.cess)}],
+                }
+                for e in invs
+            ],
+        }
+        for exp_typ, invs in sorted(exp_map.items())
+    ]
+
     b2cs = [
         {
             "sply_ty": row.supply_type,
@@ -1040,7 +1137,7 @@ def gstr1_json(report: Gstr1Report) -> dict:
         for row in report.b2cs
     ]
 
-    def _cdn(rows: list[Gstr1Invoice]) -> list[dict]:
+    def _cdn(rows: list[Gstr1Invoice], *, unreg: bool = False) -> list[dict]:
         return [
             {
                 "nt_num": inv.name,
@@ -1048,6 +1145,8 @@ def gstr1_json(report: Gstr1Report) -> dict:
                 "ntty": "C",
                 "val": float(abs(inv.invoice_value)),
                 "pos": inv.place_of_supply[:2],
+                # CDNUR notes carry a note type (export EXPWP/EXPWOP, else B2CL); CDNR (registered) do not.
+                **({"typ": _cdnur_typ(inv)} if unreg else {}),
                 "itms": [
                     {
                         "num": 1,
@@ -1115,13 +1214,15 @@ def gstr1_json(report: Gstr1Report) -> dict:
         out["b2cl"] = b2cl
     if b2cs:
         out["b2cs"] = b2cs
+    if exp:
+        out["exp"] = exp  # Table 6A — exports (EXPWP/EXPWOP)
     if report.cdnr:
         cdnr_map: dict[str, list[Gstr1Invoice]] = defaultdict(list)
         for inv in report.cdnr:
             cdnr_map[inv.counterparty_gstin or ""].append(inv)
         out["cdnr"] = [{"ctin": ctin, "nt": _cdn(invs)} for ctin, invs in sorted(cdnr_map.items())]
     if report.cdnur:
-        out["cdnur"] = _cdn(report.cdnur)
+        out["cdnur"] = _cdn(report.cdnur, unreg=True)
     if hsn["data"]:
         out["hsn"] = hsn
     if doc_issue["doc_det"]:

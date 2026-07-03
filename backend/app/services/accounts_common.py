@@ -170,6 +170,7 @@ async def auto_gst_from_items(
     db: AsyncSession, *, company: Company, party_gstin: str | None,
     place_of_supply: str | None, payload_items: list,
     item_rates: dict[uuid.UUID, dict] | None = None, is_sales: bool = True,
+    force_inter: bool = False,
 ) -> tuple[list, dict]:
     """Derive GST tax rows + per-item rate overrides from the line items when no
     document-level tax template resolved — the "the item's HSN carries the rate,
@@ -227,12 +228,14 @@ async def auto_gst_from_items(
             taxable_hsns.add(t[0])
     hsn_rate = await _hsn_rates(db, {h for h in taxable_hsns if h})
 
-    # intra vs inter: party state vs company state (GSTIN first, then place of supply)
+    # intra vs inter: party state vs company state (GSTIN first, then place of supply).
+    # ``force_inter`` (SEZ/Export with payment) always books IGST — a zero-rated supply is
+    # deemed inter-state u/s 7(5) IGST Act, even to an SEZ in the supplier's own state.
     company_state = _gstin_state(company.tax_id)
     party_state = _gstin_state(party_gstin)
     if party_state is None and place_of_supply and place_of_supply[:2].isdigit():
         party_state = place_of_supply[:2]
-    inter = bool(company_state and party_state and company_state != party_state)
+    inter = force_inter or bool(company_state and party_state and company_state != party_state)
 
     # Each non-template line's total GST rate: HSN rate if Taxable, else 0.
     # Every such line gets an EXPLICIT override (incl. 0), so a Nil/Exempt line
@@ -507,7 +510,7 @@ async def compute_doc_tax_preview(
     place_of_supply: str | None = None, conversion_rate: Decimal = Decimal(1),
     apply_discount_on: str = "Grand Total",
     additional_discount_percentage: Decimal = Decimal(0), discount_amount: Decimal = Decimal(0),
-    is_reverse_charge: bool = False,
+    is_reverse_charge: bool = False, gst_category: str = "Regular", export_with_payment: bool = False,
 ):
     """Compute the GST + totals a transaction document (invoice / order / quotation)
     would apply, WITHOUT persisting — for the draft form's live preview. Mirrors the
@@ -527,8 +530,13 @@ async def compute_doc_tax_preview(
     from app.services.taxes_and_totals import ItemRow, TaxRow, calculate_taxes_and_totals
 
     is_sales = kind == "sales"
-    template = await resolve_tax_template(
-        db, company.id, kind, party.tax_category_id, party_gstin=party.tax_id
+    # Zero-rated sales (SEZ/Export u/s 16 IGST Act): under LUT/bond → NO tax; with payment →
+    # IGST (always inter-state). Mirrors create_sales_invoice so preview == create.
+    zero_rated = is_sales and gst_category in ("SEZ", "Export")
+    lut = zero_rated and not export_with_payment
+    template = (
+        None if zero_rated
+        else await resolve_tax_template(db, company.id, kind, party.tax_category_id, party_gstin=party.tax_id)
     )
     tax_rows_in = (
         [
@@ -551,10 +559,11 @@ async def compute_doc_tax_preview(
             tax_rows_in = rcm_rows
             for iid, heads in rcm_overrides.items():
                 item_rates.setdefault(iid, {}).update(heads)
-    if not tax_rows_in:
+    if not tax_rows_in and not lut:
         auto_rows, auto_overrides = await auto_gst_from_items(
             db, company=company, party_gstin=party.tax_id, place_of_supply=place_of_supply,
             payload_items=items, item_rates=item_rates, is_sales=is_sales,
+            force_inter=(zero_rated and export_with_payment),
         )
         if auto_rows:
             tax_rows_in = auto_rows
