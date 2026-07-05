@@ -158,6 +158,22 @@ DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     ("Accounts User", "Purchase Receipt", ["read"]),
     ("Accounts User", "Sales Order", ["read"]),
     ("Accounts User", "Delivery Note", ["read"]),
+    # Module — Manufacturing (BOM → Work Order → Manufacture)
+    ("Manufacturing Manager", "BOM", ["read", "write", "create", "submit", "cancel", "report"]),
+    ("Manufacturing Manager", "Work Order", ["read", "write", "create", "submit", "cancel", "report"]),
+    ("Manufacturing Manager", "Item", ["read", "report"]),
+    ("Manufacturing Manager", "Warehouse", ["read"]),
+    ("Manufacturing Manager", "Stock Entry", ["read", "report"]),
+    ("Manufacturing Manager", "Material Request", ["read", "write", "create", "report"]),
+    ("Manufacturing Manager", "Stock Ledger Entry", ["read", "report"]),
+    ("Manufacturing User", "BOM", ["read", "write", "create", "submit", "report"]),
+    ("Manufacturing User", "Work Order", ["read", "write", "create", "submit", "report"]),
+    ("Manufacturing User", "Item", ["read"]),
+    ("Manufacturing User", "Warehouse", ["read"]),
+    ("Manufacturing User", "Stock Entry", ["read"]),
+    # Stock Manager doubles as production lead in a lean MSME setup
+    ("Stock Manager", "BOM", ["read", "write", "create", "submit", "cancel", "report"]),
+    ("Stock Manager", "Work Order", ["read", "write", "create", "submit", "cancel", "report"]),
 ]
 
 

@@ -40,7 +40,20 @@ from app.models.accounts import InvoiceItemMixin, VoucherMixin
 from app.models.base import Base, CompanyScopedMixin, DocumentMixin
 
 VALUATION_METHODS = ("Moving Average", "FIFO")
-STOCK_ENTRY_PURPOSES = ("Material Receipt", "Material Issue", "Material Transfer")
+# "Manufacture" (consume raws + produce FG at input cost) and the optional
+# "Material Transfer for Manufacture" (move raws to a WIP warehouse) are driven by the
+# Manufacturing module's Work Order — see app.services.work_order. "Repack" is the
+# BOM-less, work-order-less version of Manufacture (re-box / bundle / split a pack):
+# consumed rows + finished rows on one entry, finished value = consumed value (+ any
+# additional operating cost), created directly like the other manual purposes.
+STOCK_ENTRY_PURPOSES = (
+    "Material Receipt",
+    "Material Issue",
+    "Material Transfer",
+    "Manufacture",
+    "Material Transfer for Manufacture",
+    "Repack",
+)
 MATERIAL_REQUEST_TYPES = ("Purchase", "Material Transfer", "Material Issue")
 STOCK_RECONCILIATION_PURPOSES = ("Opening Stock", "Stock Reconciliation")
 
@@ -415,6 +428,18 @@ class StockEntry(Base, DocumentMixin, CompanyScopedMixin, VoucherMixin):
     )
     total_amount: Mapped[Decimal] = mapped_column(
         Numeric(21, 6), nullable=False, default=0, server_default=text("0")
+    )
+    # Manufacturing (purpose "Manufacture" / "Material Transfer for Manufacture"): the Work
+    # Order this entry serves, plus the flat operating cost folded into the FG valuation on
+    # a Manufacture entry (Cr the operating-cost account, Dr Finished-Goods inventory).
+    work_order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_orders.id")
+    )
+    operating_cost: Mapped[Decimal] = mapped_column(
+        Numeric(21, 6), nullable=False, default=0, server_default=text("0")
+    )
+    operating_cost_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id")
     )
 
     items: Mapped[list["StockEntryItem"]] = relationship(

@@ -39,6 +39,12 @@ from app.api.v1.core import (
     users,
     workflows,
 )
+from app.api.v1.manufacturing import (
+    boms as manufacturing_boms,
+    reports as manufacturing_reports,
+    work_orders as manufacturing_work_orders,
+    workspace as manufacturing_workspace,
+)
 from app.api.v1 import registry as metadata_engine
 from app.api.v1.selling import quotations, sales_orders, workspace as selling_workspace
 from app.api.v1.stock import (
@@ -111,6 +117,12 @@ api_v1_router.include_router(selling_workspace.router)
 # Module — Assets (fixed-asset register + depreciation)
 api_v1_router.include_router(assets_module.router)
 api_v1_router.include_router(assets_reports.router)
+
+# Module — Manufacturing (BOM → Work Order → Manufacture)
+api_v1_router.include_router(manufacturing_boms.router)
+api_v1_router.include_router(manufacturing_work_orders.router)
+api_v1_router.include_router(manufacturing_reports.router)
+api_v1_router.include_router(manufacturing_workspace.router)
 
 # Module — India Compliance (GST settings, returns, e-documents)
 api_v1_router.include_router(compliance_gst_settings.router)

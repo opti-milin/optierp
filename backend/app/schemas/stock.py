@@ -225,14 +225,25 @@ class StockEntryItemIn(BaseModel):
     batch_no: str | None = None  # required for batched items; must be an existing batch
     source_warehouse_id: uuid.UUID | None = None
     target_warehouse_id: uuid.UUID | None = None
+    # Repack only: marks a PRODUCED (finished) row — everything else on the entry is
+    # consumed. On a finished row, ``basic_rate`` acts as an optional value WEIGHT for
+    # splitting the consumed cost across multiple outputs (equal-by-qty when all zero).
+    is_finished_item: bool = False
 
 
 class StockEntryCreate(BaseModel):
-    purpose: str = Field(pattern="^(Material Receipt|Material Issue|Material Transfer)$")
+    # "Manufacture" / "Material Transfer for Manufacture" are NOT creatable here —
+    # they are driven exclusively by a Work Order (see app.services.work_order).
+    purpose: str = Field(pattern="^(Material Receipt|Material Issue|Material Transfer|Repack)$")
     posting_date: date
     from_warehouse_id: uuid.UUID | None = None
     to_warehouse_id: uuid.UUID | None = None
     remarks: str | None = None
+    # Repack only: an additional flat cost (labour / freight) folded into the finished
+    # rows' value; the account is credited under perpetual inventory (like Manufacture).
+    # Upper bound keeps the value inside Numeric(21, 6) — beyond it the DB would 500.
+    operating_cost: Decimal = Field(ge=0, le=Decimal("999999999999999"), default=Decimal("0"))
+    operating_cost_account_id: uuid.UUID | None = None
     items: list[StockEntryItemIn] = Field(min_length=1)
 
 
@@ -260,6 +271,11 @@ class StockEntryResponse(DocumentMeta):
     from_warehouse_id: uuid.UUID | None
     to_warehouse_id: uuid.UUID | None
     total_amount: Decimal
+    # Manufacturing: the driving Work Order (Manufacture / WIP transfer) and the flat
+    # cost folded into the finished rows' value (Manufacture / Repack).
+    work_order_id: uuid.UUID | None = None
+    operating_cost: Decimal = Decimal("0")
+    operating_cost_account_id: uuid.UUID | None = None
     remarks: str | None
     company_id: uuid.UUID
     items: list[StockEntryItemResponse]

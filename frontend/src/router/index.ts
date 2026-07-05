@@ -416,6 +416,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/ModuleWorkspace.vue"),
         props: { moduleKey: "accounting" },
       },
+      {
+        path: "manufacturing",
+        name: "manufacturing-workspace",
+        component: () => import("@/views/ModuleWorkspace.vue"),
+        props: { moduleKey: "manufacturing" },
+      },
+      // Module — Manufacturing (BOM → Work Order → Manufacture)
+      { path: "bom", name: "bom", component: () => import("@/views/manufacturing/BomView.vue") },
+      { path: "bom/:id", name: "bom-detail", component: () => import("@/views/manufacturing/BomDetailView.vue"), props: true },
+      { path: "work-orders", name: "work-orders", component: () => import("@/views/manufacturing/WorkOrderView.vue") },
+      { path: "work-orders/:id", name: "work-order-detail", component: () => import("@/views/manufacturing/WorkOrderDetailView.vue"), props: true },
+      { path: "manufacturing-reports", name: "manufacturing-reports", component: () => import("@/views/manufacturing/ManufacturingReportsView.vue") },
+      { path: "manufacturing-settings", name: "manufacturing-settings", component: () => import("@/views/manufacturing/ManufacturingSettingsView.vue") },
       // Module 06+ routes register here per module
     ],
   },

@@ -30,6 +30,10 @@ const TONES: Record<string, string> = {
   Pending: "bg-amber-100 text-amber-800",
   Expired: "bg-red-100 text-red-700",
   Received: "bg-green-100 text-green-800",
+  // manufacturing (Work Order) lifecycle
+  "Not Started": "bg-gray-100 text-gray-700",
+  "In Process": "bg-blue-100 text-blue-800",
+  Stopped: "bg-red-100 text-red-700",
 };
 
 function tone(): string {

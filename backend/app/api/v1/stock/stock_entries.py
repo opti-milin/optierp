@@ -37,7 +37,11 @@ async def list_entries(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 20,
     purpose: Annotated[
-        str | None, Query(pattern="^(Material Receipt|Material Issue|Material Transfer)$")
+        str | None,
+        Query(
+            pattern="^(Material Receipt|Material Issue|Material Transfer|Manufacture|"
+            "Material Transfer for Manufacture|Repack)$"
+        ),
     ] = None,
 ) -> ListResponse[StockEntryListItem]:
     entries, total = await service.list_stock_entries(

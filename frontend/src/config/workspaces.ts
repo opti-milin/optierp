@@ -556,10 +556,68 @@ const ASSETS: WorkspaceConfig = {
   ],
 };
 
+// Manufacturing module: BOM (recipe) → Work Order (make N) → Manufacture (consume raws,
+// produce the finished good at input cost). `/manufacturing` is the workspace dashboard.
+const MANUFACTURING: WorkspaceConfig = {
+  key: "manufacturing",
+  title: "Manufacturing",
+  statsEndpoint: "/manufacturing/workspace",
+  sidebar: [
+    {
+      items: [
+        { label: "Home", to: "/", icon: "⌂" },
+        { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
+        { label: "BOM", to: "/bom", icon: "📋" },
+        { label: "Work Order", to: "/work-orders", icon: "🛠" },
+      ],
+    },
+    {
+      title: "Reports",
+      items: [
+        { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
+        { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
+        { label: "BOM Stock (Build?)", to: "/manufacturing-reports?tab=bom-stock" },
+        { label: "Stock Ledger", to: "/stock-balance?tab=ledger" },
+        { label: "General Ledger", to: "/reports?tab=general-ledger" },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [
+        { label: "Items", to: "/items" },
+        { label: "Warehouses", to: "/warehouses" },
+        { label: "Manufacturing Settings", to: "/manufacturing-settings" },
+      ],
+    },
+  ],
+  cards: [
+    {
+      title: "Production",
+      links: [
+        { label: "Bill of Materials", to: "/bom" },
+        { label: "Work Order", to: "/work-orders" },
+        { label: "Repack (Stock Entry)", to: "/stock-entries/new" },
+        { label: "Manufacturing Settings", to: "/manufacturing-settings" },
+      ],
+    },
+    {
+      title: "Reports",
+      links: [
+        { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
+        { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
+        { label: "BOM Stock (Can I build?)", to: "/manufacturing-reports?tab=bom-stock" },
+      ],
+    },
+  ],
+};
+
 export const WORKSPACES: Record<string, WorkspaceConfig> = {
   selling: SELLING,
   buying: BUYING,
   stock: STOCK,
   accounting: ACCOUNTING,
   assets: ASSETS,
+  manufacturing: MANUFACTURING,
 };

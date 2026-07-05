@@ -15,9 +15,11 @@ interface Tile {
 
 const tiles: Tile[] = [
   { label: "Sales", to: "/selling", icon: "🧭" },
-  { label: "Purchases", to: "/buying", icon: "🛍" },
+  { label: "Purchase", to: "/buying", icon: "🛍" },
   { label: "Inventory", to: "/stock", icon: "📦" },
   { label: "Accounting", to: "/accounting", icon: "📊" },
+  // TEMPORARILY HIDDEN (2026-07-05, per owner) — restore by uncommenting:
+  // { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
   { label: "Assets", to: "/assets", icon: "🏗" },
   { label: "Setup", to: "/companies", icon: "⚙" },
   { label: "Reports", to: "/reports", icon: "📈" },

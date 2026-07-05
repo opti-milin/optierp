@@ -96,6 +96,8 @@ export interface StockEntryItemIn {
   uom?: string | null;
   source_warehouse_id?: string | null;
   target_warehouse_id?: string | null;
+  // Repack only: marks a PRODUCED row; basic_rate then acts as an optional value weight
+  is_finished_item?: boolean;
 }
 
 export interface StockEntryListItem {
@@ -114,6 +116,8 @@ export interface StockEntryDetail extends DocumentMeta {
   from_warehouse_id: string | null;
   to_warehouse_id: string | null;
   total_amount: string;
+  work_order_id: string | null;
+  operating_cost: string;
   remarks: string | null;
   items: Array<{
     idx: number;

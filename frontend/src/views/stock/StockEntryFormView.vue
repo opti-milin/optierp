@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Stock Entry — create (draft) + detail (read-only with submit/cancel).
 
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
@@ -24,16 +24,38 @@ const doc = ref<StockEntryDetail | null>(null);
 const saving = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 
-const purpose = ref<"Material Receipt" | "Material Issue" | "Material Transfer">("Material Receipt");
+const purpose = ref<"Material Receipt" | "Material Issue" | "Material Transfer" | "Repack">(
+  "Material Receipt",
+);
 const postingDate = ref(new Date().toISOString().slice(0, 10));
 const fromWarehouseId = ref("");
 const toWarehouseId = ref("");
 const remarks = ref("");
+// Repack only: optional flat cost (labour/freight) folded into the finished rows' value
+const operatingCost = ref<number>(0);
+const operatingCostAccountId = ref("");
+const accountOptions = ref<{ value: string; label: string }[]>([]);
 const rows = ref<StockEntryItemIn[]>([{ item_id: "", qty: 1, basic_rate: 0 }]);
 
+const isRepack = computed(() => purpose.value === "Repack");
 const needsSource = computed(() => purpose.value !== "Material Receipt");
 const needsTarget = computed(() => purpose.value !== "Material Issue");
 const showRate = computed(() => purpose.value === "Material Receipt");
+// Repack additional cost > 0 needs its expense account (backend enforces at create too)
+const missingCostAccount = computed(
+  () => isRepack.value && (operatingCost.value || 0) > 0 && !operatingCostAccountId.value,
+);
+
+// switching purpose changes what basic_rate / Finished MEAN — reset per-row state so a
+// Repack weight can't leak into a Receipt rate (or vice versa) invisibly
+watch(purpose, () => {
+  rows.value.forEach((r) => {
+    r.basic_rate = 0;
+    r.is_finished_item = false;
+  });
+  operatingCost.value = 0;
+  operatingCostAccountId.value = "";
+});
 
 function whName(wid: string | null | undefined): string {
   if (!wid) return "—";
@@ -58,6 +80,8 @@ async function save(): Promise<void> {
       posting_date: postingDate.value,
       from_warehouse_id: needsSource.value ? fromWarehouseId.value || null : null,
       to_warehouse_id: needsTarget.value ? toWarehouseId.value || null : null,
+      operating_cost: isRepack.value ? operatingCost.value || 0 : 0,
+      operating_cost_account_id: isRepack.value ? operatingCostAccountId.value || null : null,
       remarks: remarks.value || null,
       items: rows.value.filter((r) => r.item_id),
     });
@@ -82,6 +106,14 @@ async function docAction(action: "submit" | "cancel"): Promise<void> {
 onMounted(async () => {
   await Promise.all([store.fetchItems(), store.fetchWarehouses()]);
   await load();
+  // account options for the Repack additional-cost credit (best-effort)
+  try {
+    accountOptions.value = (
+      await api.get<{ value: string; label: string }[]>("/registry/account/options")
+    ).data;
+  } catch {
+    accountOptions.value = [];
+  }
 });
 </script>
 
@@ -112,6 +144,10 @@ onMounted(async () => {
         <div><div class="text-xs uppercase text-gray-400">From</div>{{ whName(doc.from_warehouse_id) }}</div>
         <div><div class="text-xs uppercase text-gray-400">To</div>{{ whName(doc.to_warehouse_id) }}</div>
         <div><div class="text-xs uppercase text-gray-400">Total</div>{{ formatCurrency(doc.total_amount, companyCurrency) }}</div>
+        <div v-if="Number(doc.operating_cost) > 0">
+          <div class="text-xs uppercase text-gray-400">Additional cost</div>
+          {{ formatCurrency(doc.operating_cost, companyCurrency) }}
+        </div>
         <div v-if="doc.remarks" class="col-span-4"><div class="text-xs uppercase text-gray-400">Remarks</div>{{ doc.remarks }}</div>
       </section>
 
@@ -147,8 +183,11 @@ onMounted(async () => {
             <router-link to="/stock-entries" class="text-primary hover:underline">Stock Entries</router-link>
           </p>
         </div>
-        <button class="btn-primary" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save (Draft)" }}</button>
+        <button class="btn-primary" :disabled="saving || missingCostAccount" @click="save">{{ saving ? "Saving…" : "Save (Draft)" }}</button>
       </div>
+      <p v-if="missingCostAccount" class="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
+        An additional cost needs an expense account to credit — pick one (e.g. "Expenses Included In Valuation").
+      </p>
       <p v-if="error" class="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error.detail }}</p>
 
       <section class="mb-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -156,7 +195,8 @@ onMounted(async () => {
           <div>
             <label class="form-label">Purpose*</label>
             <select v-model="purpose" class="form-input">
-              <option>Material Receipt</option><option>Material Issue</option><option>Material Transfer</option>
+              <option>Material Receipt</option><option>Material Issue</option>
+              <option>Material Transfer</option><option>Repack</option>
             </select>
           </div>
           <div>
@@ -164,35 +204,63 @@ onMounted(async () => {
             <input v-model="postingDate" type="date" class="form-input" />
           </div>
           <div v-if="needsSource">
-            <label class="form-label">From Warehouse*</label>
+            <label class="form-label">{{ isRepack ? "Consume From*" : "From Warehouse*" }}</label>
             <select v-model="fromWarehouseId" class="form-input">
               <option value="" disabled>Select…</option>
               <option v-for="w in store.leafWarehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
             </select>
           </div>
           <div v-if="needsTarget">
-            <label class="form-label">To Warehouse*</label>
+            <label class="form-label">{{ isRepack ? "Produce Into*" : "To Warehouse*" }}</label>
             <select v-model="toWarehouseId" class="form-input">
               <option value="" disabled>Select…</option>
               <option v-for="w in store.leafWarehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
             </select>
           </div>
         </div>
+        <div v-if="isRepack" class="mt-3 grid grid-cols-4 gap-4">
+          <div>
+            <label class="form-label">Additional cost (labour / freight)</label>
+            <input v-model.number="operatingCost" type="number" min="0" step="any" class="form-input" />
+          </div>
+          <div class="col-span-2">
+            <label class="form-label">Additional cost account</label>
+            <select v-model="operatingCostAccountId" class="form-input">
+              <option value="">— (needed only if cost &gt; 0)</option>
+              <option v-for="a in accountOptions" :key="a.value" :value="a.value">{{ a.label }}</option>
+            </select>
+          </div>
+        </div>
+        <p v-if="isRepack" class="mt-2 text-xs text-gray-500">
+          Tick <strong>Finished</strong> on the rows this repack <em>produces</em>; the other rows are
+          consumed. Finished rows are valued at consumed cost (+ additional cost) — with several finished
+          rows the value is split by the optional per-row weight (else per unit).
+        </p>
         <div class="mb-1 mt-4 grid grid-cols-12 gap-2 text-xs font-medium text-gray-500">
-          <div class="col-span-6">Item</div><div class="col-span-3 text-right">Qty</div>
+          <div :class="isRepack ? 'col-span-5' : 'col-span-6'">Item</div>
+          <div v-if="isRepack" class="col-span-1 text-center">Finished</div>
+          <div class="col-span-3 text-right">Qty</div>
           <div v-if="showRate" class="col-span-3 text-right">Rate</div>
+          <div v-else-if="isRepack" class="col-span-3 text-right">Value weight</div>
         </div>
         <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 gap-2">
-          <select v-model="row.item_id" class="form-input col-span-6">
+          <select v-model="row.item_id" class="form-input" :class="isRepack ? 'col-span-5' : 'col-span-6'">
             <option value="" disabled>Item…</option>
             <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
+          <div v-if="isRepack" class="col-span-1 flex items-center justify-center">
+            <input v-model="row.is_finished_item" type="checkbox" />
+          </div>
           <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-3 text-right" />
-          <input v-if="showRate" v-model.number="row.basic_rate" type="number" min="0" step="any" placeholder="Rate" class="form-input col-span-3 text-right" />
+          <input
+            v-if="showRate || (isRepack && row.is_finished_item)"
+            v-model.number="row.basic_rate" type="number" min="0" step="any"
+            :placeholder="isRepack ? 'weight (optional)' : 'Rate'" class="form-input col-span-3 text-right"
+          />
           <div v-else class="col-span-3 flex items-center justify-end pr-2 text-xs text-gray-400">at current valuation</div>
         </div>
         <div class="mt-2 flex items-center justify-between">
-          <button type="button" class="btn-secondary" @click="rows.push({ item_id: '', qty: 1, basic_rate: 0 })">Add Row</button>
+          <button type="button" class="btn-secondary" @click="rows.push({ item_id: '', qty: 1, basic_rate: 0, is_finished_item: false })">Add Row</button>
           <input v-model="remarks" class="form-input w-72" placeholder="Remarks (optional)" />
         </div>
       </section>
