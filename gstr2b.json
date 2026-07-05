@@ -1,0 +1,6 @@
+{"data":{"docdata":{"b2b":[
+  {"ctin":"27BBBBB0003B1Z5","inv":[{"inum":"VEND-2004","dt":"24-06-2026","val":896.8,"itms":[{"num":1,"txval":760,"rt":18,"cgst":68.4,"sgst":68.4}]}]},
+  {"ctin":"27BBBBB0000B1Z5","inv":[{"inum":"VEND-PO-1","dt":"29-06-2026","val":170224.44,"itms":[{"num":1,"txval":144258,"rt":18,"cgst":12983.22,"sgst":12983.22}]}]},
+  {"ctin":"27BBBBB0001B1Z5","inv":[{"inum":"VEND-2005","dt":"24-06-2026","val":7720,"itms":[{"num":1,"txval":6720,"rt":18,"cgst":500,"sgst":500}]}]},
+  {"ctin":"27CCCCC9999C1Z5","inv":[{"inum":"VEND-9999","dt":"20-06-2026","val":5900,"itms":[{"num":1,"txval":5000,"rt":18,"cgst":450,"sgst":450}]}]}
+]}}}

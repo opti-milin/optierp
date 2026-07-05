@@ -2,9 +2,11 @@
 
 > Sub‑module of [ACCOUNTING_GAP_AND_PLAN.md](../ACCOUNTING_GAP_AND_PLAN.md). ERPNext workspace card: **Subscription**.
 
-## Status today — 🔴 not built
+## Status today — 🟢 built (2026‑06‑22)
 
-Zero code. **Net‑new sub‑module.** Build only if there are recurring/contract customers — for an
+> Implemented — see the v1 status note at the bottom of this doc. The original "not built" analysis is kept below for context.
+
+Was a **net‑new sub‑module.** Relevant only if there are recurring/contract customers — for an
 appliance distributor that usually means **AMC (annual maintenance contracts)**, equipment **rentals**,
 or retainer billing. If the business is purely one‑off order→invoice, **defer entirely**.
 

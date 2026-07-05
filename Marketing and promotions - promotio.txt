@@ -19,3 +19,20 @@ email send to customer and supplier
 module for tax management - GST & Income Tax
 - 
 
+
+incoming Email response reader and linking
+
+prefered supplier - based on ranking on different parameters
+prefered customer -  based on ranking on different parameters
+
+invoice with gst/without gst
+
+sale based forecasting to decide purshase procurement cycle(purchase recommendation)
+warehouse specific inventory summary and mapping
+location specific multilocation, multiware house inventory management
+
+return products management - return product actual cost 
+
+auto reconciliation of payments
+
+

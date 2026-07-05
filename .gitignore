@@ -25,3 +25,8 @@ Thumbs.db
 # Local artifacts — screenshots & Playwright MCP browser session
 /*.png
 .playwright-mcp/
+
+# Database dumps — data lives in Postgres, not git. See MIGRATION.md.
+backups/
+*.dump
+*.sql.gz

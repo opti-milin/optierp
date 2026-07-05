@@ -2,9 +2,11 @@
 
 > Sub‑module of [ACCOUNTING_GAP_AND_PLAN.md](../ACCOUNTING_GAP_AND_PLAN.md). ERPNext workspace card: **Share Management**.
 
-## Status today — 🔴 not built
+## Status today — 🟢 built (2026‑06‑22)
 
-Zero code. This is a **net‑new sub‑module** and the **lowest priority** in the accounting plan — for
+> Implemented — see the v1 status note at the bottom of this doc. The original "not built" analysis is kept below for context.
+
+This was a **net‑new sub‑module** and the **lowest priority** in the accounting plan — for
 a private appliance distributor it's a cap table, not a trading function. Build only when the owner
 actually needs to track shareholders (e.g. taking on an investor, issuing ESOPs).
 
