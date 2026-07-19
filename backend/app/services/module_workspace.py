@@ -16,6 +16,7 @@ from app.models.accounts import SalesInvoice
 from app.models.base import DOCSTATUS_SUBMITTED
 from app.models.buying import PurchaseOrder
 from app.models.core import Company
+from app.models.manufacturing import BOM, WorkOrder
 from app.models.selling import SalesOrder
 from app.models.stock import Item, StockEntry, Warehouse
 
@@ -124,6 +125,65 @@ async def get_accounting_workspace(db: AsyncSession, company_id: uuid.UUID) -> d
             {"label": "Sales Invoices", "value": count, "format": "int"},
             {"label": "Total Invoiced", "value": invoiced, "format": "currency"},
             {"label": "Outstanding", "value": outstanding, "format": "currency"},
+        ],
+        "trend": trend,
+    }
+
+
+async def get_manufacturing_workspace(db: AsyncSession, company_id: uuid.UUID) -> dict[str, Any]:
+    currency = await _company_currency(db, company_id)
+    active_boms = (
+        await db.execute(
+            select(func.count())
+            .select_from(BOM)
+            .where(BOM.company_id == company_id, BOM.docstatus == DOCSTATUS_SUBMITTED, BOM.is_active.is_(True))
+        )
+    ).scalar_one()
+    open_cond = (
+        WorkOrder.company_id == company_id,
+        WorkOrder.docstatus == DOCSTATUS_SUBMITTED,
+        WorkOrder.status.in_(("Not Started", "In Process")),
+    )
+    open_wos = (await db.execute(select(func.count()).select_from(WorkOrder).where(*open_cond))).scalar_one()
+    completed = (
+        await db.execute(
+            select(func.count())
+            .select_from(WorkOrder)
+            .where(WorkOrder.company_id == company_id, WorkOrder.status == "Completed")
+        )
+    ).scalar_one()
+
+    # 12-month trend of finished quantity produced (by actual_end_date)
+    months = _last_12_months(date.today())
+    start = date(months[0][0], months[0][1], 1)
+    year_col = func.extract("year", WorkOrder.actual_end_date)
+    month_col = func.extract("month", WorkOrder.actual_end_date)
+    rows = (
+        await db.execute(
+            select(
+                year_col.label("y"),
+                month_col.label("m"),
+                func.coalesce(func.sum(WorkOrder.produced_qty), 0).label("v"),
+            )
+            .where(
+                WorkOrder.company_id == company_id,
+                WorkOrder.actual_end_date.is_not(None),
+                WorkOrder.actual_end_date >= start,
+            )
+            .group_by(year_col, month_col)
+        )
+    ).all()
+    bucket = {(int(r.y), int(r.m)): float(r.v) for r in rows}
+    trend = [{"label": _MONTH_ABBR[m - 1], "value": bucket.get((y, m), 0)} for (y, m) in months]
+
+    return {
+        "currency": currency,
+        "chart_title": "Finished Quantity Produced",
+        "trend_format": "int",
+        "cards": [
+            {"label": "Active BOMs", "value": int(active_boms), "format": "int"},
+            {"label": "Open Work Orders", "value": int(open_wos), "format": "int"},
+            {"label": "Completed Work Orders", "value": int(completed), "format": "int"},
         ],
         "trend": trend,
     }

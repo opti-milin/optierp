@@ -19,3 +19,8 @@ email send to customer and supplier
 module for tax management - GST & Income Tax
 - 
 
+Delivery time back and forth estimation from purchase order -> production-> manufacturing -> sourcing
+
+Manufacturing audit, Inventory Audit, 
+
+Adv Tax -> IT Returns

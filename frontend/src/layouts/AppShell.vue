@@ -17,6 +17,7 @@ const GLOBAL_NAV: WsNavGroup[] = [
       { label: "Sales", to: "/selling", icon: "🧭" },
       { label: "Purchases", to: "/buying", icon: "🛍" },
       { label: "Inventory", to: "/stock", icon: "📦" },
+      { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
       { label: "Accounting", to: "/accounting", icon: "📊" },
     ],
   },
@@ -104,7 +105,7 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex min-h-screen">
+  <div class="flex h-screen overflow-hidden">
     <aside v-if="!isHome" class="flex w-60 flex-col border-r border-gray-200 bg-white">
       <div class="flex items-center gap-3 border-b border-gray-200 px-4 py-4">
         <img :src="brand.logo_url" :alt="brand.product_name" class="h-8 w-8" />
@@ -113,7 +114,7 @@ async function logout(): Promise<void> {
           <div class="text-xs text-gray-500">{{ headerSubtitle }}</div>
         </div>
       </div>
-      <nav class="flex-1 overflow-y-auto p-3">
+      <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-3">
         <div v-for="(group, gi) in sidebarGroups" :key="gi" class="mb-2">
           <div
             v-if="group.title"
@@ -152,3 +153,24 @@ async function logout(): Promise<void> {
     </main>
   </div>
 </template>
+
+<style scoped>
+/* Always-visible, thin styled scrollbar for the sidebar nav */
+.sidebar-scroll {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #cbd5e1 transparent; /* thumb track (Firefox) */
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8; /* slate-400 */
+}
+</style>

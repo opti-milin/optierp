@@ -137,7 +137,15 @@ from app.schemas.stock import (  # noqa: E402
     StockReconciliationItemIn,
     WarehouseCreate,
 )
+from app.schemas.manufacturing import (  # noqa: E402
+    BOMCreate,
+    WorkOrderCreate,
+    WorkOrderFinishIn,
+)
 from app.services import accounts_masters as masters  # noqa: E402
+from app.services import bom as bom_service  # noqa: E402
+from app.services import manufacturing_common as mfg_common  # noqa: E402
+from app.services import work_order as wo_service  # noqa: E402
 from app.services import budget as budget_service  # noqa: E402
 from app.services import delivery_note as dn_service  # noqa: E402
 from app.services import journal_entry as je_service  # noqa: E402
@@ -502,13 +510,17 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
             ("TCS 206C(1H) - Sale of Goods 0.1%", "TCS", 0.1, 5_000_000, tcs_payable.id),
             ("TCS 206C - Motor Vehicle (>10L) 1%", "TCS", 1, 1_000_000, tcs_payable.id),
         ]
-        db.add_all([
-            TaxWithholdingCategory(
+        tax_withholding_categories = {}  # name → category for later reference
+        twc_objs = []
+        for name, kind, rate, thr, acct in _twc:
+            twc = TaxWithholdingCategory(
                 id=uuid.uuid4(), company_id=company.id, category_name=name, kind=kind,
                 rate=_d(rate), threshold=_d(thr), account_id=acct,
             )
-            for name, kind, rate, thr, acct in _twc
-        ])
+            twc_objs.append(twc)
+            if kind == "TDS":  # only TDS for purchases
+                tax_withholding_categories[name] = twc.id
+        db.add_all(twc_objs)
         await db.flush()
 
         # Dunning tiers — escalate by days overdue (grace), interest % p.a., flat fee
@@ -795,9 +807,12 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         # --- purchase invoices + pay ---------------------------------------------
         purchase_invoices = []
+        tds_categories_list = list(tax_withholding_categories.values())
         for n in range(14):
             supplier = rng.choice(suppliers)
             posting = _date_in_fy(fy.year_start_date)
+            # ~40% of invoices get a TDS category
+            tds_category = rng.choice(tds_categories_list) if rng.random() < 0.4 else None
             invoice = await pi_service.create_purchase_invoice(
                 db,
                 PurchaseInvoiceCreate(
@@ -809,6 +824,7 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
                     items=purchase_items(),
                     tax_template_id=purchase_template.id if rng.random() < 0.7 else None,
                     payment_terms_template_id=extras["ptt_split"] if rng.random() < 0.35 else None,
+                    tax_withholding_category_id=tds_category,
                 ),
                 actor,
             )
@@ -1074,6 +1090,7 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
         await db.flush()
 
         await seed_supply_chain(db, actor, customers, suppliers, income_account, recent, extras)
+        await seed_manufacturing(db, actor, recent)
 
         # Assign each item the GST slab template that matches its HSN rate, so the
         # rate charged (via the item-tax-template override) agrees with the item's
@@ -1562,6 +1579,92 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
     await pr_service.submit_purchase_receipt(db, pr_lc.id, actor)
 
     print("Cycles: PO->PR->PI and QTN->SO->DN->SI seeded (plus returns, QC split, landed cost)")
+
+
+async def seed_manufacturing(db, actor, recent) -> None:
+    """Demo manufacturing data: BOM, Work Order, and Manufacture finish."""
+    from sqlalchemy import select
+    from app.models.stock import Item, Warehouse
+    from app.schemas.manufacturing import BOMItemIn
+
+    company_id = actor.company_id if isinstance(actor.company_id, uuid.UUID) else uuid.UUID(actor.company_id)
+    whs = (await db.execute(
+        select(Warehouse).where(
+            Warehouse.company_id == company_id,
+            Warehouse.warehouse_name.in_(["Main Store", "Showroom"]),
+        )
+    )).scalars().all()
+    wh_map = {wh.warehouse_name: wh for wh in whs}
+    main_store = wh_map.get("Main Store")
+    if main_store is None:
+        print("Manufacturing seed: Main Store warehouse not found; skipping manufacturing seed.")
+        return
+
+    item_codes = [
+        "MIXER-GRINDER-X200",
+        "RM-COPPER-MOTOR-WINDING-750W",
+        "RM-ABS-BODY-SHELL",
+    ]
+    items = (await db.execute(
+        select(Item).where(Item.company_id == company_id, Item.item_code.in_(item_codes))
+    )).scalars().all()
+    item_map = {item.item_code: item for item in items}
+    missing = [code for code in item_codes if code not in item_map]
+    if missing:
+        print(f"Manufacturing seed: missing required items {missing}; skipping manufacturing seed.")
+        return
+
+    production_item = item_map["MIXER-GRINDER-X200"]
+    raw_components = [
+        item_map["RM-COPPER-MOTOR-WINDING-750W"],
+        item_map["RM-ABS-BODY-SHELL"],
+    ]
+
+    await mfg_common.update_manufacturing_settings(
+        db,
+        company_id,
+        {
+            "default_source_warehouse_id": str(main_store.id),
+            "default_fg_warehouse_id": str(main_store.id),
+        },
+    )
+
+    bom = await bom_service.create_bom(
+        db,
+        BOMCreate(
+            production_item_id=production_item.id,
+            quantity=_d(1),
+            is_default=True,
+            remarks="Demo manufacturing BOM",
+            items=[
+                BOMItemIn(item_id=raw_components[0].id, qty=_d(2)),
+                BOMItemIn(item_id=raw_components[1].id, qty=_d(3)),
+            ],
+        ),
+        actor,
+    )
+    await bom_service.submit_bom(db, bom.id, actor)
+
+    wo = await wo_service.create_work_order(
+        db,
+        WorkOrderCreate(
+            bom_id=bom.id,
+            qty=_d(6),
+            source_warehouse_id=main_store.id,
+            fg_warehouse_id=main_store.id,
+            planned_start_date=recent(4),
+            remarks="Demo manufacturing run",
+        ),
+        actor,
+    )
+    await wo_service.submit_work_order(db, wo.id, actor)
+    await wo_service.finish_work_order(
+        db,
+        wo.id,
+        WorkOrderFinishIn(qty=_d(6), posting_date=recent(2)),
+        actor,
+    )
+    print("Manufacturing seed: created BOM, Work Order, and finished production for 6 units.")
 
 
 async def topup_main() -> None:

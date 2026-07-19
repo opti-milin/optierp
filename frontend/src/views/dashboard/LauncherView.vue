@@ -15,8 +15,9 @@ interface Tile {
 
 const tiles: Tile[] = [
   { label: "Sales", to: "/selling", icon: "🧭" },
-  { label: "Purchases", to: "/buying", icon: "🛍" },
+  { label: "Purchase", to: "/buying", icon: "🛍" },
   { label: "Inventory", to: "/stock", icon: "📦" },
+  { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
   { label: "Accounting", to: "/accounting", icon: "📊" },
   { label: "Assets", to: "/assets", icon: "🏗" },
   { label: "Setup", to: "/companies", icon: "⚙" },

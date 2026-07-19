@@ -54,7 +54,7 @@ services:
         condition: service_started
     command: >
       sh -c "alembic upgrade head &&
-             python -m scripts.seed --admin-email $${ADMIN_EMAIL:-admin@example.com} --admin-password $${ADMIN_PASSWORD:-ChangeMe!123} &&
+             python -m scripts.seed_demo --reset-schema --database-url '$${MIGRATIONS_DATABASE_URL}' --admin-email $${ADMIN_EMAIL:-admin@example.com} --admin-password $${ADMIN_PASSWORD:-ChangeMe!123} &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
