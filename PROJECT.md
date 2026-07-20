@@ -37,16 +37,14 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 
 ## 2. Current Transition State
 
-- **Branch:** `develop` — **clean working tree** (nothing uncommitted at handoff).
-- **Last commit:** `0d5c845 feat: Add manufacturing module with BOM, work orders, and related features`.
-- **Exact spot:** The **Manufacturing module (Phase 4)** has just begun. What landed:
-  - Models in [backend/app/models/manufacturing.py](backend/app/models/manufacturing.py): `BOM` + `BOMItem`, `WorkOrder` + `WorkOrderItem` (only these four tables).
-  - Services: [bom.py](backend/app/services/bom.py), [work_order.py](backend/app/services/work_order.py), [manufacturing_common.py](backend/app/services/manufacturing_common.py), [manufacturing_reports.py](backend/app/services/manufacturing_reports.py).
-  - API: [backend/app/api/v1/manufacturing/](backend/app/api/v1/manufacturing/) — `boms.py`, `work_orders.py`, `reports.py`, `workspace.py`.
-  - Frontend: [frontend/src/views/manufacturing/](frontend/src/views/manufacturing/) — BOM list/detail, Work Order list/detail, reports, settings.
-  - Migration: `backend/migrations/versions/0065_manufacturing.py` (latest head).
-- **NOT yet built in Manufacturing** (next concrete work): **Job Card, Production Plan, Operation, Routing, Workstation** — see the migration spec, Module 07. BOM multi-level explosion (recursive CTE) and Work-Order → Job-Card completion roll-up still need finishing.
-- **Immediately before this**, the India-GST/compliance work (GSTR-2B recon, TDS 26Q/16A, e-documents) and free-text line items on orders/invoices landed (commits `0b8445a`…`631921c`).
+- **Branch:** `develop`
+- **Latest migration head:** `0068_itr_rate_entity` (after `0067_itr_ay_partial_unique`).
+- **Exact spot:** **Income Tax (entity ITR) Phases 0–6 lean** landed as a net-new India USP (ERPNext has no entity ITR compute/file — see [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md)):
+  - Company `pan` / `tan`; Income Tax Settings blob; engine masters Income Tax Rate Table + Tax Adjustment Category.
+  - Bespoke `IncomeTaxComputation` worksheet (P&L seed, adjustments, tax pack, TDS credit) + Vue at `/income-tax`.
+  - Entity ITR JSON/CSV (`GET …/itr`), advance-tax calendar, 26AS JSON reconcile, pluggable e-file (`none` / `sandbox`). Portal HTTPS + DSC still open.
+- **Manufacturing (Phase 4)** remains in progress: Job Card, Production Plan, Operation/Routing, Workstation still to build.
+- **Immediately before this**, Manufacturing BOM/Work Order (`0065`) and India GST/compliance work.
 
 ---
 
@@ -70,6 +68,7 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 - [ ] Customer order-tracking dashboard (read-only customer role + timeline over the doc-status chain).
 - [ ] One-page reconciliation (sales · purchase · bank) with auto-match service.
 - [ ] MCA (India company-law) compliance calendar + form pre-fill.
+- [x] **Income Tax (entity ITR)** — Phases 0–6 lean done (settings, computation, entity ITR export, advance-tax calendar, 26AS JSON, sandbox e-file provider). Remaining: full portal schedules, real DSC/HTTPS adapter — [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md).
 - [ ] POS + loyalty (till + points ledger hooked into pricing engine).
 
 **Technical debt / cross-cutting**
@@ -134,7 +133,7 @@ optierp-mig/
 │   │   │                          #   compliance/ assets/ core/ + auth.py, registry.py, router.py (master)
 │   │   ├── registry/              # The "machine": base.py (engine), descriptors.py (recipe cards, ~36 masters)
 │   │   └── jobs/                  # Scheduled jobs: assets.py (depreciation), subscription.py
-│   ├── migrations/versions/       # Alembic, one revision per feature — HEAD = 0065_manufacturing
+│   ├── migrations/versions/       # Alembic, one revision per feature — HEAD = 0067_itr_ay_partial_unique
 │   ├── data/coa/                  # Chart-of-Accounts templates (standard, India, UAE), verbatim from ERPNext
 │   ├── print_formats/             # Jinja2 → PDF (WeasyPrint) invoice templates
 │   ├── scripts/                   # seed.py (bootstrap), seed_demo.py (full demo dataset)

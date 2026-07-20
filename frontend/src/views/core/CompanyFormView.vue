@@ -44,7 +44,9 @@ const fields = computed<FieldConfig[]>(() => [
     type: "select",
     options: core.coaTemplates.map((t) => ({ value: t, label: t })),
   },
-  { name: "tax_id", label: "Tax ID", type: "text" },
+  { name: "tax_id", label: "GSTIN (Tax ID)", type: "text", help: "15-character GSTIN" },
+  { name: "pan", label: "PAN", type: "text", help: "10-character Permanent Account Number" },
+  { name: "tan", label: "TAN", type: "text", help: "Tax Deduction Account Number (for TDS returns)" },
   { name: "date_of_establishment", label: "Date of Establishment", type: "date" },
 ]);
 
@@ -91,6 +93,9 @@ onMounted(async () => {
             <dt class="text-gray-500">COA Template</dt>
             <dd class="font-medium">{{ doc.chart_of_accounts_template ?? "—" }}</dd>
           </div>
+          <div><dt class="text-gray-500">GSTIN</dt><dd class="font-mono font-medium">{{ doc.tax_id ?? "—" }}</dd></div>
+          <div><dt class="text-gray-500">PAN</dt><dd class="font-mono font-medium">{{ doc.pan ?? "—" }}</dd></div>
+          <div><dt class="text-gray-500">TAN</dt><dd class="font-mono font-medium">{{ doc.tan ?? "—" }}</dd></div>
         </dl>
       </div>
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

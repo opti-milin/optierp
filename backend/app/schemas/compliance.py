@@ -338,3 +338,189 @@ class Form16A(BaseModel):
     sections: list[Tds26qRow]  # section-wise TDS for this deductee
     total_base: Decimal
     total_tds: Decimal
+
+
+# ---------------------------------------------------------------------------
+# Income Tax (entity ITR) — Phase 0 settings + Phase 1 computation pack.
+# See docs/ITR_GAP_AND_PLAN.md. Live e-filing is deferred.
+# ---------------------------------------------------------------------------
+
+ENTITY_TYPES = ("Company", "Proprietor", "Firm", "LLP")
+FILING_REGIMES = ("Normal", "New")  # lean corporate rate regimes
+
+
+class IncomeTaxSettings(BaseModel):
+    """Per-company income-tax policy. ``pan`` / ``tan`` are derived from Company."""
+
+    entity_type: str = "Company"  # Company | Proprietor | Firm | LLP
+    filing_regime: str = "Normal"
+    default_assessment_year: str | None = None  # e.g. "2025-26"
+    # Empty / "none" ⇒ JSON-only; "sandbox" ⇒ stub ack; future live adapters register by name.
+    itr_efile_provider: str | None = None
+
+    # derived from Company on read
+    pan: str | None = None
+    tan: str | None = None
+
+    @field_validator("entity_type")
+    @classmethod
+    def _valid_entity(cls, v: str) -> str:
+        if v not in ENTITY_TYPES:
+            raise ValueError(f"entity_type must be one of {ENTITY_TYPES}")
+        return v
+
+    @field_validator("filing_regime")
+    @classmethod
+    def _valid_regime(cls, v: str) -> str:
+        if v not in FILING_REGIMES:
+            raise ValueError(f"filing_regime must be one of {FILING_REGIMES}")
+        return v
+
+
+class IncomeTaxAdjustmentLineIn(BaseModel):
+    category_id: uuid.UUID | None = None
+    description: str = ""
+    direction: str = "Add"  # Add | Deduct
+    amount: Decimal = Decimal("0")
+
+    @field_validator("direction")
+    @classmethod
+    def _valid_direction(cls, v: str) -> str:
+        if v not in ("Add", "Deduct"):
+            raise ValueError("direction must be Add or Deduct")
+        return v
+
+
+class IncomeTaxAdjustmentLineOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    idx: int
+    category_id: uuid.UUID | None = None
+    description: str
+    direction: str
+    amount: Decimal
+
+
+class IncomeTaxComputationCreate(BaseModel):
+    assessment_year: str
+    from_date: date
+    to_date: date
+    rate_table_id: uuid.UUID | None = None
+    advance_tax_paid: Decimal = Decimal("0")
+    remarks: str | None = None
+    adjustments: list[IncomeTaxAdjustmentLineIn] = []
+    # When True (default), seed book_profit from P&L and tds_credit from purchase TDS.
+    seed_from_books: bool = True
+    book_profit: Decimal | None = None  # override when seed_from_books is False
+    tds_credit: Decimal | None = None
+
+
+class IncomeTaxComputationUpdate(BaseModel):
+    rate_table_id: uuid.UUID | None = None
+    advance_tax_paid: Decimal | None = None
+    remarks: str | None = None
+    adjustments: list[IncomeTaxAdjustmentLineIn] | None = None
+    book_profit: Decimal | None = None
+    tds_credit: Decimal | None = None
+    reseeds_from_books: bool = False
+    # Re-pick rate table from Income Tax Settings entity_type + filing_regime + AY.
+    resolve_rate_from_settings: bool = False
+
+
+class IncomeTaxComputationResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    name: str
+    assessment_year: str
+    from_date: date
+    to_date: date
+    rate_table_id: uuid.UUID | None = None
+    book_profit: Decimal
+    net_adjustments: Decimal
+    taxable_income: Decimal
+    tax_amount: Decimal
+    surcharge_amount: Decimal
+    cess_amount: Decimal
+    total_tax: Decimal
+    tds_credit: Decimal
+    advance_tax_paid: Decimal
+    tax_payable: Decimal
+    status: str
+    docstatus: int
+    remarks: str | None = None
+    adjustments: list[IncomeTaxAdjustmentLineOut] = []
+
+
+class IncomeTaxComputationListItem(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    name: str
+    assessment_year: str
+    from_date: date
+    to_date: date
+    taxable_income: Decimal
+    total_tax: Decimal
+    tax_payable: Decimal
+    status: str
+    docstatus: int
+
+
+class AdvanceTaxInstalment(BaseModel):
+    instalment: int
+    due_date: date
+    cumulative_percent: int
+    suggested_amount: Decimal | None = None  # filled when total_tax known
+
+
+class AdvanceTaxCalendar(BaseModel):
+    assessment_year: str
+    instalments: list[AdvanceTaxInstalment]
+
+
+class Itr6ExportPack(BaseModel):
+    """Entity ITR handoff pack (ITR-6 / ITR-3 / ITR-5). Name kept for API stability."""
+
+    computation_id: uuid.UUID
+    assessment_year: str
+    form: str = "ITR-6"
+    payload: dict
+
+
+class ItrEfileResult(BaseModel):
+    """Envelope returned by POST …/itr/efile (mirrors GSP push envelope)."""
+
+    status: str  # generated | pushed
+    provider: str
+    payload: dict
+    result: dict | None = None
+    message: str
+
+
+class Form26asReconRequest(BaseModel):
+    computation_id: uuid.UUID
+    form26as: dict
+
+
+class Form26asReconRow(BaseModel):
+    source: str
+    description: str | None = None
+    amount: Decimal
+    status: str
+
+
+class Form26asReconSummary(BaseModel):
+    books_tds_credit: Decimal
+    portal_tds_credit: Decimal
+    difference: Decimal
+    status: str
+    portal_line_count: int
+
+
+class Form26asReconReport(BaseModel):
+    computation_id: uuid.UUID
+    assessment_year: str
+    summary: Form26asReconSummary
+    rows: list[Form26asReconRow]

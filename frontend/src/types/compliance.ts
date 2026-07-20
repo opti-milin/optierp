@@ -206,3 +206,59 @@ export interface Form16A {
   total_base: string;
   total_tds: string;
 }
+
+// --- Income Tax (entity ITR) ------------------------------------------------
+
+export interface IncomeTaxSettings {
+  entity_type: string;
+  filing_regime: string;
+  default_assessment_year: string | null;
+  itr_efile_provider: string | null;
+  pan: string | null;
+  tan: string | null;
+}
+
+export interface IncomeTaxAdjustmentLine {
+  id: string;
+  idx: number;
+  category_id: string | null;
+  description: string;
+  direction: string;
+  amount: string;
+}
+
+export interface IncomeTaxComputation {
+  id: string;
+  name: string;
+  assessment_year: string;
+  from_date: string;
+  to_date: string;
+  rate_table_id: string | null;
+  book_profit: string;
+  net_adjustments: string;
+  taxable_income: string;
+  tax_amount: string;
+  surcharge_amount: string;
+  cess_amount: string;
+  total_tax: string;
+  tds_credit: string;
+  advance_tax_paid: string;
+  tax_payable: string;
+  status: string;
+  docstatus: number;
+  remarks: string | null;
+  adjustments: IncomeTaxAdjustmentLine[];
+}
+
+export interface IncomeTaxComputationListItem {
+  id: string;
+  name: string;
+  assessment_year: string;
+  from_date: string;
+  to_date: string;
+  taxable_income: string;
+  total_tax: string;
+  tax_payable: string;
+  status: string;
+  docstatus: number;
+}

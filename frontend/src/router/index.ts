@@ -60,6 +60,26 @@ const routes: RouteRecordRaw[] = [
         name: "tds-returns",
         component: () => import("@/views/compliance/TdsReturnsView.vue"),
       },
+      {
+        path: "income-tax-settings",
+        name: "income-tax-settings",
+        component: () => import("@/views/compliance/IncomeTaxSettingsView.vue"),
+      },
+      {
+        path: "income-tax",
+        name: "income-tax",
+        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+      },
+      {
+        path: "income-tax/new",
+        name: "income-tax-new",
+        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+      },
+      {
+        path: "income-tax/:id",
+        name: "income-tax-detail",
+        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+      },
       // Module 02 — Accounts
       {
         path: "sales-invoices",

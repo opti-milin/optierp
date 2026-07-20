@@ -363,6 +363,10 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "GST Settings", to: "/gst-settings" },
         { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
         { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
+        { label: "Income Tax Settings", to: "/income-tax-settings" },
+        { label: "Income Tax Computation", to: "/income-tax" },
+        { label: "Income Tax Rate Table", to: "/m/income-tax-rate-table" },
+        { label: "Tax Adjustment Category", to: "/m/tax-adjustment-category" },
       ],
     },
     {
@@ -442,6 +446,8 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "GST Settings", to: "/gst-settings" },
         { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
         { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
+        { label: "Income Tax Settings", to: "/income-tax-settings" },
+        { label: "Income Tax Computation", to: "/income-tax" },
       ],
     },
     {

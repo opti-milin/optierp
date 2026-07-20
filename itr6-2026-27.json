@@ -1,0 +1,82 @@
+{
+  "computation_id": "297de439-67c5-4185-844d-159b43386e22",
+  "assessment_year": "2026-27",
+  "form": "ITR-6",
+  "payload": {
+    "form": "ITR-6",
+    "assessment_year": "2026-27",
+    "filing_regime": "Normal",
+    "company": {
+      "name": "Mango Appliances Demo",
+      "pan": "AABCM1234C",
+      "tan": "MUMM12345A",
+      "gstin": "27AAEPM1234C1Z5",
+      "abbr": "MAD"
+    },
+    "period": {
+      "from_date": "2025-04-01",
+      "to_date": "2026-03-31"
+    },
+    "computation_ref": "ITR-COMP-2026-00001",
+    "part_a_bs": {
+      "total_assets": "984771.00",
+      "total_liabilities": "1031181.20",
+      "total_equity": "0.00",
+      "provisional_profit_loss": "-46410.20"
+    },
+    "part_a_pl": {
+      "total_income": "25230.00",
+      "total_expense": "71640.20",
+      "net_profit": "-46410.20"
+    },
+    "schedule_bp": {
+      "book_profit": "-46410.20",
+      "net_adjustments": "25000.00",
+      "taxable_income": "-21410.20",
+      "adjustments": [
+        {
+          "idx": 0,
+          "category_id": null,
+          "description": "",
+          "direction": "Add",
+          "amount": "25000.00"
+        }
+      ]
+    },
+    "part_b_tti": {
+      "tax_amount": "0.00",
+      "surcharge_amount": "0.00",
+      "cess_amount": "0.00",
+      "total_tax": "0.00",
+      "tds_credit": "0.00",
+      "advance_tax_paid": "50000.00",
+      "tax_payable": "-50000.00"
+    },
+    "advance_tax_calendar": [
+      {
+        "instalment": 1,
+        "due_date": "2025-06-15",
+        "cumulative_percent": 15
+      },
+      {
+        "instalment": 2,
+        "due_date": "2025-09-15",
+        "cumulative_percent": 45
+      },
+      {
+        "instalment": 3,
+        "due_date": "2025-12-15",
+        "cumulative_percent": 75
+      },
+      {
+        "instalment": 4,
+        "due_date": "2026-03-15",
+        "cumulative_percent": 100
+      }
+    ],
+    "notes": [
+      "OptiReach ITR-6 handoff pack — not the Income-tax portal schema.",
+      "Hand to CA / offline utility; live e-filing is a later phase."
+    ]
+  }
+}

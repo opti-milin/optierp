@@ -27,6 +27,7 @@ from app.models.accounts import (
 )
 from app.models.assets import Asset, AssetCategory, AssetMaintenance, Location
 from app.models.buying import Supplier, SupplierGroup
+from app.models.compliance import IncomeTaxRateTable, TaxAdjustmentCategory
 from app.models.selling import (
     Address,
     BlanketOrder,
@@ -678,6 +679,88 @@ register(
             FieldSpec("disabled", "Disabled", "Check", in_list=True),
         ),
         list_fields=("category_name", "kind", "rate", "disabled"),
+    )
+)
+
+
+# --- Compliance: Income Tax Rate Table (entity ITR Phase 1) ------------------
+register(
+    DocTypeDescriptor(
+        name="Income Tax Rate Table",
+        slug="income-tax-rate-table",
+        model=IncomeTaxRateTable,
+        title_field="assessment_year",
+        naming="field:assessment_year",
+        group="Accounts",
+        permission_name="Income Tax Rate Table",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec(
+                "assessment_year", "Assessment Year", "Data",
+                required=True, in_list=True,
+                help="e.g. 2025-26 (the AY that covers FY 2024-25).",
+            ),
+            FieldSpec(
+                "entity_type", "Entity Type", "Select",
+                options="Company\nProprietor\nFirm\nLLP",
+                required=True, in_list=True,
+            ),
+            FieldSpec(
+                "filing_regime", "Filing Regime", "Select",
+                options="Normal\nNew",
+                required=True, in_list=True,
+            ),
+            FieldSpec("tax_rate", "Tax Rate (%)", "Float", required=True, in_list=True),
+            FieldSpec("surcharge_rate", "Surcharge (%)", "Float", in_list=True),
+            FieldSpec("cess_rate", "Cess (%)", "Float", in_list=True),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=(
+            "assessment_year",
+            "entity_type",
+            "filing_regime",
+            "tax_rate",
+            "surcharge_rate",
+            "cess_rate",
+            "disabled",
+        ),
+    )
+)
+
+
+# --- Compliance: Tax Adjustment Category (entity ITR Phase 1) ----------------
+register(
+    DocTypeDescriptor(
+        name="Tax Adjustment Category",
+        slug="tax-adjustment-category",
+        model=TaxAdjustmentCategory,
+        title_field="category_code",
+        naming="field:category_code",
+        group="Accounts",
+        permission_name="Tax Adjustment Category",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec(
+                "category_code", "Code", "Data",
+                required=True, in_list=True, unique=True,
+                help="e.g. 40(a), 43B — Income-tax Act section / nature.",
+            ),
+            FieldSpec("category_name", "Name", "Data", required=True, in_list=True, span=2),
+            FieldSpec(
+                "direction", "Direction", "Select", options="Add\nDeduct",
+                required=True, in_list=True,
+                help="Add = disallowance / add-back; Deduct = allowable deduction.",
+            ),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("category_code", "category_name", "direction", "disabled"),
     )
 )
 
