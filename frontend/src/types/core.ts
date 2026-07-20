@@ -39,6 +39,8 @@ export interface Company extends DocumentMeta {
   country_code: string | null;
   default_currency: string;
   tax_id: string | null;
+  pan: string | null;
+  tan: string | null;
   domain: string | null;
   is_group: boolean;
   parent_company_id: string | null;

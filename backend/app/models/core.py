@@ -40,7 +40,9 @@ class Company(Base, DocumentMixin):
     abbr: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
     country_code: Mapped[str | None] = mapped_column(String(2))
     default_currency: Mapped[str] = mapped_column(String(3), nullable=False)
-    tax_id: Mapped[str | None] = mapped_column(String(80))
+    tax_id: Mapped[str | None] = mapped_column(String(80))  # GSTIN
+    pan: Mapped[str | None] = mapped_column(String(10))  # Income-tax PAN
+    tan: Mapped[str | None] = mapped_column(String(10))  # Tax Deduction Account Number
     domain: Mapped[str | None] = mapped_column(String(140))
     is_group: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     parent_company_id: Mapped[uuid.UUID | None] = mapped_column(

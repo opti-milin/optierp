@@ -642,6 +642,15 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         # --- parity-feature masters + party defaults ----------------------------
         extras = await seed_extra_masters(db, actor, company)
+        from app.services.income_tax_masters import ensure_income_tax_masters  # noqa: PLC0415
+
+        itr_counts = await ensure_income_tax_masters(
+            db, company_id=company.id, user_id=uuid.UUID(str(actor.id))
+        )
+        print(
+            f"Income Tax masters: +{itr_counts['rate_tables']} rates, "
+            f"+{itr_counts['adjustment_categories']} adjustment categories"
+        )
         # default payment terms on a couple of parties; group/territory on a customer
         customers[0].payment_terms_template_id = extras["ptt_net30"]
         customers[3].payment_terms_template_id = extras["ptt_5050"]

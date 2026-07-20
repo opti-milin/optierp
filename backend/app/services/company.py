@@ -66,6 +66,8 @@ async def create_company(db: AsyncSession, payload: CompanyCreate, user: Current
         country_code=payload.country_code,
         default_currency=payload.default_currency,
         tax_id=payload.tax_id,
+        pan=payload.pan,
+        tan=payload.tan,
         domain=payload.domain,
         date_of_establishment=payload.date_of_establishment,
         parent_company_id=payload.parent_company_id,

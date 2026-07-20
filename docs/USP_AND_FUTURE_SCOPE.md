@@ -30,6 +30,7 @@ that's actually nice to drive.
 | 2 | **Customer Tracking Dashboard** | Customers watch their own order move, stage by stage | No real customer-facing tracker |
 | 3 | **One-Page Reconciliation** | Sales, purchase **and** bank matched on a single screen | Three separate tools |
 | 4 | **MCA Compliance** | India company-law filings, built in | Manual / third-party |
+| 4b | **Income Tax (entity ITR)** | Compute + export ITR pack from books (ITR-6 first) | Manual / CA re-key — ERPNext has none |
 | 5 | **Company Onboarding Wizard** | A new business is live in minutes, not weeks | Long manual setup |
 | 6 | **POS + Loyalty** | Till that remembers and rewards customers | POS yes, loyalty is thin |
 
