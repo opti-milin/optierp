@@ -6,12 +6,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ValidationError
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
 from app.schemas.buying import OrderListItem
 from app.schemas.accounts import InvoiceTaxPreview
 from app.schemas.common import ListResponse
-from app.schemas.selling import SalesOrderCreate, SalesOrderResponse
+from app.schemas.selling import (
+    OrderFulfillmentOut,
+    OrderFulfillmentPreviewIn,
+    SalesOrderCreate,
+    SalesOrderResponse,
+)
 from app.services import sales_order as service
 
 router = APIRouter(prefix="/sales-orders", tags=["selling: sales orders"])
@@ -27,6 +33,29 @@ async def preview(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> InvoiceTaxPreview:
     return await service.preview_sales_order(db, payload, current_user)
+
+
+@router.post(
+    "/check-fulfillment",
+    response_model=OrderFulfillmentOut,
+    summary="Preview fulfillability + cost for draft lines (nothing saved)",
+)
+async def check_fulfillment_preview(
+    payload: OrderFulfillmentPreviewIn,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Sales Order", "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> OrderFulfillmentOut:
+    if current_user.company_id is None:
+        raise ValidationError("An active company is required")
+    data = await service.preview_sales_order_fulfillment(
+        db,
+        current_user.company_id,
+        items=payload.items,
+        delivery_date=payload.delivery_date,
+        set_warehouse_id=payload.set_warehouse_id,
+        as_of=payload.as_of,
+    )
+    return OrderFulfillmentOut.model_validate(data)
 
 
 @router.post("", response_model=SalesOrderResponse, status_code=201,
@@ -74,11 +103,24 @@ async def get_order(
     )
 
 
+@router.post(
+    "/{so_id}/check-fulfillment",
+    response_model=OrderFulfillmentOut,
+    summary="Check fulfillability + manufacturing cost for a Sales Order",
+)
+async def check_fulfillment(
+    so_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Sales Order", "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> OrderFulfillmentOut:
+    data = await service.check_sales_order_fulfillment(db, so_id, current_user.company_id)
+    return OrderFulfillmentOut.model_validate(data)
+
+
 @router.post("/{so_id}/submit", response_model=SalesOrderResponse,
              summary="Submit a Sales Order",
-             description="Reserves stock and runs the credit-limit check; breaches return "
-                         "as `warnings` (the order still submits, matching ERPNext's "
-                         "warning-only default).")
+             description="Reserves stock, credit-limit check, and optional CTP fulfillment "
+                         "gate (warn or block per Manufacturing Settings).")
 async def submit(
     so_id: uuid.UUID,
     current_user: Annotated[CurrentUser, Depends(require_permission("Sales Order", "submit"))],

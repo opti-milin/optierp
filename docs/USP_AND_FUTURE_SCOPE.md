@@ -33,6 +33,7 @@ that's actually nice to drive.
 | 4b | **Income Tax (entity ITR)** | Compute + export ITR pack from books (ITR-6 first) | Manual / CA re-key — ERPNext has none |
 | 5 | **Company Onboarding Wizard** | A new business is live in minutes, not weeks | Long manual setup |
 | 6 | **POS + Loyalty** | Till that remembers and rewards customers | POS yes, loyalty is thin |
+| 7 | **Manufacturing Planning** | Promise dates from capacity + materials, not guesswork | MRP-I only; no CTP / reverse schedule / pegging board |
 
 Module naming reminder (so the rest of the doc reads cleanly): **Selling = sales**,
 **Buying = purchase**, **Stock = inventory**, **Marketing = promotions + leads**.
@@ -203,6 +204,28 @@ more pricing rules, applied live at the till. One engine, consistent everywhere
 - **Loyalty Program / Points Ledger** = a master (recipe card) + an
   earn/redeem **hook** into the pricing engine — the same hook pattern Pricing
   Rules already use.
+
+---
+
+## 6b. Manufacturing Planning (post-parity USP)
+
+### What it is
+After we reach ERPNext-level manufacturing (BOM → Production Plan → Work Order →
+Job Card → stock), OptiReach adds what ERPNext never finished: **delivery-date
+estimation (CTP)**, **reverse scheduling from the customer date**, a **lead-time
+engine** across the BOM tree, a **procurement plan** with suggested order dates,
+a **finite capacity board**, light **demand forecasting**, and an end-to-end
+**demand→supply pegging timeline**.
+
+### The ERPNext gap
+ERPNext Manufacturing is solid MRP-I (explode, net, execute). It does not do
+true capable-to-promise, reverse schedule, or a planner-facing what-if board.
+Capacity is a soft slot check on Work Order submit — not a planning surface.
+
+### How we'd build it
+Sequenced as **Phase 7+** in [MANUFACTURING_GAP_AND_PLAN.md](MANUFACTURING_GAP_AND_PLAN.md)
+after Phases 0–6 parity. Calculation lives in services (`mfg_planning`, `lead_time`,
+`ctp`); the Planning Board is a Vue workspace over Production Plan + Work Order data.
 
 ---
 

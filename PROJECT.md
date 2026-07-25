@@ -38,21 +38,23 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 ## 2. Current Transition State
 
 - **Branch:** `develop`
-- **Latest migration head:** `0068_itr_rate_entity` (after `0067_itr_ay_partial_unique`).
-- **Exact spot:** **Income Tax (entity ITR) Phases 0–6 lean** landed as a net-new India USP (ERPNext has no entity ITR compute/file — see [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md)):
-  - Company `pan` / `tan`; Income Tax Settings blob; engine masters Income Tax Rate Table + Tax Adjustment Category.
-  - Bespoke `IncomeTaxComputation` worksheet (P&L seed, adjustments, tax pack, TDS credit) + Vue at `/income-tax`.
-  - Entity ITR JSON/CSV (`GET …/itr`), advance-tax calendar, 26AS JSON reconcile, pluggable e-file (`none` / `sandbox`). Portal HTTPS + DSC still open.
-- **Manufacturing (Phase 4)** remains in progress: Job Card, Production Plan, Operation/Routing, Workstation still to build.
-- **Immediately before this**, Manufacturing BOM/Work Order (`0065`) and India GST/compliance work.
+- **Latest migration head:** `0075_quality_inspection` (after `0074_subcontracting` / `0073_production_plan`).
+- **Exact spot:** **Manufacturing Phases 0–7 complete** (parity + soft USP planning: CTP, reverse, pegging, forecast, what-if, capacity board + FG-GEARBOX seed). True finite-capacity APS remains out of scope.
+- Income Tax (entity ITR) Phases 0–6 lean remain landed (see [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md)).
 
 ---
 
 ## 3. Remaining Todo List (priority order)
 
-**Phase 4 — Operations (in progress)**
-- [ ] Manufacturing: Job Card (+ time logs), Production Plan, Operation/Routing, Workstation.
-- [ ] Manufacturing: multi-level BOM explosion (recursive CTE) + capacity planning; Work-Order material transfer & completion roll-up.
+**Phase 4 — Operations (in progress)** — detail in [docs/MANUFACTURING_GAP_AND_PLAN.md](docs/MANUFACTURING_GAP_AND_PLAN.md)
+- [x] Manufacturing Phase 0: valuation/GL, WIP UI, serial/batch Finish, Item mfg fields (`0069`), MR type Manufacture, Repack UI.
+- [x] Manufacturing Phase 1: multi-level/phantom BOM, scrap, Finish alternate, BOM Explorer (`0070`).
+- [x] Manufacturing Phase 2: Job Card (+ time logs); Operation/Routing/Workstation; Material Consumption; soft capacity (`0072`).
+- [x] Manufacturing Phase 3: Production Plan (SO demand → WOs + Manufacture MRs) (`0073`).
+- [x] Manufacturing Phase 4: Subcontracting — Subcontract Job + Send/Receipt SE (`0074`).
+- [x] Manufacturing Phase 5: Quality Inspection gate on Finish / Subcontract Receive (`0075`).
+- [x] Manufacturing Phase 6: WO Summary / Production Analytics + Manufacturing module flag.
+- [x] Manufacturing Phase 7: CTP + reverse + pegging + demand forecast + what-if CTP + soft capacity board + FG-GEARBOX demo seed — [docs/MANUFACTURING_GAP_AND_PLAN.md](docs/MANUFACTURING_GAP_AND_PLAN.md). True APS/finite capacity still out of scope.
 - [ ] CRM: Lead, Opportunity, Campaign, Contact/Address; Lead→Opportunity→Quotation hand-off (hook); pipeline report. *(Masters via descriptors.)*
 - [ ] HR & Payroll: Employee, Leave (append-only Leave Ledger), Attendance, Salary Structure/Slip, Payroll Entry. **Source is `frappe/hrms`, not erpnext (`hr` moved out of `develop`).**
 - [ ] Projects: Project, Task (dependency/topological-sort validation), Timesheet, Gantt endpoint.

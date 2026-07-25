@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { brand } from "@/brand";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
+import { useModuleFlagsStore } from "@/stores/moduleFlags";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const flags = useModuleFlagsStore();
+
+onMounted(() => {
+  void flags.load();
+});
 
 // Global sidebar (shown outside any module — e.g. Setup pages).
 const GLOBAL_NAV: WsNavGroup[] = [
@@ -31,6 +37,14 @@ const GLOBAL_NAV: WsNavGroup[] = [
     ],
   },
 ];
+
+const filteredGlobalNav = computed<WsNavGroup[]>(() => {
+  if (flags.flags.manufacturing) return GLOBAL_NAV;
+  return GLOBAL_NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => i.to !== "/manufacturing"),
+  }));
+});
 
 const MODULE_KEYS = Object.keys(WORKSPACES);
 const GLOBAL_PREFIXES = ["/companies", "/users", "/roles", "/settings"];
@@ -84,7 +98,7 @@ watch(() => route.path, updateModule, { immediate: true });
 
 const isHome = computed(() => route.name === "dashboard"); // launcher: full-page, no sidebar
 const sidebarGroups = computed<WsNavGroup[]>(() =>
-  currentModule.value ? WORKSPACES[currentModule.value].sidebar : GLOBAL_NAV,
+  currentModule.value ? WORKSPACES[currentModule.value].sidebar : filteredGlobalNav.value,
 );
 const headerTitle = computed(() =>
   currentModule.value ? WORKSPACES[currentModule.value].title : brand.value.product_name,

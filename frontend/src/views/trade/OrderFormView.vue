@@ -27,7 +27,7 @@ import { useAuthStore } from "@/stores/auth";
 import { api } from "@/api/client";
 import { formatCurrency, formatDate, formatQty } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
-import type { OrderDetail, OrderItemIn } from "@/types/trade";
+import type { OrderDetail, OrderFulfillment, OrderItemIn } from "@/types/trade";
 import type { TaxRowIn } from "@/types/accounts";
 import type { OrderKind } from "@/views/trade/OrderListView.vue";
 
@@ -53,6 +53,8 @@ const doc = ref<OrderDetail | null>(null);
 const error = ref<ErrorEnvelope | null>(null);
 const warnings = ref<string[]>([]);
 const saving = ref(false);
+const fulfillment = ref<OrderFulfillment | null>(null);
+const fulfillmentBusy = ref(false);
 
 const partyId = ref("");
 const postingDate = ref(new Date().toISOString().slice(0, 10));
@@ -254,8 +256,12 @@ function stockQtyLabel(row: Record<string, unknown>): string {
 }
 
 const gridColumns = computed<GridColumn[]>(() => {
+  // Quotation keeps free-text (ad-hoc proposal lines). Sales/Purchase Order
+  // use a master Item dropdown so fulfilment / manufacturing always have item_id.
   const cols: GridColumn[] = [
-    { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" },
+    props.kind === "quotation"
+      ? { key: "item_id", label: "Item / Service", type: "item", required: true, freeText: true, nameKey: "item_name" }
+      : { key: "item_id", label: "Item / Service", type: "item", required: true },
   ];
   if (props.kind === "sales-order") cols.push({ key: "delivery_date", label: "Delivery Date", type: "date" });
   if (props.kind === "purchase-order") cols.push({ key: "schedule_date", label: "Required By", type: "date" });
@@ -509,6 +515,45 @@ async function action(name: "submit" | "cancel"): Promise<void> {
   }
 }
 
+async function checkFulfillment(): Promise<void> {
+  if (props.kind === "purchase-order") return;
+  fulfillmentBusy.value = true;
+  error.value = null;
+  try {
+    if (doc.value) {
+      fulfillment.value = (
+        await api.post<OrderFulfillment>(`${cfg.value.endpoint}/${doc.value.id}/check-fulfillment`)
+      ).data;
+    } else {
+      const body = {
+        items: items.value
+          .filter((r) => r.item_id)
+          .map((r) => ({
+            item_id: r.item_id,
+            qty: r.qty,
+            rate: r.rate,
+            warehouse_id: r.warehouse_id || setWarehouseId.value || null,
+            delivery_date: props.kind === "sales-order" ? (extraDate.value || null) : null,
+          })),
+        delivery_date: extraDate.value || null,
+        set_warehouse_id: setWarehouseId.value || null,
+      };
+      fulfillment.value = (
+        await api.post<OrderFulfillment>(`${cfg.value.endpoint}/check-fulfillment`, body)
+      ).data;
+    }
+  } catch (e) {
+    error.value = e as ErrorEnvelope;
+  } finally {
+    fulfillmentBusy.value = false;
+  }
+}
+
+function applySuggestedDelivery(): void {
+  if (!fulfillment.value?.earliest_promise_date) return;
+  extraDate.value = fulfillment.value.earliest_promise_date;
+}
+
 async function prefill(): Promise<void> {
   // Sales Order from a Quotation
   const fromQuotation = route.query.quotation_id;
@@ -591,6 +636,15 @@ onMounted(async () => {
           <PrintButton :path="`/print/${encodeURIComponent(cfg.title)}/${doc.id}`" :title="`${doc.name} — Preview`" />
           <SendEmailButton :doctype="cfg.title" :doc-id="doc.id" :doc-name="doc.name" />
           <button v-if="doc.docstatus === 0" class="btn-primary" @click="action('submit')">Submit</button>
+          <button
+            v-if="(kind === 'quotation' || kind === 'sales-order') && doc.docstatus === 0"
+            type="button"
+            class="btn-secondary"
+            :disabled="fulfillmentBusy"
+            @click="checkFulfillment"
+          >
+            Check Fulfillment
+          </button>
           <button v-if="kind === 'quotation' && doc.status === 'Open'" class="btn-primary"
                   @click="createSalesOrder">Create Sales Order</button>
           <button v-if="kind !== 'quotation' && doc.docstatus === 1 && pendingRows.length"
@@ -605,6 +659,86 @@ onMounted(async () => {
       <p v-if="error" class="mb-3 text-sm text-red-600">{{ error.detail }}</p>
       <div v-if="warnings.length" class="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
         <p v-for="w in warnings" :key="w">⚠ {{ w }}</p>
+      </div>
+
+      <div
+        v-if="fulfillment && (kind === 'quotation' || kind === 'sales-order')"
+        class="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+      >
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold text-gray-900">Fulfillment &amp; cost</h2>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <button
+              v-if="fulfillment.earliest_promise_date && doc.docstatus === 0"
+              type="button"
+              class="btn-secondary"
+              @click="applySuggestedDelivery"
+            >
+              Use promise {{ fulfillment.earliest_promise_date }}
+            </button>
+            <RouterLink
+              :to="fulfillment.planning_dashboard_path"
+              class="btn-secondary"
+            >
+              Open Planning Dashboard
+            </RouterLink>
+          </div>
+        </div>
+        <div class="mb-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <div class="text-xs uppercase text-gray-400">On time?</div>
+            <div class="font-medium" :class="fulfillment.can_fulfill_on_time === false ? 'text-red-600' : 'text-gray-900'">
+              <template v-if="fulfillment.can_fulfill_on_time === true">Yes</template>
+              <template v-else-if="fulfillment.can_fulfill_on_time === false">No</template>
+              <template v-else>—</template>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Earliest promise</div>
+            <div class="font-medium text-gray-900">{{ fulfillment.earliest_promise_date ?? "—" }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Est. mfg cost</div>
+            <div class="font-medium text-gray-900">{{ formatCurrency(fulfillment.estimated_cost, doc.currency) }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Est. margin</div>
+            <div class="font-medium text-gray-900">
+              {{ formatCurrency(fulfillment.estimated_margin, doc.currency) }}
+              <span v-if="fulfillment.estimated_margin_pct != null" class="text-gray-500">
+                ({{ fulfillment.estimated_margin_pct }}%)
+              </span>
+            </div>
+          </div>
+        </div>
+        <ul v-if="fulfillment.warnings.length" class="mb-2 list-disc px-5 text-xs text-amber-800">
+          <li v-for="(w, i) in fulfillment.warnings" :key="i">{{ w }}</li>
+        </ul>
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <tr>
+              <th class="px-3 py-2">Item</th>
+              <th class="px-3 py-2 text-right">Promise</th>
+              <th class="px-3 py-2 text-right">Cost</th>
+              <th class="px-3 py-2 text-right">Margin</th>
+              <th class="px-3 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ln in fulfillment.lines" :key="ln.item_id" class="border-t border-gray-100">
+              <td class="px-3 py-1.5">{{ ln.item_name ?? ln.item_code }}</td>
+              <td class="px-3 py-1.5 text-right">{{ ln.earliest_promise_date ?? "—" }}</td>
+              <td class="px-3 py-1.5 text-right">{{ formatCurrency(ln.estimated_cost, doc.currency) }}</td>
+              <td class="px-3 py-1.5 text-right">{{ formatCurrency(ln.estimated_margin, doc.currency) }}</td>
+              <td class="px-3 py-1.5">
+                <span v-if="ln.skipped" class="text-gray-400">Skipped</span>
+                <span v-else-if="ln.on_time === true" class="text-green-700">On time</span>
+                <span v-else-if="ln.on_time === false" class="text-red-600">Late</span>
+                <span v-else class="text-gray-400">CTP only</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- fulfilment dialog -->
@@ -755,10 +889,72 @@ onMounted(async () => {
         </nav>
         <div class="flex items-center gap-2">
           <GetItemsFrom :sources="sources" @select="onGetItems" />
+          <button
+            v-if="kind === 'quotation' || kind === 'sales-order'"
+            type="button"
+            class="btn-secondary"
+            :disabled="fulfillmentBusy || !items.some((r) => r.item_id)"
+            @click="checkFulfillment"
+          >
+            Check Fulfillment
+          </button>
           <button type="submit" class="btn-primary" :disabled="saving || !partyId">
             {{ saving ? "Saving…" : "Save" }}
           </button>
         </div>
+      </div>
+
+      <p v-if="error" class="mb-3 text-sm text-red-600">{{ error.detail }}</p>
+      <div
+        v-if="fulfillment && (kind === 'quotation' || kind === 'sales-order')"
+        class="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+      >
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold text-gray-900">Fulfillment &amp; cost</h2>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <button
+              v-if="fulfillment.earliest_promise_date"
+              type="button"
+              class="btn-secondary"
+              @click="applySuggestedDelivery"
+            >
+              Use promise {{ fulfillment.earliest_promise_date }}
+            </button>
+            <RouterLink :to="fulfillment.planning_dashboard_path" class="btn-secondary">
+              Open Planning Dashboard
+            </RouterLink>
+          </div>
+        </div>
+        <div class="mb-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <div class="text-xs uppercase text-gray-400">On time?</div>
+            <div class="font-medium" :class="fulfillment.can_fulfill_on_time === false ? 'text-red-600' : 'text-gray-900'">
+              <template v-if="fulfillment.can_fulfill_on_time === true">Yes</template>
+              <template v-else-if="fulfillment.can_fulfill_on_time === false">No</template>
+              <template v-else>—</template>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Earliest promise</div>
+            <div class="font-medium text-gray-900">{{ fulfillment.earliest_promise_date ?? "—" }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Est. mfg cost</div>
+            <div class="font-medium text-gray-900">{{ formatCurrency(fulfillment.estimated_cost) }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-400">Est. margin</div>
+            <div class="font-medium text-gray-900">
+              {{ formatCurrency(fulfillment.estimated_margin) }}
+              <span v-if="fulfillment.estimated_margin_pct != null" class="text-gray-500">
+                ({{ fulfillment.estimated_margin_pct }}%)
+              </span>
+            </div>
+          </div>
+        </div>
+        <ul v-if="fulfillment.warnings.length" class="mb-2 list-disc px-5 text-xs text-amber-800">
+          <li v-for="(w, i) in fulfillment.warnings" :key="i">{{ w }}</li>
+        </ul>
       </div>
 
       <!-- tabs -->

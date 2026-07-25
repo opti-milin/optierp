@@ -9,9 +9,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
 from app.schemas.core import SystemSettingResponse, SystemSettingUpsert
+from app.services import module_flags as module_flags_service
 from app.services import settings as settings_service
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/settings", tags=["core: settings"])
+
+
+class ModuleFlags(BaseModel):
+    manufacturing: bool = True
+
+
+class ModuleFlagsUpdate(BaseModel):
+    manufacturing: bool | None = None
+
+
+@router.get(
+    "/module-flags",
+    response_model=ModuleFlags,
+    summary="Get module feature flags",
+    description="Per-company toggles that hide optional modules from the UI (default: on).",
+)
+async def get_module_flags(
+    current_user: Annotated[CurrentUser, Depends(require_permission("System Settings", "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ModuleFlags:
+    if current_user.company_id is None:
+        return ModuleFlags()
+    flags = await module_flags_service.get_module_flags(db, current_user.company_id)
+    return ModuleFlags(**flags)
+
+
+@router.put(
+    "/module-flags",
+    response_model=ModuleFlags,
+    summary="Update module feature flags",
+)
+async def update_module_flags(
+    payload: ModuleFlagsUpdate,
+    current_user: Annotated[CurrentUser, Depends(require_permission("System Settings", "write"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ModuleFlags:
+    if current_user.company_id is None:
+        from app.core.exceptions import ValidationError
+
+        raise ValidationError("An active company is required")
+    data = payload.model_dump(exclude_unset=True)
+    flags = await module_flags_service.update_module_flags(db, current_user.company_id, data)
+    return ModuleFlags(**flags)
 
 
 @router.put(

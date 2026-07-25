@@ -245,6 +245,7 @@ const STOCK: WorkspaceConfig = {
         { label: "Stock Ageing", to: "/stock-balance?tab=ageing", icon: "⏳" },
         { label: "Serial Numbers", to: "/serial-nos", icon: "🔢" },
         { label: "Batches", to: "/m/batch", icon: "🏷️" },
+        { label: "Item Alternative", to: "/m/item-alternative", icon: "🔀" },
         { label: "Purchase Receipt", to: "/purchase-receipts", icon: "📦" },
         { label: "Delivery Note", to: "/delivery-notes", icon: "🚚" },
       ],
@@ -573,17 +574,26 @@ const MANUFACTURING: WorkspaceConfig = {
       items: [
         { label: "Home", to: "/", icon: "⌂" },
         { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
+        { label: "Planning Dashboard", to: "/manufacturing-planning", icon: "📐" },
         { label: "BOM", to: "/bom", icon: "📋" },
         { label: "Work Order", to: "/work-orders", icon: "🛠" },
+        { label: "Job Card", to: "/job-cards", icon: "⏱" },
+        { label: "Production Plan", to: "/production-plans", icon: "📅" },
+        { label: "Subcontract Job", to: "/subcontract-jobs", icon: "🤝" },
+        { label: "Quality Inspection", to: "/quality-inspections", icon: "✅" },
       ],
     },
     {
       title: "Reports",
       items: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
         { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Work Order Summary", to: "/manufacturing-reports?tab=wo-summary" },
+        { label: "Production Analytics", to: "/manufacturing-reports?tab=analytics" },
         { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
         { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
         { label: "BOM Stock (Build?)", to: "/manufacturing-reports?tab=bom-stock" },
+        { label: "BOM Explorer", to: "/manufacturing-reports?tab=explorer" },
         { label: "Stock Ledger", to: "/stock-balance?tab=ledger" },
         { label: "General Ledger", to: "/reports?tab=general-ledger" },
       ],
@@ -592,6 +602,10 @@ const MANUFACTURING: WorkspaceConfig = {
       title: "Setup",
       items: [
         { label: "Items", to: "/items" },
+        { label: "Item Alternative", to: "/m/item-alternative" },
+        { label: "Operation", to: "/m/operation" },
+        { label: "Workstation", to: "/m/workstation" },
+        { label: "Routing", to: "/m/routing" },
         { label: "Warehouses", to: "/warehouses" },
         { label: "Manufacturing Settings", to: "/manufacturing-settings" },
       ],
@@ -599,10 +613,21 @@ const MANUFACTURING: WorkspaceConfig = {
   ],
   cards: [
     {
+      title: "Planning",
+      links: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
+        { label: "Production Plan", to: "/production-plans" },
+      ],
+    },
+    {
       title: "Production",
       links: [
         { label: "Bill of Materials", to: "/bom" },
         { label: "Work Order", to: "/work-orders" },
+        { label: "Job Card", to: "/job-cards" },
+        { label: "Production Plan", to: "/production-plans" },
+        { label: "Subcontract Job", to: "/subcontract-jobs" },
+        { label: "Quality Inspection", to: "/quality-inspections" },
         { label: "Repack (Stock Entry)", to: "/stock-entries/new" },
         { label: "Manufacturing Settings", to: "/manufacturing-settings" },
       ],
@@ -610,10 +635,25 @@ const MANUFACTURING: WorkspaceConfig = {
     {
       title: "Reports",
       links: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
         { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Work Order Summary", to: "/manufacturing-reports?tab=wo-summary" },
+        { label: "Production Analytics", to: "/manufacturing-reports?tab=analytics" },
         { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
         { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
         { label: "BOM Stock (Can I build?)", to: "/manufacturing-reports?tab=bom-stock" },
+        { label: "BOM Explorer", to: "/manufacturing-reports?tab=explorer" },
+      ],
+    },
+    {
+      title: "Setup",
+      links: [
+        { label: "Operation", to: "/m/operation" },
+        { label: "Workstation", to: "/m/workstation" },
+        { label: "Routing", to: "/m/routing" },
+        { label: "Item Alternative", to: "/m/item-alternative" },
+        { label: "Items", to: "/items" },
+        { label: "Warehouses", to: "/warehouses" },
       ],
     },
   ],

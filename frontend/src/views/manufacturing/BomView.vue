@@ -8,14 +8,17 @@ import { api } from "@/api/client";
 import { formatCurrency, formatQty } from "@/utils/format";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import type { ErrorEnvelope, ListResponse } from "@/types/core";
-import type { BomItemIn, BomListItem } from "@/types/manufacturing";
+import type { BomItemIn, BomListItem, BomOperationIn, BomScrapItemIn } from "@/types/manufacturing";
 
 interface ItemOpt { id: string; item_code: string; item_name: string }
+interface MasterOpt { id: string; operation_name?: string; workstation_name?: string }
 
 const router = useRouter();
 
 const rows = ref<BomListItem[]>([]);
 const items = ref<ItemOpt[]>([]);
+const operations = ref<MasterOpt[]>([]);
+const workstations = ref<MasterOpt[]>([]);
 const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 
@@ -24,25 +27,51 @@ const fProduction = ref("");
 const fQuantity = ref<number>(1);
 const fOperating = ref<number>(0);
 const fDefault = ref(true);
-const fComponents = ref<BomItemIn[]>([{ item_id: "", qty: 1 }]);
+const fPhantom = ref(false);
+const fComponents = ref<BomItemIn[]>([{ item_id: "", qty: 1, allow_alternative_item: false }]);
+const fScrap = ref<BomScrapItemIn[]>([]);
+const fOps = ref<BomOperationIn[]>([]);
 const saving = ref(false);
 
 const validComponents = computed(() =>
   fComponents.value.filter((c) => c.item_id && Number(c.qty) > 0),
 );
+const validScrap = computed(() =>
+  fScrap.value.filter((c) => c.item_id && Number(c.qty) > 0),
+);
+const validOps = computed(() =>
+  fOps.value.filter((c) => c.operation_id && Number(c.time_in_mins ?? 0) >= 0),
+);
 
 function addRow(): void {
-  fComponents.value.push({ item_id: "", qty: 1 });
+  fComponents.value.push({ item_id: "", qty: 1, allow_alternative_item: false });
 }
 function removeRow(idx: number): void {
   fComponents.value.splice(idx, 1);
   if (!fComponents.value.length) addRow();
 }
+function addScrap(): void {
+  fScrap.value.push({ item_id: "", qty: 1, rate: 0 });
+}
+function removeScrap(idx: number): void {
+  fScrap.value.splice(idx, 1);
+}
+function addOp(): void {
+  fOps.value.push({ operation_id: "", workstation_id: "", time_in_mins: 0 });
+}
+function removeOp(idx: number): void {
+  fOps.value.splice(idx, 1);
+}
 
 async function fetchOptions(): Promise<void> {
-  items.value = (
-    await api.get<ListResponse<ItemOpt>>("/items", { params: { page_size: 200 } })
-  ).data.items;
+  const [itemRes, opRes, wsRes] = await Promise.all([
+    api.get<ListResponse<ItemOpt>>("/items", { params: { page_size: 200 } }),
+    api.get<ListResponse<MasterOpt>>("/registry/operation", { params: { page_size: 200 } }).catch(() => ({ data: { items: [] } })),
+    api.get<ListResponse<MasterOpt>>("/registry/workstation", { params: { page_size: 200 } }).catch(() => ({ data: { items: [] } })),
+  ]);
+  items.value = itemRes.data.items;
+  operations.value = opRes.data.items;
+  workstations.value = wsRes.data.items;
 }
 
 async function fetchList(): Promise<void> {
@@ -70,7 +99,22 @@ async function save(): Promise<void> {
         quantity: fQuantity.value || 1,
         operating_cost: fOperating.value || 0,
         is_default: fDefault.value,
-        items: validComponents.value.map((c) => ({ item_id: c.item_id, qty: Number(c.qty) })),
+        is_phantom: fPhantom.value,
+        items: validComponents.value.map((c) => ({
+          item_id: c.item_id,
+          qty: Number(c.qty),
+          allow_alternative_item: !!c.allow_alternative_item,
+        })),
+        scrap_items: validScrap.value.map((c) => ({
+          item_id: c.item_id,
+          qty: Number(c.qty),
+          rate: Number(c.rate) || 0,
+        })),
+        operations: validOps.value.map((c) => ({
+          operation_id: c.operation_id,
+          workstation_id: c.workstation_id || null,
+          time_in_mins: Number(c.time_in_mins) || 0,
+        })),
       })
     ).data;
     void router.push(`/bom/${created.id}`);
@@ -128,7 +172,12 @@ onMounted(async () => {
         </div>
         <table class="min-w-full text-sm">
           <thead class="text-left text-xs uppercase text-gray-400">
-            <tr><th class="py-1">Item</th><th class="w-32 py-1">Qty / batch</th><th class="w-10"></th></tr>
+            <tr>
+              <th class="py-1">Item</th>
+              <th class="w-28 py-1">Qty / batch</th>
+              <th class="w-20 py-1 text-center">Alt?</th>
+              <th class="w-10"></th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="(c, idx) in fComponents" :key="idx">
@@ -142,6 +191,9 @@ onMounted(async () => {
                 <input v-model.number="c.qty" type="number" min="0" step="any" class="form-input" />
               </td>
               <td class="py-1 text-center">
+                <input v-model="c.allow_alternative_item" type="checkbox" title="Allow alternate on Finish" />
+              </td>
+              <td class="py-1 text-center">
                 <button type="button" class="text-gray-400 hover:text-red-600" @click="removeRow(idx)">✕</button>
               </td>
             </tr>
@@ -149,8 +201,94 @@ onMounted(async () => {
         </table>
       </div>
 
+      <div class="mt-4">
+        <div class="mb-1 flex items-center justify-between">
+          <label class="form-label mb-0">Scrap / by-product (optional)</label>
+          <button type="button" class="text-sm text-blue-600 hover:underline" @click="addScrap">+ Add scrap</button>
+        </div>
+        <table v-if="fScrap.length" class="min-w-full text-sm">
+          <thead class="text-left text-xs uppercase text-gray-400">
+            <tr>
+              <th class="py-1">Item</th>
+              <th class="w-28 py-1">Qty / batch</th>
+              <th class="w-32 py-1">Recovery rate</th>
+              <th class="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(c, idx) in fScrap" :key="idx">
+              <td class="py-1 pr-2">
+                <select v-model="c.item_id" class="form-input">
+                  <option value="" disabled>Select…</option>
+                  <option v-for="i in items" :key="i.id" :value="i.id">{{ i.item_code }} — {{ i.item_name }}</option>
+                </select>
+              </td>
+              <td class="py-1 pr-2">
+                <input v-model.number="c.qty" type="number" min="0" step="any" class="form-input" />
+              </td>
+              <td class="py-1 pr-2">
+                <input v-model.number="c.rate" type="number" min="0" step="any" class="form-input" />
+              </td>
+              <td class="py-1 text-center">
+                <button type="button" class="text-gray-400 hover:text-red-600" @click="removeScrap(idx)">✕</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="text-xs text-gray-400">No scrap rows — recovery value is netted from BOM cost when present.</p>
+      </div>
+
+      <div class="mt-4">
+        <div class="mb-1 flex items-center justify-between">
+          <label class="form-label mb-0">Operations (optional)</label>
+          <button type="button" class="text-sm text-blue-600 hover:underline" @click="addOp">+ Add operation</button>
+        </div>
+        <table v-if="fOps.length" class="min-w-full text-sm">
+          <thead class="text-left text-xs uppercase text-gray-400">
+            <tr>
+              <th class="py-1">Operation</th>
+              <th class="py-1">Workstation</th>
+              <th class="w-28 py-1">Time (mins)</th>
+              <th class="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(c, idx) in fOps" :key="idx">
+              <td class="py-1 pr-2">
+                <select v-model="c.operation_id" class="form-input">
+                  <option value="" disabled>Select…</option>
+                  <option v-for="o in operations" :key="o.id" :value="o.id">{{ o.operation_name }}</option>
+                </select>
+              </td>
+              <td class="py-1 pr-2">
+                <select v-model="c.workstation_id" class="form-input">
+                  <option value="">—</option>
+                  <option v-for="w in workstations" :key="w.id" :value="w.id">{{ w.workstation_name }}</option>
+                </select>
+              </td>
+              <td class="py-1 pr-2">
+                <input v-model.number="c.time_in_mins" type="number" min="0" step="any" class="form-input" />
+              </td>
+              <td class="py-1 text-center">
+                <button type="button" class="text-gray-400 hover:text-red-600" @click="removeOp(idx)">✕</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="text-xs text-gray-400">
+          No operations — Finish stays a single step. Add operations to generate Job Cards on Work Order submit.
+          Masters:
+          <RouterLink to="/m/operation" class="text-blue-600 hover:underline">Operation</RouterLink>,
+          <RouterLink to="/m/workstation" class="text-blue-600 hover:underline">Workstation</RouterLink>,
+          <RouterLink to="/m/routing" class="text-blue-600 hover:underline">Routing</RouterLink>.
+        </p>
+      </div>
+
       <label class="mt-3 flex items-center gap-2 text-sm text-gray-700">
         <input v-model="fDefault" type="checkbox" /> Set as the default BOM for this item
+      </label>
+      <label class="mt-2 flex items-center gap-2 text-sm text-gray-700">
+        <input v-model="fPhantom" type="checkbox" /> Phantom BOM (explode through when used as a component)
       </label>
       <p v-if="error" class="mt-2 text-sm text-red-600">{{ error.detail }}</p>
       <div class="mt-4 flex justify-end">
@@ -170,6 +308,7 @@ onMounted(async () => {
             <th class="px-4 py-2 text-right">Total cost</th>
             <th class="px-4 py-2 text-right">Per unit</th>
             <th class="px-4 py-2">Default</th>
+            <th class="px-4 py-2">Phantom</th>
             <th class="px-4 py-2">Status</th>
           </tr>
         </thead>
@@ -189,10 +328,11 @@ onMounted(async () => {
             <td class="px-4 py-1.5 text-right">{{ formatCurrency(row.total_cost) }}</td>
             <td class="px-4 py-1.5 text-right font-medium">{{ formatCurrency(row.cost_per_unit) }}</td>
             <td class="px-4 py-1.5">{{ row.is_default ? "★" : "" }}</td>
+            <td class="px-4 py-1.5">{{ row.is_phantom ? "Yes" : "" }}</td>
             <td class="px-4 py-1.5"><StatusBadge :status="row.docstatus" /></td>
           </tr>
           <tr v-if="!rows.length && !loading">
-            <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+            <td colspan="8" class="px-4 py-8 text-center text-gray-400">
               No BOMs yet. Create one to define a finished good's recipe.
             </td>
           </tr>

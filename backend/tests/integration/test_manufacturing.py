@@ -1,4 +1,4 @@
-"""Manufacturing module integration: BOM costing, Work Order → Manufacture, stock + GL
+"""Manufacturing module integration: BOM costing, Work Order ? Manufacture, stock + GL
 reconciliation, partial finish, material availability + shortfall MR, and cancel-reverts.
 
 Runs against Postgres (skipped unless TEST_DATABASE_URL is set). The seeded company uses
@@ -74,7 +74,7 @@ async def gl_is_balanced(client, headers) -> bool:
 
 
 async def on_hand(client, headers, item_id: str, warehouse_id: str) -> float:
-    """Actual qty at a warehouse — 0 when the report omits the emptied bin."""
+    """Actual qty at a warehouse ? 0 when the report omits the emptied bin."""
     bal = await stock_balance(client, headers, item_id, warehouse_id)
     return float(bal["actual_qty"]) if bal else 0.0
 
@@ -90,7 +90,7 @@ async def account_balance(client, headers, account_id: str) -> float:
 
 async def _combo_bom(client, headers, wh):
     """cooler @4000 + stand @500; FG combo; a submitted BOM '1 combo = 1 cooler + 1 stand +
-    ₹200 labour'. Returns (cooler, stand, combo, bom)."""
+    ?200 labour'. Returns (cooler, stand, combo, bom)."""
     cooler = await make_item(client, headers, "COOLER", wh["id"], valuation_rate="4000")
     stand = await make_item(client, headers, "STAND", wh["id"], valuation_rate="500")
     combo = await make_item(client, headers, "AC-COMBO", wh["id"])
@@ -131,7 +131,7 @@ async def test_bom_costing(ctx):
     assert resp.json()["is_active"] is True
 
 
-# --- Phase 2: Work Order → Manufacture reconciles stock + GL --------------------------
+# --- Phase 2: Work Order ? Manufacture reconciles stock + GL --------------------------
 
 
 async def test_work_order_manufacture_reconciles(ctx):
@@ -228,7 +228,7 @@ async def test_partial_finish_and_over_produce_block(ctx):
     wo = resp.json()
     await client.post(f"{API}/work-orders/{wo['id']}/submit", headers=headers)
 
-    # finish 4 → In Process
+    # finish 4 ? In Process
     resp = await client.post(
         f"{API}/work-orders/{wo['id']}/finish",
         json={"qty": "4", "posting_date": "2026-06-03"},
@@ -246,7 +246,7 @@ async def test_partial_finish_and_over_produce_block(ctx):
     )
     assert resp.status_code == 422, resp.text
 
-    # finish the remaining 6 → Completed
+    # finish the remaining 6 ? Completed
     resp = await client.post(
         f"{API}/work-orders/{wo['id']}/finish",
         json={"qty": "6", "posting_date": "2026-06-04"},
@@ -269,7 +269,7 @@ async def test_material_availability_and_shortfall_mr(ctx):
     wh = await make_warehouse(client, headers, "Main Store")
     cooler, stand, combo, bom = await _combo_bom(client, headers, wh)
     await client.post(f"{API}/boms/{bom['id']}/submit", headers=headers)
-    # only 6 coolers, 10 stands → can build 6 combos
+    # only 6 coolers, 10 stands ? can build 6 combos
     await receive(client, headers, cooler["id"], wh["id"], "6", "4000", "2026-06-01")
     await receive(client, headers, stand["id"], wh["id"], "10", "500", "2026-06-01")
 
@@ -296,7 +296,7 @@ async def test_material_availability_and_shortfall_mr(ctx):
     resp = await client.post(f"{API}/work-orders/{wo['id']}/material-request", headers=headers)
     assert resp.status_code == 201, resp.text
     mr = resp.json()
-    assert mr["material_request_type"] == "Purchase"
+    assert mr["material_request_type"] == "Manufacture"
     assert len(mr["items"]) == 1
     assert float(mr["items"][0]["qty"]) == pytest.approx(4)
 
@@ -334,7 +334,7 @@ async def test_manufacture_cancel_reverts_work_order(ctx):
     resp = await client.post(f"{API}/work-orders/{wo['id']}/cancel", headers=headers)
     assert resp.status_code == 422, resp.text
 
-    # cancel the Manufacture Stock Entry → raws restored, FG removed, WO rolled back
+    # cancel the Manufacture Stock Entry ? raws restored, FG removed, WO rolled back
     resp = await client.post(f"{API}/stock-entries/{se_id}/cancel", headers=headers)
     assert resp.status_code == 200, resp.text
 
@@ -421,7 +421,7 @@ async def test_reports(ctx):
     assert wu[0]["bom_name"] == bom["name"]
     assert float(wu[0]["qty_per_batch"]) == 1
 
-    # BOM stock report: can I build 10? (only 6 coolers on hand → buildable 6)
+    # BOM stock report: can I build 10? (only 6 coolers on hand ? buildable 6)
     resp = await client.get(
         f"{API}/manufacturing-reports/bom-stock",
         params={"bom_id": bom["id"], "for_qty": "10"}, headers=headers,
@@ -487,7 +487,7 @@ async def test_repack_single_output(ctx):
 
 
 async def test_repack_multi_output_weighted_split(ctx):
-    """Split one consumed pool across two outputs by value weight (qty × basic_rate)."""
+    """Split one consumed pool across two outputs by value weight (qty x basic_rate)."""
     client, company, headers = ctx
     wh = await make_warehouse(client, headers, "Main Store")
     kit = await make_item(client, headers, "KIT", wh["id"])
@@ -502,7 +502,7 @@ async def test_repack_multi_output_weighted_split(ctx):
             "from_warehouse_id": wh["id"], "to_warehouse_id": wh["id"],
             "items": [
                 {"item_id": kit["id"], "qty": "10"},
-                # weights: A = 5×300 = 1500, B = 5×100 = 500 → A gets 750, B gets 250
+                # weights: A = 5x300 = 1500, B = 5x100 = 500 ? A gets 750, B gets 250
                 {"item_id": part_a["id"], "qty": "5", "basic_rate": "300", "is_finished_item": True},
                 {"item_id": part_b["id"], "qty": "5", "basic_rate": "100", "is_finished_item": True},
             ],
@@ -744,7 +744,7 @@ async def test_repack_into_negative_bin_balances_gl(ctx):
     kit = await make_item(client, headers, "KIT", wh["id"])
     bundle = await make_item(client, headers, "BUNDLE", wh["id"])
 
-    # allow negative stock, then oversell BUNDLE: bin qty −5, value −500 (rate 100)
+    # allow negative stock, then oversell BUNDLE: bin qty ?5, value ?500 (rate 100)
     resp = await client.put(
         f"{API}/settings",
         json={"key": "allow_negative_stock", "value": True, "company_id": company["id"]},
@@ -766,7 +766,7 @@ async def test_repack_into_negative_bin_balances_gl(ctx):
     assert resp.status_code == 200, resp.text
 
     # repack 10 KIT (worth 2000) into 10 BUNDLE: incoming 200/unit; the bin crosses from
-    # −5 → +5 with a rate reset, so the ledger moves 1500 while the pool is 2000
+    # ?5 ? +5 with a rate reset, so the ledger moves 1500 while the pool is 2000
     await receive(client, headers, kit["id"], wh["id"], "10", "200", "2026-06-03")
     resp = await client.post(
         f"{API}/stock-entries",
@@ -790,15 +790,15 @@ async def test_repack_into_negative_bin_balances_gl(ctx):
     assert float(fg["valuation_rate"]) == pytest.approx(200)
     assert await gl_is_balanced(client, headers)
     # the repack voucher posted its 500 residual as Dr Stock Adjustment. Account total:
-    # receipts credit adjustment (−500 −2000), the over-issue debits it (+1000), and the
-    # repack residual debits it (+500) → −1000. Without the residual leg the repack
+    # receipts credit adjustment (?500 ?2000), the over-issue debits it (+1000), and the
+    # repack residual debits it (+500) ? ?1000. Without the residual leg the repack
     # voucher itself would have been out of balance and submit would have failed.
     adj = await coa_account(client, company, headers, "Stock Adjustment")
     assert await account_balance(client, headers, adj["id"]) == pytest.approx(-1000)
 
 
 async def test_repack_weight_ignores_uom_factor(ctx):
-    """The value weight is qty × basic_rate in the LINE UOM — a pack-UOM finished row must
+    """The value weight is qty x basic_rate in the LINE UOM ? a pack-UOM finished row must
     not have its share inflated by its conversion factor."""
     client, company, headers = ctx
     wh = await make_warehouse(client, headers, "Main Store")
@@ -816,7 +816,7 @@ async def test_repack_weight_ignores_uom_factor(ctx):
             "from_warehouse_id": wh["id"], "to_warehouse_id": wh["id"],
             "items": [
                 {"item_id": bulk["id"], "qty": "10"},
-                # equal LINE amounts (1×100 vs 1×100) → 50/50 despite the Box factor 12
+                # equal LINE amounts (1x100 vs 1x100) ? 50/50 despite the Box factor 12
                 {"item_id": boxed["id"], "qty": "1", "uom": "Box", "basic_rate": "100",
                  "is_finished_item": True},
                 {"item_id": loose["id"], "qty": "1", "basic_rate": "100",
@@ -846,7 +846,7 @@ async def test_repack_validation_hardening(ctx):
     item_b = await make_item(client, headers, "B", wh["id"])
     item_c = await make_item(client, headers, "C", wh["id"])
 
-    # mixed weights: one finished row weighted, the other blank → 422
+    # mixed weights: one finished row weighted, the other blank ? 422
     resp = await client.post(
         f"{API}/stock-entries",
         json={
@@ -863,7 +863,7 @@ async def test_repack_validation_hardening(ctx):
     assert resp.status_code == 422, resp.text
     assert "value weight" in resp.json()["detail"]
 
-    # additional cost without an account → 422 at create
+    # additional cost without an account ? 422 at create
     resp = await client.post(
         f"{API}/stock-entries",
         json={
@@ -937,7 +937,7 @@ async def test_repack_document_shows_actual_values(ctx):
 
 
 async def test_explicit_null_source_not_overridden_by_settings(ctx):
-    """An explicitly-null source warehouse means 'no order-level source' — the settings
+    """An explicitly-null source warehouse means 'no order-level source' ? the settings
     default must not silently re-apply."""
     client, company, headers = ctx
     wh = await make_warehouse(client, headers, "Main Store")
@@ -950,12 +950,12 @@ async def test_explicit_null_source_not_overridden_by_settings(ctx):
     )
     assert resp.status_code == 200, resp.text
 
-    # omitted source → default applies
+    # omitted source ? default applies
     resp = await client.post(f"{API}/work-orders", json={"bom_id": bom["id"], "qty": "1"}, headers=headers)
     assert resp.status_code == 201, resp.text
     assert resp.json()["source_warehouse_id"] == wh["id"]
 
-    # explicit null source → honored (no order-level source)
+    # explicit null source ? honored (no order-level source)
     resp = await client.post(
         f"{API}/work-orders",
         json={"bom_id": bom["id"], "qty": "1", "source_warehouse_id": None},
@@ -966,8 +966,8 @@ async def test_explicit_null_source_not_overridden_by_settings(ctx):
 
 
 async def test_settings_json_tampering_is_sanitized(ctx):
-    """Garbage written through the generic PUT /settings must not 500 Work Order flows —
-    reads re-validate: bad UUIDs → None, out-of-range/non-numeric pct → clamped/0."""
+    """Garbage written through the generic PUT /settings must not 500 Work Order flows ?
+    reads re-validate: bad UUIDs ? None, out-of-range/non-numeric pct ? clamped/0."""
     client, company, headers = ctx
     wh = await make_warehouse(client, headers, "Main Store")
     cooler, stand, combo, bom = await _combo_bom(client, headers, wh)
@@ -988,7 +988,7 @@ async def test_settings_json_tampering_is_sanitized(ctx):
     )
     assert resp.status_code in (200, 201), resp.text
 
-    # settings read sanitizes: junk warehouse → null, pct clamped to 100
+    # settings read sanitizes: junk warehouse ? null, pct clamped to 100
     resp = await client.get(f"{API}/manufacturing/settings", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -1040,3 +1040,312 @@ async def test_work_order_rejects_non_expense_cost_account(ctx):
     )
     assert resp.status_code == 422, resp.text
     assert "Expense account" in resp.json()["detail"]
+
+
+# --- Phase 1: multi-level BOM / phantom / scrap / alternate / explorer ---------------
+
+
+async def test_phantom_bom_explodes_on_work_order(ctx):
+    """A phantom sub-assembly disappears from the WO; its leaves are required instead."""
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    steel = await make_item(client, headers, "STEEL", wh["id"], valuation_rate="50")
+    bolt = await make_item(client, headers, "BOLT", wh["id"], valuation_rate="5")
+    kit = await make_item(client, headers, "PHANTOM-KIT", wh["id"])
+    fg = await make_item(client, headers, "FG-ASSY", wh["id"])
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": kit["id"], "quantity": "1", "is_default": True, "is_phantom": True,
+            "items": [
+                {"item_id": steel["id"], "qty": "2"},
+                {"item_id": bolt["id"], "qty": "4"},
+            ],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    kit_bom = resp.json()
+    assert kit_bom["is_phantom"] is True
+    await client.post(f"{API}/boms/{kit_bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": fg["id"], "quantity": "1", "is_default": True, "operating_cost": "10",
+            "items": [{"item_id": kit["id"], "qty": "1"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    fg_bom = resp.json()
+    # nested phantom cost rolled up: 2*50 + 4*5 = 120; +10 labour = 130
+    assert float(fg_bom["raw_material_cost"]) == pytest.approx(120)
+    assert float(fg_bom["total_cost"]) == pytest.approx(130)
+    await client.post(f"{API}/boms/{fg_bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/work-orders",
+        json={"bom_id": fg_bom["id"], "qty": "5", "source_warehouse_id": wh["id"], "fg_warehouse_id": wh["id"]},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    wo = resp.json()
+    codes = {i["item_code"]: float(i["required_qty"]) for i in wo["items"]}
+    assert "PHANTOM-KIT" not in codes
+    assert codes["STEEL"] == pytest.approx(10)  # 2 ? 5
+    assert codes["BOLT"] == pytest.approx(20)   # 4 ? 5
+
+
+async def test_stocked_subassembly_stays_on_work_order(ctx):
+    """Non-phantom child BOM stays as one required line (not exploded)."""
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    steel = await make_item(client, headers, "STEEL", wh["id"], valuation_rate="50")
+    sub = await make_item(client, headers, "SUB-ASSY", wh["id"])
+    fg = await make_item(client, headers, "FG-TOP", wh["id"])
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": sub["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": steel["id"], "qty": "3"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    sub_bom = resp.json()
+    await client.post(f"{API}/boms/{sub_bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": fg["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": sub["id"], "qty": "2"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    fg_bom = resp.json()
+    await client.post(f"{API}/boms/{fg_bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/work-orders",
+        json={"bom_id": fg_bom["id"], "qty": "4", "source_warehouse_id": wh["id"], "fg_warehouse_id": wh["id"]},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    wo = resp.json()
+    assert len(wo["items"]) == 1
+    assert wo["items"][0]["item_code"] == "SUB-ASSY"
+    assert float(wo["items"][0]["required_qty"]) == pytest.approx(8)
+
+
+async def test_bom_scrap_nets_cost_and_finish_produces_scrap(ctx):
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    steel = await make_item(client, headers, "STEEL", wh["id"], valuation_rate="100")
+    scrap = await make_item(client, headers, "SCRAP-METAL", wh["id"])
+    fg = await make_item(client, headers, "FG-BRACKET", wh["id"])
+    await receive(client, headers, steel["id"], wh["id"], "20", "100", "2026-06-01")
+    op_acct = await coa_account(client, company, headers, "Expenses Included In Valuation")
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": fg["id"], "quantity": "1", "is_default": True,
+            "operating_cost": "50",
+            "items": [{"item_id": steel["id"], "qty": "2"}],
+            "scrap_items": [{"item_id": scrap["id"], "qty": "0.5", "rate": "20"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    bom = resp.json()
+    # RM 200 + op 50 - scrap 10 = 240
+    assert float(bom["raw_material_cost"]) == pytest.approx(200)
+    assert float(bom["scrap_cost"]) == pytest.approx(10)
+    assert float(bom["total_cost"]) == pytest.approx(240)
+    await client.post(f"{API}/boms/{bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/work-orders",
+        json={
+            "bom_id": bom["id"], "qty": "10", "source_warehouse_id": wh["id"],
+            "fg_warehouse_id": wh["id"], "operating_cost_account_id": op_acct["id"],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    wo = resp.json()
+    await client.post(f"{API}/work-orders/{wo['id']}/submit", headers=headers)
+    resp = await client.post(
+        f"{API}/work-orders/{wo['id']}/finish",
+        json={"qty": "10", "posting_date": "2026-06-02"},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    assert await on_hand(client, headers, steel["id"], wh["id"]) == pytest.approx(0)
+    assert await on_hand(client, headers, scrap["id"], wh["id"]) == pytest.approx(5)  # 0.5 ? 10
+    fg_bal = await stock_balance(client, headers, fg["id"], wh["id"])
+    assert float(fg_bal["actual_qty"]) == pytest.approx(10)
+    # pool = 20*100 + 500 = 2500; scrap recovery weight 5*20=100; FG gets ~2400 ? 240/unit
+    assert float(fg_bal["valuation_rate"]) == pytest.approx(240)
+    scrap_bal = await stock_balance(client, headers, scrap["id"], wh["id"])
+    assert float(scrap_bal["stock_value"]) == pytest.approx(100)
+    assert await gl_is_balanced(client, headers)
+
+
+async def test_alternate_item_on_finish(ctx):
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    primary = await make_item(client, headers, "RAW-A", wh["id"], valuation_rate="40")
+    alt = await make_item(client, headers, "RAW-B", wh["id"], valuation_rate="40")
+    fg = await make_item(client, headers, "FG-ALT", wh["id"])
+    await receive(client, headers, alt["id"], wh["id"], "10", "40", "2026-06-01")
+
+    # Item Alternative master must allow RAW-A ? RAW-B
+    resp = await client.post(
+        f"{API}/registry/item-alternative",
+        json={
+            "item_id": primary["id"],
+            "alternative_item_id": alt["id"],
+            "two_way": True,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": fg["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": primary["id"], "qty": "1", "allow_alternative_item": True}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    bom = resp.json()
+    await client.post(f"{API}/boms/{bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/work-orders",
+        json={"bom_id": bom["id"], "qty": "5", "source_warehouse_id": wh["id"], "fg_warehouse_id": wh["id"]},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    wo = resp.json()
+    assert wo["items"][0]["allow_alternative_item"] is True
+    await client.post(f"{API}/work-orders/{wo['id']}/submit", headers=headers)
+
+    # Unregistered substitute must be rejected
+    rogue = await make_item(client, headers, "RAW-ROGUE", wh["id"], valuation_rate="40")
+    await receive(client, headers, rogue["id"], wh["id"], "10", "40", "2026-06-01")
+    resp = await client.post(
+        f"{API}/work-orders/{wo['id']}/finish",
+        json={
+            "qty": "1", "posting_date": "2026-06-02",
+            "consumed": [{"item_id": primary["id"], "substitute_item_id": rogue["id"]}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+    resp = await client.post(
+        f"{API}/work-orders/{wo['id']}/finish",
+        json={
+            "qty": "5", "posting_date": "2026-06-02",
+            "consumed": [{"item_id": primary["id"], "substitute_item_id": alt["id"]}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert await on_hand(client, headers, primary["id"], wh["id"]) == pytest.approx(0)
+    assert await on_hand(client, headers, alt["id"], wh["id"]) == pytest.approx(5)  # received 10, consumed 5
+    assert await on_hand(client, headers, fg["id"], wh["id"]) == pytest.approx(5)
+    # WO consumed_qty still tracks against the planned item
+    wo2 = (await client.get(f"{API}/work-orders/{wo['id']}", headers=headers)).json()
+    assert float(wo2["items"][0]["consumed_qty"]) == pytest.approx(5)
+
+
+async def test_multilevel_cycle_blocked(ctx):
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    a = await make_item(client, headers, "ITEM-A", wh["id"], valuation_rate="10")
+    b = await make_item(client, headers, "ITEM-B", wh["id"], valuation_rate="10")
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": a["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": b["id"], "qty": "1"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    bom_a = resp.json()
+    await client.post(f"{API}/boms/{bom_a['id']}/submit", headers=headers)
+
+    # B ? A would close the cycle once B is submitted (A already lists B)
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": b["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": a["id"], "qty": "1"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+    assert "cycle" in resp.json()["detail"].lower()
+
+
+async def test_bom_explorer_flattens_nested(ctx):
+    client, company, headers = ctx
+    wh = await make_warehouse(client, headers, "Main Store")
+    steel = await make_item(client, headers, "STEEL", wh["id"], valuation_rate="50")
+    sub = await make_item(client, headers, "SUB", wh["id"])
+    fg = await make_item(client, headers, "FG", wh["id"])
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": sub["id"], "quantity": "1", "is_default": True,
+            "items": [{"item_id": steel["id"], "qty": "3"}],
+        },
+        headers=headers,
+    )
+    sub_bom = resp.json()
+    await client.post(f"{API}/boms/{sub_bom['id']}/submit", headers=headers)
+
+    resp = await client.post(
+        f"{API}/boms",
+        json={
+            "production_item_id": fg["id"], "quantity": "1", "is_default": True, "operating_cost": "20",
+            "items": [{"item_id": sub["id"], "qty": "2"}],
+            "scrap_items": [{"item_id": steel["id"], "qty": "0.1", "rate": "5"}],
+        },
+        headers=headers,
+    )
+    # scrap cannot be a component that's also FG? steel is fine as scrap of FG
+    # Wait - scrap item steel is ok. But create may fail if scrap is same as component of nested?
+    # Should be fine.
+    assert resp.status_code == 201, resp.text
+    fg_bom = resp.json()
+    await client.post(f"{API}/boms/{fg_bom['id']}/submit", headers=headers)
+
+    resp = await client.get(
+        f"{API}/manufacturing-reports/bom-explorer",
+        params={"bom_id": fg_bom["id"], "for_qty": "10", "flatten_all": True},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["flatten_all"] is True
+    # 10 FG ? 2 SUB ? 3 STEEL = 60
+    assert len(body["rows"]) == 1
+    assert body["rows"][0]["item_code"] == "STEEL"
+    assert float(body["rows"][0]["stock_qty"]) == pytest.approx(60)
+    assert len(body["scrap_rows"]) == 1
+    assert float(body["scrap_rows"][0]["stock_qty"]) == pytest.approx(1)  # 0.1 ? 10

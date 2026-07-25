@@ -52,9 +52,12 @@ STOCK_ENTRY_PURPOSES = (
     "Material Transfer",
     "Manufacture",
     "Material Transfer for Manufacture",
+    "Material Consumption for Manufacture",
     "Repack",
+    "Send to Subcontractor",
+    "Subcontract Receipt",
 )
-MATERIAL_REQUEST_TYPES = ("Purchase", "Material Transfer", "Material Issue")
+MATERIAL_REQUEST_TYPES = ("Purchase", "Material Transfer", "Material Issue", "Manufacture")
 STOCK_RECONCILIATION_PURPOSES = ("Opening Stock", "Stock Reconciliation")
 
 
@@ -181,6 +184,19 @@ class Item(Base, DocumentMixin, CompanyScopedMixin):
         Numeric(21, 6), nullable=False, default=0, server_default=text("0")
     )
     lead_time_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    # Manufacturing (Phase 0): default recipe for this finished good; include flag for
+    # Production Plan netting (Phase 3) — false excludes the item from auto-planning.
+    default_bom_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("boms.id", ondelete="SET NULL")
+    )
+    include_item_in_manufacturing: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    # Quality (Phase 5): when true, Manufacture / Subcontract Receipt requires an
+    # Accepted Quality Inspection against the Work Order / Subcontract Job first.
+    inspection_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     brand: Mapped[str | None] = mapped_column(String(140))
     barcode: Mapped[str | None] = mapped_column(String(140))
     # Fixed-asset flag (Assets module Phase 3): a Purchase Invoice line for such an item
@@ -305,6 +321,45 @@ class Batch(Base, DocumentMixin, CompanyScopedMixin):
     @property
     def item_name(self) -> str | None:
         return self.item.item_name if self.item else None
+
+
+class ItemAlternative(Base, DocumentMixin, CompanyScopedMixin):
+    """Allowed substitute for an item (descriptor master at /m/item-alternative).
+
+    Used when a BOM/Work Order line has ``allow_alternative_item`` — Finish may
+    only consume a substitute that appears here (or via a two-way reverse link).
+    """
+
+    __tablename__ = "item_alternatives"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "item_id", "alternative_item_id",
+            name="uq_item_alternative_pair",
+        ),
+        Index("ix_item_alternatives_company_item", "company_id", "item_id"),
+    )
+
+    title: Mapped[str] = mapped_column(String(280), nullable=False)
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    alternative_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("items.id"), nullable=False
+    )
+    two_way: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+    item = relationship("Item", foreign_keys=[item_id], lazy="joined", viewonly=True)
+    alternative_item = relationship(
+        "Item", foreign_keys=[alternative_item_id], lazy="joined", viewonly=True
+    )
+
+    @property
+    def item_code(self) -> str | None:
+        return self.item.item_code if self.item else None
+
+    @property
+    def alternative_item_code(self) -> str | None:
+        return self.alternative_item.item_code if self.alternative_item else None
 
 
 # ============================================================================
@@ -434,6 +489,9 @@ class StockEntry(Base, DocumentMixin, CompanyScopedMixin, VoucherMixin):
     # a Manufacture entry (Cr the operating-cost account, Dr Finished-Goods inventory).
     work_order_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("work_orders.id")
+    )
+    subcontract_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subcontract_jobs.id")
     )
     operating_cost: Mapped[Decimal] = mapped_column(
         Numeric(21, 6), nullable=False, default=0, server_default=text("0")

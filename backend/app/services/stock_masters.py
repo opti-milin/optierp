@@ -171,6 +171,9 @@ async def create_item(db: AsyncSession, payload: ItemCreate, user: CurrentUser) 
         asset_category_id=payload.asset_category_id,
         hsn_sac_code=payload.hsn_sac_code,
         gst_treatment=payload.gst_treatment,
+        default_bom_id=payload.default_bom_id,
+        include_item_in_manufacturing=payload.include_item_in_manufacturing,
+        inspection_required=payload.inspection_required,
         owner=user.id,
         modified_by=user.id,
     )

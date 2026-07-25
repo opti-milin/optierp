@@ -284,9 +284,36 @@ async def list_quotations(
 
 async def submit_quotation(
     db: AsyncSession, quotation_id: uuid.UUID, user: CurrentUser
-) -> Quotation:
+) -> tuple[Quotation, list[str]]:
     quotation = await get_quotation(db, quotation_id, user.company_id)
     require_draft(quotation.docstatus)
+
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        raise_if_blocked,
+    )
+
+    fulfillment = await check_order_fulfillment(
+        db,
+        quotation.company_id,
+        [
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=row.qty,
+                selling_amount=row.amount or Decimal("0"),
+                delivery_date=None,
+                warehouse_id=row.warehouse_id,
+            )
+            for row in quotation.items
+            if row.item_id is not None
+        ],
+        header_delivery_date=quotation.valid_till,
+        document_context="quotation",
+        document_id=quotation.id,
+    )
+    raise_if_blocked(fulfillment)
+
     quotation.docstatus = DOCSTATUS_SUBMITTED
     quotation.status = "Open"
     quotation.modified_by = user.id
@@ -296,7 +323,84 @@ async def submit_quotation(
         user_id=user.id, company_id=quotation.company_id,
     )
     await db.commit()
-    return await get_quotation(db, quotation.id, user.company_id)
+    return await get_quotation(db, quotation.id, user.company_id), list(fulfillment.warnings)
+
+
+async def check_quotation_fulfillment(
+    db: AsyncSession, quotation_id: uuid.UUID, company_id: uuid.UUID
+):
+    from decimal import Decimal
+
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        fulfillment_result_to_dict,
+    )
+
+    quotation = await get_quotation(db, quotation_id, company_id)
+    result = await check_order_fulfillment(
+        db,
+        quotation.company_id,
+        [
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=row.qty,
+                selling_amount=row.amount or Decimal("0"),
+                delivery_date=None,
+                warehouse_id=row.warehouse_id,
+            )
+            for row in quotation.items
+            if row.item_id is not None
+        ],
+        header_delivery_date=quotation.valid_till,
+        document_context="quotation",
+        document_id=quotation.id,
+        force=True,
+    )
+    return fulfillment_result_to_dict(result)
+
+
+async def preview_quotation_fulfillment(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    *,
+    items: list,
+    valid_till=None,
+    as_of=None,
+):
+    from decimal import Decimal
+
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        fulfillment_result_to_dict,
+    )
+
+    lines: list[FulfillmentLineIn] = []
+    for row in items:
+        if row.item_id is None:
+            continue
+        qty = row.qty
+        rate = row.rate or Decimal("0")
+        amount = (qty * rate).quantize(Decimal("0.01"))
+        lines.append(
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=qty,
+                selling_amount=amount,
+                warehouse_id=row.warehouse_id,
+            )
+        )
+    result = await check_order_fulfillment(
+        db,
+        company_id,
+        lines,
+        header_delivery_date=valid_till,
+        as_of=as_of,
+        document_context="quotation",
+        force=True,
+    )
+    return fulfillment_result_to_dict(result)
 
 
 async def cancel_quotation(

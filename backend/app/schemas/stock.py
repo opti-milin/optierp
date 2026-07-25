@@ -83,6 +83,9 @@ class ItemCreate(BaseModel):
     asset_category_id: uuid.UUID | None = None
     hsn_sac_code: str | None = Field(default=None, max_length=8)
     gst_treatment: str = Field(default="Taxable", pattern=GST_TREATMENT_PATTERN)
+    default_bom_id: uuid.UUID | None = None
+    include_item_in_manufacturing: bool = True
+    inspection_required: bool = False
 
 
 class ItemUpdate(BaseModel):
@@ -110,6 +113,9 @@ class ItemUpdate(BaseModel):
     hsn_sac_code: str | None = Field(default=None, max_length=8)
     gst_treatment: str | None = Field(default=None, pattern=GST_TREATMENT_PATTERN)
     disabled: bool | None = None
+    default_bom_id: uuid.UUID | None = None
+    include_item_in_manufacturing: bool | None = None
+    inspection_required: bool | None = None
 
 
 class ItemResponse(DocumentMeta):
@@ -147,6 +153,9 @@ class ItemResponse(DocumentMeta):
     gst_treatment: str = "Taxable"
     disabled: bool
     company_id: uuid.UUID
+    default_bom_id: uuid.UUID | None = None
+    include_item_in_manufacturing: bool = True
+    inspection_required: bool = False
 
 
 class ItemListItem(ORMModel):
@@ -165,6 +174,15 @@ class ItemListItem(ORMModel):
     standard_rate: Decimal
     hsn_sac_code: str | None = None
     disabled: bool
+
+
+class ItemAlternativeOption(BaseModel):
+    """One allowed substitute for an item (from Item Alternative master)."""
+
+    id: uuid.UUID
+    item_code: str
+    item_name: str
+    stock_uom: str | None = None
 
 
 class PriceListCreate(BaseModel):
@@ -303,7 +321,8 @@ class MaterialRequestItemIn(BaseModel):
 
 class MaterialRequestCreate(BaseModel):
     material_request_type: str = Field(
-        default="Purchase", pattern="^(Purchase|Material Transfer|Material Issue)$"
+        default="Purchase",
+        pattern="^(Purchase|Material Transfer|Material Issue|Manufacture)$",
     )
     posting_date: date
     schedule_date: date | None = None

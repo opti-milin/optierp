@@ -52,6 +52,10 @@ export interface Item extends DocumentMeta {
   hsn_sac_code: string | null;
   gst_treatment: string;
   disabled: boolean;
+  company_id: string;
+  default_bom_id: string | null;
+  include_item_in_manufacturing: boolean;
+  inspection_required: boolean;
 }
 
 export interface ItemListItem {
@@ -96,6 +100,9 @@ export interface StockEntryItemIn {
   uom?: string | null;
   source_warehouse_id?: string | null;
   target_warehouse_id?: string | null;
+  is_finished_item?: boolean;
+  serial_nos?: string[] | null;
+  batch_no?: string | null;
 }
 
 export interface StockEntryListItem {
@@ -114,6 +121,8 @@ export interface StockEntryDetail extends DocumentMeta {
   from_warehouse_id: string | null;
   to_warehouse_id: string | null;
   total_amount: string;
+  operating_cost?: string;
+  operating_cost_account_id?: string | null;
   remarks: string | null;
   items: Array<{
     idx: number;

@@ -1,8 +1,9 @@
-"""Manufacturing report services (Phase 4) — read-only.
+"""Manufacturing report services — read-only.
 
 * **Production Register** — every Work Order's planned-vs-produced position + cost.
 * **BOM where-used** — which BOMs consume a given item.
 * **BOM stock report** — can I build N of a finished good from current stock?
+* **BOM Explorer** — flatten a nested BOM to leaf (and stocked sub-assembly) materials.
 """
 
 import uuid
@@ -17,12 +18,17 @@ from app.models.base import DOCSTATUS_CANCELLED, DOCSTATUS_SUBMITTED
 from app.models.manufacturing import BOM, BOMItem, WorkOrder
 from app.models.stock import Warehouse
 from app.schemas.manufacturing import (
+    BOMExplorerReport,
+    BOMExplorerRow,
     BOMStockReport,
     BOMStockReportRow,
     BOMWhereUsedRow,
     MaterialShortageRow,
+    ProductionAnalyticsRow,
     ProductionRegisterRow,
+    WorkOrderSummaryRow,
 )
+from app.services.bom_explosion import explode_bom, explode_scrap
 from app.services.manufacturing_common import item_available_qty
 
 ZERO = Decimal("0")
@@ -72,9 +78,7 @@ async def material_shortage(
     db: AsyncSession, company_id: uuid.UUID, *, only_short: bool = False
 ) -> list[MaterialShortageRow]:
     """Aggregate component demand across ALL open Work Orders (submitted, not stopped /
-    completed / cancelled) vs on-hand stock: "given everything I've committed to build,
-    what am I short?" Grouped by (item, consume-from warehouse); availability is checked
-    at that warehouse (company-wide when none is set)."""
+    completed / cancelled) vs on-hand stock."""
     stmt = (
         select(WorkOrder)
         .options(selectinload(WorkOrder.items))
@@ -172,33 +176,37 @@ async def bom_where_used(
 async def bom_stock_report(
     db: AsyncSession, bom_id: uuid.UUID, company_id: uuid.UUID, *, for_qty: Decimal
 ) -> BOMStockReport:
-    """For a target number of finished units, each component's need vs on-hand stock, and
-    the maximum finished units the current stock can build (the min over components)."""
+    """For a target number of finished units, each required component's need vs on-hand.
+
+    Uses the same explosion as Work Order create (phantoms flatten; stocked sub-assemblies
+    stay as one line).
+    """
     bom = await db.scalar(
-        select(BOM).options(selectinload(BOM.items)).where(BOM.id == bom_id, BOM.company_id == company_id)
+        select(BOM)
+        .options(selectinload(BOM.items), selectinload(BOM.scrap_items))
+        .where(BOM.id == bom_id, BOM.company_id == company_id)
     )
     if bom is None:
         raise NotFoundError("BOM not found")
-    scale = (for_qty / bom.quantity) if bom.quantity else ZERO
+    exploded = await explode_bom(db, bom, for_qty, flatten_all=False)
     rows: list[BOMStockReportRow] = []
     buildable = None
-    for comp in bom.items:
-        required = (comp.stock_qty * scale).quantize(Decimal("0.000001"))
+    for comp in exploded:
         available = await item_available_qty(db, comp.item_id, comp.source_warehouse_id)
-        shortfall = max(ZERO, required - available)
+        shortfall = max(ZERO, comp.stock_qty - available)
         rows.append(
             BOMStockReportRow(
                 item_id=comp.item_id,
                 item_code=comp.item_code,
                 item_name=comp.item_name,
-                required_qty=required,
+                required_qty=comp.stock_qty,
                 available_qty=available,
                 shortfall_qty=shortfall,
             )
         )
-        per_batch = comp.stock_qty / bom.quantity if bom.quantity else ZERO
-        if per_batch > ZERO:
-            can = available / per_batch
+        per_unit = (comp.stock_qty / for_qty) if for_qty else ZERO
+        if per_unit > ZERO:
+            can = available / per_unit
             buildable = can if buildable is None else min(buildable, can)
     return BOMStockReport(
         bom_id=bom.id,
@@ -207,3 +215,142 @@ async def bom_stock_report(
         buildable_qty=(buildable or ZERO).quantize(Decimal("0.000001")),
         rows=rows,
     )
+
+
+async def bom_explorer(
+    db: AsyncSession,
+    bom_id: uuid.UUID,
+    company_id: uuid.UUID,
+    *,
+    for_qty: Decimal,
+    flatten_all: bool = True,
+) -> BOMExplorerReport:
+    """Flatten a nested BOM for ``for_qty`` finished units.
+
+    Default ``flatten_all=True`` walks every nested BOM to leaf raw materials (Explorer).
+    Pass ``flatten_all=False`` to mirror Work Order explosion (phantoms only).
+    """
+    bom = await db.scalar(
+        select(BOM)
+        .options(selectinload(BOM.items), selectinload(BOM.scrap_items))
+        .where(BOM.id == bom_id, BOM.company_id == company_id)
+    )
+    if bom is None:
+        raise NotFoundError("BOM not found")
+
+    exploded = await explode_bom(db, bom, for_qty, flatten_all=flatten_all)
+    scrap = await explode_scrap(db, bom, for_qty)
+    scale = (for_qty / bom.quantity) if bom.quantity else ZERO
+
+    rows = [
+        BOMExplorerRow(
+            item_id=c.item_id,
+            item_code=c.item_code,
+            item_name=c.item_name,
+            stock_qty=c.stock_qty,
+            rate=c.rate,
+            amount=(c.stock_qty * c.rate).quantize(Decimal("0.000001")),
+            level=c.level,
+            source_warehouse_id=c.source_warehouse_id,
+            is_leaf=True,
+        )
+        for c in exploded
+    ]
+    scrap_rows = [
+        BOMExplorerRow(
+            item_id=s.item_id,
+            item_code=s.item_code,
+            item_name=s.item_name,
+            stock_qty=s.stock_qty,
+            rate=s.rate,
+            amount=(s.stock_qty * s.rate).quantize(Decimal("0.000001")),
+            level=0,
+            source_warehouse_id=s.stock_warehouse_id,
+            is_leaf=True,
+        )
+        for s in scrap
+    ]
+    raw = sum((r.amount for r in rows), ZERO)
+    scrap_cost = sum((r.amount for r in scrap_rows), ZERO)
+    op = (bom.operating_cost * scale).quantize(Decimal("0.000001"))
+    return BOMExplorerReport(
+        bom_id=bom.id,
+        bom_name=bom.name,
+        production_item_code=bom.production_item_code,
+        production_item_name=bom.production_item_name,
+        for_qty=for_qty,
+        flatten_all=flatten_all,
+        raw_material_cost=raw,
+        scrap_cost=scrap_cost,
+        operating_cost=op,
+        total_cost=max(ZERO, raw + op - scrap_cost),
+        rows=rows,
+        scrap_rows=scrap_rows,
+    )
+
+
+async def work_order_summary(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[WorkOrderSummaryRow]:
+    """Roll up open/completed Work Orders by status (Work Order Summary equivalent)."""
+    stmt = (
+        select(WorkOrder)
+        .options(selectinload(WorkOrder.bom))
+        .where(WorkOrder.company_id == company_id, WorkOrder.docstatus != DOCSTATUS_CANCELLED)
+    )
+    buckets: dict[str, dict] = {}
+    for wo in (await db.execute(stmt)).scalars():
+        b = buckets.setdefault(
+            wo.status,
+            {
+                "count": 0,
+                "total_qty": ZERO,
+                "total_produced_qty": ZERO,
+                "total_pending_qty": ZERO,
+                "total_estimated_cost": ZERO,
+            },
+        )
+        cost_per_unit = wo.bom.cost_per_unit if wo.bom else ZERO
+        b["count"] += 1
+        b["total_qty"] += wo.qty
+        b["total_produced_qty"] += wo.produced_qty
+        b["total_pending_qty"] += max(ZERO, wo.qty - wo.produced_qty)
+        b["total_estimated_cost"] += (cost_per_unit * wo.qty).quantize(Decimal("0.01"))
+    return [
+        WorkOrderSummaryRow(status=status, **vals)
+        for status, vals in sorted(buckets.items(), key=lambda x: x[0])
+    ]
+
+
+async def production_analytics(
+    db: AsyncSession, company_id: uuid.UUID
+) -> list[ProductionAnalyticsRow]:
+    """Monthly completed production (qty + estimated cost) from Work Orders."""
+    stmt = (
+        select(WorkOrder)
+        .options(selectinload(WorkOrder.bom))
+        .where(
+            WorkOrder.company_id == company_id,
+            WorkOrder.docstatus == DOCSTATUS_SUBMITTED,
+            WorkOrder.status == "Completed",
+            WorkOrder.actual_end_date.is_not(None),
+        )
+        .order_by(WorkOrder.actual_end_date.asc())
+    )
+    buckets: dict[str, dict] = {}
+    for wo in (await db.execute(stmt)).scalars():
+        if wo.actual_end_date is None:
+            continue
+        period = wo.actual_end_date.strftime("%Y-%m")
+        b = buckets.setdefault(
+            period,
+            {"work_orders_completed": 0, "qty_produced": ZERO, "estimated_cost": ZERO},
+        )
+        cost_per_unit = wo.bom.cost_per_unit if wo.bom else ZERO
+        b["work_orders_completed"] += 1
+        b["qty_produced"] += wo.produced_qty
+        b["estimated_cost"] += (cost_per_unit * wo.produced_qty).quantize(Decimal("0.01"))
+    return [
+        ProductionAnalyticsRow(period=period, **vals)
+        for period, vals in sorted(buckets.items())
+    ]

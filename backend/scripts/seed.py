@@ -160,6 +160,14 @@ DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     ("Accounts User", "Purchase Receipt", ["read"]),
     ("Accounts User", "Sales Order", ["read"]),
     ("Accounts User", "Delivery Note", ["read"]),
+    # Manufacturing
+    ("Manufacturing Manager", "BOM", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Work Order", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Job Card", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Production Plan", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Subcontract Job", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Quality Inspection", _ACCOUNTS_TXN_ALL),
+    ("Manufacturing Manager", "Stock Entry", _ACCOUNTS_TXN_USER),
 ]
 
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Stock Entry — create (draft) + detail (read-only with submit/cancel).
+// Purposes: Receipt / Issue / Transfer / Repack (BOM-less consume + produce).
 
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
@@ -13,6 +14,10 @@ import { formatCurrency, formatDate, formatQty } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type { StockEntryDetail, StockEntryItemIn } from "@/types/stock";
 
+type Purpose = "Material Receipt" | "Material Issue" | "Material Transfer" | "Repack";
+type AccountOpt = { value: string; label: string };
+type Row = StockEntryItemIn & { is_finished_item?: boolean };
+
 const route = useRoute();
 const router = useRouter();
 const store = useStockStore();
@@ -23,22 +28,37 @@ const isEdit = computed(() => !!id.value);
 const doc = ref<StockEntryDetail | null>(null);
 const saving = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
+const accounts = ref<AccountOpt[]>([]);
 
-const purpose = ref<"Material Receipt" | "Material Issue" | "Material Transfer">("Material Receipt");
+const purpose = ref<Purpose>("Material Receipt");
 const postingDate = ref(new Date().toISOString().slice(0, 10));
 const fromWarehouseId = ref("");
 const toWarehouseId = ref("");
 const remarks = ref("");
-const rows = ref<StockEntryItemIn[]>([{ item_id: "", qty: 1, basic_rate: 0 }]);
+const operatingCost = ref(0);
+const operatingCostAccountId = ref("");
+const rows = ref<Row[]>([{ item_id: "", qty: 1, basic_rate: 0, is_finished_item: false }]);
 
+const isRepack = computed(() => purpose.value === "Repack");
 const needsSource = computed(() => purpose.value !== "Material Receipt");
 const needsTarget = computed(() => purpose.value !== "Material Issue");
-const showRate = computed(() => purpose.value === "Material Receipt");
+const showRate = computed(() => purpose.value === "Material Receipt" || isRepack.value);
 
 function whName(wid: string | null | undefined): string {
   if (!wid) return "—";
   return store.warehouses.find((w) => w.id === wid)?.warehouse_name ?? "—";
 }
+
+function newRow(finished = false): Row {
+  return { item_id: "", qty: 1, basic_rate: 0, is_finished_item: finished };
+}
+
+watch(purpose, (p) => {
+  if (p === "Repack") {
+    // Default layout: row 1 = consume (pack), row 2 = produce (loose units)
+    rows.value = [newRow(false), newRow(true)];
+  }
+});
 
 async function load(): Promise<void> {
   if (!id.value) return;
@@ -53,14 +73,26 @@ async function save(): Promise<void> {
   saving.value = true;
   error.value = null;
   try {
-    const { data } = await api.post<{ id: string }>("/stock-entries", {
+    const payload: Record<string, unknown> = {
       purpose: purpose.value,
       posting_date: postingDate.value,
       from_warehouse_id: needsSource.value ? fromWarehouseId.value || null : null,
       to_warehouse_id: needsTarget.value ? toWarehouseId.value || null : null,
       remarks: remarks.value || null,
-      items: rows.value.filter((r) => r.item_id),
-    });
+      items: rows.value
+        .filter((r) => r.item_id)
+        .map((r) => ({
+          item_id: r.item_id,
+          qty: r.qty,
+          basic_rate: r.basic_rate ?? 0,
+          is_finished_item: isRepack.value ? !!r.is_finished_item : false,
+        })),
+    };
+    if (isRepack.value) {
+      payload.operating_cost = operatingCost.value || 0;
+      payload.operating_cost_account_id = operatingCostAccountId.value || null;
+    }
+    const { data } = await api.post<{ id: string }>("/stock-entries", payload);
     router.push(`/stock-entries/${data.id}`);
   } catch (e) {
     error.value = e as ErrorEnvelope;
@@ -80,7 +112,18 @@ async function docAction(action: "submit" | "cancel"): Promise<void> {
 }
 
 onMounted(async () => {
-  await Promise.all([store.fetchItems(), store.fetchWarehouses()]);
+  await Promise.all([
+    store.fetchItems(),
+    store.fetchWarehouses(),
+    api
+      .get<AccountOpt[]>("/registry/account/options")
+      .then((r) => {
+        accounts.value = r.data;
+      })
+      .catch(() => {
+        accounts.value = [];
+      }),
+  ]);
   await load();
 });
 </script>
@@ -112,6 +155,10 @@ onMounted(async () => {
         <div><div class="text-xs uppercase text-gray-400">From</div>{{ whName(doc.from_warehouse_id) }}</div>
         <div><div class="text-xs uppercase text-gray-400">To</div>{{ whName(doc.to_warehouse_id) }}</div>
         <div><div class="text-xs uppercase text-gray-400">Total</div>{{ formatCurrency(doc.total_amount, companyCurrency) }}</div>
+        <div v-if="Number(doc.operating_cost || 0) > 0" class="col-span-2">
+          <div class="text-xs uppercase text-gray-400">Operating cost</div>
+          {{ formatCurrency(doc.operating_cost, companyCurrency) }}
+        </div>
         <div v-if="doc.remarks" class="col-span-4"><div class="text-xs uppercase text-gray-400">Remarks</div>{{ doc.remarks }}</div>
       </section>
 
@@ -156,7 +203,10 @@ onMounted(async () => {
           <div>
             <label class="form-label">Purpose*</label>
             <select v-model="purpose" class="form-input">
-              <option>Material Receipt</option><option>Material Issue</option><option>Material Transfer</option>
+              <option>Material Receipt</option>
+              <option>Material Issue</option>
+              <option>Material Transfer</option>
+              <option>Repack</option>
             </select>
           </div>
           <div>
@@ -164,35 +214,81 @@ onMounted(async () => {
             <input v-model="postingDate" type="date" class="form-input" />
           </div>
           <div v-if="needsSource">
-            <label class="form-label">From Warehouse*</label>
+            <label class="form-label">{{ isRepack ? "From (consume)*" : "From Warehouse*" }}</label>
             <select v-model="fromWarehouseId" class="form-input">
               <option value="" disabled>Select…</option>
               <option v-for="w in store.leafWarehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
             </select>
           </div>
           <div v-if="needsTarget">
-            <label class="form-label">To Warehouse*</label>
+            <label class="form-label">{{ isRepack ? "To (produce)*" : "To Warehouse*" }}</label>
             <select v-model="toWarehouseId" class="form-input">
               <option value="" disabled>Select…</option>
               <option v-for="w in store.leafWarehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
             </select>
           </div>
         </div>
-        <div class="mb-1 mt-4 grid grid-cols-12 gap-2 text-xs font-medium text-gray-500">
-          <div class="col-span-6">Item</div><div class="col-span-3 text-right">Qty</div>
-          <div v-if="showRate" class="col-span-3 text-right">Rate</div>
+
+        <div v-if="isRepack" class="mt-4 grid grid-cols-2 gap-4">
+          <div>
+            <label class="form-label">Operating cost</label>
+            <input v-model.number="operatingCost" type="number" min="0" step="any" class="form-input" />
+          </div>
+          <div>
+            <label class="form-label">Operating cost account</label>
+            <select v-model="operatingCostAccountId" class="form-input">
+              <option value="">— (required if cost &gt; 0)</option>
+              <option v-for="a in accounts" :key="a.value" :value="a.value">{{ a.label }}</option>
+            </select>
+          </div>
+          <p class="col-span-2 text-xs text-gray-500">
+            <strong>Consumed</strong> = what you take out of stock.
+            <strong>Produced</strong> = what you put back (set Role).
+            Example — break 1 pack into 10 units: Consumed qty <strong>1</strong>, Produced qty <strong>10</strong>
+            (same or different item). Value of the consumed row is spread across produced qty on Submit
+            (draft rates stay ₹0 until then).
+          </p>
         </div>
-        <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 gap-2">
-          <select v-model="row.item_id" class="form-input col-span-6">
+
+        <div class="mb-1 mt-4 grid grid-cols-12 gap-2 text-xs font-medium text-gray-500">
+          <div :class="isRepack ? 'col-span-5' : 'col-span-6'">Item</div>
+          <div v-if="isRepack" class="col-span-2 text-center">Role</div>
+          <div class="col-span-2 text-right">Qty</div>
+          <div v-if="showRate" class="col-span-3 text-right">{{ isRepack ? "Rate / weight" : "Rate" }}</div>
+          <div v-else class="col-span-3" />
+        </div>
+        <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 gap-2 items-center">
+          <select v-model="row.item_id" :class="['form-input', isRepack ? 'col-span-5' : 'col-span-6']">
             <option value="" disabled>Item…</option>
             <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
-          <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-3 text-right" />
-          <input v-if="showRate" v-model.number="row.basic_rate" type="number" min="0" step="any" placeholder="Rate" class="form-input col-span-3 text-right" />
+          <div v-if="isRepack" class="col-span-2">
+            <select
+              class="form-input text-xs"
+              :value="row.is_finished_item ? 'produced' : 'consumed'"
+              @change="row.is_finished_item = ($event.target as HTMLSelectElement).value === 'produced'"
+            >
+              <option value="consumed">Consumed</option>
+              <option value="produced">Produced</option>
+            </select>
+          </div>
+          <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-2 text-right" />
+          <input
+            v-if="showRate"
+            v-model.number="row.basic_rate"
+            type="number"
+            min="0"
+            step="any"
+            :placeholder="isRepack && row.is_finished_item ? 'Weight' : 'Rate'"
+            class="form-input col-span-3 text-right"
+          />
           <div v-else class="col-span-3 flex items-center justify-end pr-2 text-xs text-gray-400">at current valuation</div>
         </div>
-        <div class="mt-2 flex items-center justify-between">
-          <button type="button" class="btn-secondary" @click="rows.push({ item_id: '', qty: 1, basic_rate: 0 })">Add Row</button>
+        <div class="mt-2 flex items-center justify-between gap-2">
+          <div class="flex gap-2">
+            <button type="button" class="btn-secondary" @click="rows.push(newRow(false))">+ Consumed</button>
+            <button v-if="isRepack" type="button" class="btn-secondary" @click="rows.push(newRow(true))">+ Produced</button>
+          </div>
           <input v-model="remarks" class="form-input w-72" placeholder="Remarks (optional)" />
         </div>
       </section>

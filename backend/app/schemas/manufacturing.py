@@ -6,7 +6,7 @@ rest of the API); create/input payloads use ``Decimal`` with validation.
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -23,30 +23,60 @@ class BOMItemIn(BaseModel):
     item_id: uuid.UUID
     qty: Decimal = Field(gt=0)
     uom: str | None = None
-    rate: Decimal | None = Field(default=None, ge=0)  # override; else sourced from valuation
+    rate: Decimal | None = Field(default=None, ge=0)  # override; else sourced from valuation / child BOM
     source_warehouse_id: uuid.UUID | None = None
+    allow_alternative_item: bool = False
+
+
+class BOMScrapItemIn(BaseModel):
+    """Expected scrap / by-product line on a BOM (recovery value optional)."""
+
+    item_id: uuid.UUID
+    qty: Decimal = Field(gt=0)
+    uom: str | None = None
+    rate: Decimal = Field(default=Decimal("0"), ge=0)  # recovery value per stock unit
+    stock_warehouse_id: uuid.UUID | None = None
+
+
+class BOMOperationIn(BaseModel):
+    """One process step on a BOM (time × hour_rate → operating cost)."""
+
+    operation_id: uuid.UUID
+    workstation_id: uuid.UUID | None = None
+    time_in_mins: Decimal = Field(ge=0, default=Decimal("0"))
+    hour_rate: Decimal | None = Field(default=None, ge=0)  # else workstation / operation default
+    description: str | None = None
 
 
 class BOMCreate(BaseModel):
     production_item_id: uuid.UUID
     quantity: Decimal = Field(gt=0, default=Decimal("1"))
     uom: str | None = None
+    # Flat labour; operation time×rate is added on top into stored operating_cost.
     operating_cost: Decimal = Field(ge=0, le=Decimal("999999999999999"), default=Decimal("0"))
     is_default: bool = False
+    is_phantom: bool = False
+    routing_id: uuid.UUID | None = None  # optional: seed operations from a Routing
     currency: str | None = None  # defaults to the company currency
     remarks: str | None = None
     items: list[BOMItemIn] = Field(min_length=1)
+    scrap_items: list[BOMScrapItemIn] = []
+    operations: list[BOMOperationIn] = []
 
 
 class BOMUpdate(BaseModel):
-    """Replace a draft BOM's editable fields + component list (full replace of items)."""
+    """Replace a draft BOM's editable fields + component/scrap/ops lists (full replace)."""
 
     quantity: Decimal | None = Field(default=None, gt=0)
     uom: str | None = None
     operating_cost: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999999"))
     is_default: bool | None = None
+    is_phantom: bool | None = None
+    routing_id: uuid.UUID | None = None
     remarks: str | None = None
     items: list[BOMItemIn] | None = Field(default=None, min_length=1)
+    scrap_items: list[BOMScrapItemIn] | None = None
+    operations: list[BOMOperationIn] | None = None
 
 
 class BOMItemResponse(ORMModel):
@@ -62,6 +92,35 @@ class BOMItemResponse(ORMModel):
     rate: Decimal
     amount: Decimal
     source_warehouse_id: uuid.UUID | None
+    allow_alternative_item: bool = False
+
+
+class BOMScrapItemResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    item_id: uuid.UUID
+    item_code: str | None
+    item_name: str | None
+    qty: Decimal
+    uom: str | None
+    conversion_factor: Decimal
+    stock_qty: Decimal
+    rate: Decimal
+    amount: Decimal
+    stock_warehouse_id: uuid.UUID | None
+
+
+class BOMOperationResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    operation_id: uuid.UUID
+    operation_name: str | None
+    workstation_id: uuid.UUID | None
+    workstation_name: str | None
+    time_in_mins: Decimal
+    hour_rate: Decimal
+    operating_cost: Decimal
+    description: str | None
 
 
 class BOMResponse(DocumentMeta):
@@ -73,14 +132,19 @@ class BOMResponse(DocumentMeta):
     quantity: Decimal
     is_active: bool
     is_default: bool
+    is_phantom: bool = False
+    routing_id: uuid.UUID | None = None
     currency: str
     operating_cost: Decimal
     raw_material_cost: Decimal
+    scrap_cost: Decimal = Decimal("0")
     total_cost: Decimal
     cost_per_unit: Decimal
     remarks: str | None
     company_id: uuid.UUID
     items: list[BOMItemResponse]
+    scrap_items: list[BOMScrapItemResponse] = []
+    operations: list[BOMOperationResponse] = []
 
 
 class BOMListItem(ORMModel):
@@ -91,6 +155,7 @@ class BOMListItem(ORMModel):
     quantity: Decimal
     is_active: bool
     is_default: bool
+    is_phantom: bool = False
     total_cost: Decimal
     cost_per_unit: Decimal
     docstatus: int
@@ -115,19 +180,41 @@ class WorkOrderCreate(BaseModel):
     remarks: str | None = None
 
 
+class WorkOrderFinishLineIn(BaseModel):
+    """Serial/batch picks (and optional alternate) for one consumed component on Finish."""
+
+    item_id: uuid.UUID  # the Work Order required item (planned)
+    substitute_item_id: uuid.UUID | None = None  # consume this instead when allowed
+    serial_nos: list[str] | None = None
+    batch_no: str | None = None
+
+
 class WorkOrderFinishIn(BaseModel):
     """Finish (manufacture) some or all of a Work Order's quantity."""
 
     qty: Decimal = Field(gt=0)  # FG units to produce now (≤ remaining)
     posting_date: date
     operating_cost_account_id: uuid.UUID | None = None  # overrides the WO default
+    # Tracking picks (required when the FG / components are serial or batch tracked).
+    consumed: list[WorkOrderFinishLineIn] = []
+    finished_serial_nos: list[str] | None = None
+    finished_batch_no: str | None = None
 
 
 class WorkOrderTransferIn(BaseModel):
-    """Optional: transfer required materials source → WIP warehouse (Phase 3)."""
+    """Optional: transfer required materials source → WIP warehouse."""
 
     qty: Decimal = Field(gt=0)  # FG-equivalent qty whose materials to move
     posting_date: date
+    consumed: list[WorkOrderFinishLineIn] = []
+
+
+class WorkOrderConsumeIn(BaseModel):
+    """Mid-process Material Consumption for Manufacture (independent of Finish)."""
+
+    qty: Decimal = Field(gt=0)  # FG-equivalent qty whose materials to consume now
+    posting_date: date
+    consumed: list[WorkOrderFinishLineIn] = []
 
 
 class WorkOrderItemResponse(ORMModel):
@@ -142,6 +229,24 @@ class WorkOrderItemResponse(ORMModel):
     source_warehouse_id: uuid.UUID | None
     rate: Decimal
     amount: Decimal
+    allow_alternative_item: bool = False
+    has_serial_no: bool = False
+    has_batch_no: bool = False
+
+
+class WorkOrderOperationResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    operation_id: uuid.UUID
+    operation_name: str | None
+    workstation_id: uuid.UUID | None
+    workstation_name: str | None
+    time_in_mins: Decimal
+    hour_rate: Decimal
+    planned_operating_cost: Decimal
+    completed_qty: Decimal
+    status: str
+    description: str | None
 
 
 class WorkOrderResponse(DocumentMeta):
@@ -149,6 +254,8 @@ class WorkOrderResponse(DocumentMeta):
     production_item_id: uuid.UUID
     production_item_code: str | None
     production_item_name: str | None
+    production_has_serial_no: bool = False
+    production_has_batch_no: bool = False
     bom_id: uuid.UUID
     bom_name: str | None
     qty: Decimal
@@ -169,6 +276,8 @@ class WorkOrderResponse(DocumentMeta):
     remarks: str | None
     company_id: uuid.UUID
     items: list[WorkOrderItemResponse]
+    operations: list[WorkOrderOperationResponse] = []
+    warnings: list[str] = Field(default_factory=list)
 
 
 class WorkOrderListItem(ORMModel):
@@ -193,7 +302,7 @@ class WorkOrderFinishResult(BaseModel):
     status: str
 
 
-# --- Phase 3: material availability --------------------------------------------------
+# --- material availability -----------------------------------------------------------
 
 
 class MaterialAvailabilityRow(BaseModel):
@@ -220,17 +329,175 @@ class MaterialAvailabilityResponse(BaseModel):
 
 
 class ManufacturingSettings(BaseModel):
-    """The lean 4-field slice of ERPNext's Manufacturing Settings we actually need.
-
-    Stored as one SystemSetting JSON value per company; every field optional."""
+    """Lean Manufacturing Settings blob (SystemSetting JSON per company)."""
 
     default_source_warehouse_id: uuid.UUID | None = None
     default_wip_warehouse_id: uuid.UUID | None = None
     default_fg_warehouse_id: uuid.UUID | None = None
     over_production_percentage: Decimal = Field(ge=0, le=100, default=Decimal("0"))
+    capacity_planning_enabled: bool = False
+    # off = skip SO/QTN check; warn = soft warnings on submit; block = hard 422
+    order_fulfillment_mode: str = Field(default="warn", pattern="^(off|warn|block)$")
 
 
-# --- Phase 4: reports ----------------------------------------------------------------
+# --- Job Card ------------------------------------------------------------------------
+
+
+class JobCardTimeLogResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    from_time: datetime
+    to_time: datetime | None = None
+    time_in_mins: Decimal
+    completed_qty: Decimal
+
+
+class JobCardResponse(DocumentMeta):
+    name: str
+    work_order_id: uuid.UUID
+    work_order_name: str | None
+    work_order_operation_id: uuid.UUID
+    operation_id: uuid.UUID
+    operation_name: str | None
+    workstation_id: uuid.UUID | None
+    workstation_name: str | None
+    for_quantity: Decimal
+    total_completed_qty: Decimal
+    time_in_mins: Decimal
+    status: str
+    remarks: str | None
+    company_id: uuid.UUID
+    time_logs: list[JobCardTimeLogResponse] = []
+
+
+class JobCardListItem(ORMModel):
+    id: uuid.UUID
+    name: str
+    work_order_name: str | None
+    operation_name: str | None
+    workstation_name: str | None
+    for_quantity: Decimal
+    total_completed_qty: Decimal
+    status: str
+    docstatus: int
+
+
+class JobCardCompleteIn(BaseModel):
+    """Stop the open time log and/or record completed qty on a Job Card."""
+
+    completed_qty: Decimal = Field(ge=0, default=Decimal("0"))
+    to_time: datetime | None = None  # defaults to now
+
+
+# --- Production Plan ------------------------------------------------------------------
+
+
+class ProductionPlanItemIn(BaseModel):
+    """Manual FG demand row (or override after get-items)."""
+
+    item_id: uuid.UUID
+    bom_id: uuid.UUID | None = None
+    planned_qty: Decimal = Field(gt=0)
+    warehouse_id: uuid.UUID | None = None
+    planned_start_date: date | None = None
+    sales_order_id: uuid.UUID | None = None
+    description: str | None = None
+
+
+class ProductionPlanCreate(BaseModel):
+    posting_date: date
+    from_date: date | None = None
+    to_date: date | None = None
+    get_items_from: str = Field(default="Sales Order", pattern="^(Sales Order|Manual)$")
+    fg_warehouse_id: uuid.UUID | None = None
+    source_warehouse_id: uuid.UUID | None = None
+    remarks: str | None = None
+    items: list[ProductionPlanItemIn] = []
+
+
+class ProductionPlanUpdate(BaseModel):
+    posting_date: date | None = None
+    from_date: date | None = None
+    to_date: date | None = None
+    get_items_from: str | None = Field(default=None, pattern="^(Sales Order|Manual)$")
+    fg_warehouse_id: uuid.UUID | None = None
+    source_warehouse_id: uuid.UUID | None = None
+    remarks: str | None = None
+    items: list[ProductionPlanItemIn] | None = None
+
+
+class ProductionPlanItemResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    item_id: uuid.UUID
+    item_code: str | None
+    item_name: str | None
+    bom_id: uuid.UUID | None
+    bom_name: str | None
+    sales_order_id: uuid.UUID | None
+    sales_order_name: str | None
+    sales_order_item_id: uuid.UUID | None
+    planned_qty: Decimal
+    pending_qty: Decimal
+    ordered_qty: Decimal
+    warehouse_id: uuid.UUID | None
+    planned_start_date: date | None
+    work_order_id: uuid.UUID | None
+    description: str | None
+
+
+class ProductionPlanMRResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    item_id: uuid.UUID
+    item_code: str | None
+    item_name: str | None
+    warehouse_id: uuid.UUID | None
+    required_qty: Decimal
+    available_qty: Decimal
+    shortfall_qty: Decimal
+    material_request_id: uuid.UUID | None
+
+
+class ProductionPlanResponse(DocumentMeta):
+    name: str
+    posting_date: date
+    from_date: date | None
+    to_date: date | None
+    get_items_from: str
+    fg_warehouse_id: uuid.UUID | None
+    source_warehouse_id: uuid.UUID | None
+    status: str
+    work_orders_created: bool
+    material_requests_created: bool
+    remarks: str | None
+    company_id: uuid.UUID
+    items: list[ProductionPlanItemResponse] = []
+    material_requests: list[ProductionPlanMRResponse] = []
+
+
+class ProductionPlanListItem(ORMModel):
+    id: uuid.UUID
+    name: str
+    posting_date: date
+    from_date: date | None
+    to_date: date | None
+    status: str
+    work_orders_created: bool
+    material_requests_created: bool
+    docstatus: int
+
+
+class ProductionPlanCreateResult(BaseModel):
+    """Outcome of create-work-orders / create-material-requests."""
+
+    production_plan_id: uuid.UUID
+    created_ids: list[uuid.UUID]
+    created_names: list[str]
+    count: int
+
+
+# --- reports -------------------------------------------------------------------------
 
 
 class MaterialShortageRow(BaseModel):
@@ -294,3 +561,315 @@ class BOMStockReport(BaseModel):
     for_qty: Decimal  # finished units the report was run for
     buildable_qty: Decimal  # how many finished units current stock supports
     rows: list[BOMStockReportRow]
+
+
+class BOMExplorerRow(BaseModel):
+    """One leaf (or stocked sub-assembly) line in a flattened BOM Explorer tree."""
+
+    item_id: uuid.UUID
+    item_code: str | None
+    item_name: str | None
+    stock_qty: Decimal  # absolute qty for for_qty finished units
+    rate: Decimal
+    amount: Decimal
+    level: int
+    source_warehouse_id: uuid.UUID | None = None
+    is_leaf: bool = True
+
+
+class BOMExplorerReport(BaseModel):
+    """Flatten a nested BOM to its material requirements (phantoms always exploded)."""
+
+    bom_id: uuid.UUID
+    bom_name: str
+    production_item_code: str | None
+    production_item_name: str | None
+    for_qty: Decimal
+    flatten_all: bool
+    raw_material_cost: Decimal
+    scrap_cost: Decimal
+    operating_cost: Decimal
+    total_cost: Decimal
+    rows: list[BOMExplorerRow]
+    scrap_rows: list[BOMExplorerRow] = []
+
+
+# --- Subcontract Job (Phase 4) --------------------------------------------------------
+
+
+class SubcontractJobCreate(BaseModel):
+    bom_id: uuid.UUID
+    supplier_id: uuid.UUID
+    qty: Decimal = Field(gt=0)
+    posting_date: date
+    supplier_warehouse_id: uuid.UUID
+    source_warehouse_id: uuid.UUID | None = None
+    fg_warehouse_id: uuid.UUID | None = None
+    service_cost: Decimal = Field(ge=0, default=Decimal("0"))
+    service_cost_account_id: uuid.UUID | None = None
+    remarks: str | None = None
+
+
+class SubcontractJobSendIn(BaseModel):
+    qty: Decimal = Field(gt=0)
+    posting_date: date
+
+
+class SubcontractJobReceiveIn(BaseModel):
+    qty: Decimal = Field(gt=0)
+    posting_date: date
+    service_cost_account_id: uuid.UUID | None = None
+
+
+class SubcontractJobItemResponse(ORMModel):
+    id: uuid.UUID
+    idx: int
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    required_qty: Decimal
+    sent_qty: Decimal
+    consumed_qty: Decimal
+    source_warehouse_id: uuid.UUID | None = None
+    rate: Decimal
+    amount: Decimal
+
+
+class SubcontractJobResponse(DocumentMeta):
+    name: str
+    supplier_id: uuid.UUID
+    supplier_name: str | None = None
+    production_item_id: uuid.UUID
+    production_item_code: str | None = None
+    production_item_name: str | None = None
+    bom_id: uuid.UUID
+    bom_name: str | None = None
+    qty: Decimal
+    sent_qty: Decimal
+    received_qty: Decimal
+    source_warehouse_id: uuid.UUID
+    supplier_warehouse_id: uuid.UUID
+    fg_warehouse_id: uuid.UUID
+    service_cost: Decimal
+    service_cost_account_id: uuid.UUID | None = None
+    status: str
+    posting_date: date
+    remarks: str | None = None
+    company_id: uuid.UUID
+    items: list[SubcontractJobItemResponse] = []
+
+
+class SubcontractJobListItem(ORMModel):
+    id: uuid.UUID
+    name: str
+    supplier_name: str | None = None
+    production_item_code: str | None = None
+    bom_name: str | None = None
+    qty: Decimal
+    sent_qty: Decimal
+    received_qty: Decimal
+    status: str
+    docstatus: int
+    posting_date: date
+
+
+class SubcontractJobActionResult(BaseModel):
+    job: SubcontractJobResponse
+    stock_entry_id: uuid.UUID
+    stock_entry_name: str
+
+
+# --- Phase 6 reports ------------------------------------------------------------------
+
+
+class WorkOrderSummaryRow(BaseModel):
+    status: str
+    count: int
+    total_qty: Decimal
+    total_produced_qty: Decimal
+    total_pending_qty: Decimal
+    total_estimated_cost: Decimal
+
+
+class ProductionAnalyticsRow(BaseModel):
+    period: str  # YYYY-MM
+    work_orders_completed: int
+    qty_produced: Decimal
+    estimated_cost: Decimal
+
+
+# --- Phase 7.0 lead-time / CTP --------------------------------------------------------
+
+
+class LeadTimeComponentRowOut(BaseModel):
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    required_qty: Decimal
+    available_qty: Decimal
+    shortfall_qty: Decimal
+    lead_time_days: int
+    drives_wait: bool = False
+
+
+class LeadTimeEstimateOut(BaseModel):
+    """Capable-to-promise estimate: materials wait + manufacture days → promise date."""
+
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    bom_id: uuid.UUID | None = None
+    bom_name: str | None = None
+    qty: Decimal
+    as_of: date
+    warehouse_id: uuid.UUID | None = None
+    procurement_days: int
+    manufacturing_days: int
+    total_days: int
+    earliest_promise_date: date
+    operation_mins: Decimal
+    components: list[LeadTimeComponentRowOut] = []
+    notes: list[str] = []
+
+
+class ProcurementSuggestionOut(BaseModel):
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    shortfall_qty: Decimal
+    lead_time_days: int
+    latest_order_date: date
+    days_until_order: int
+
+
+class ReverseScheduleOut(BaseModel):
+    """Phase 7.1: reverse schedule from a customer delivery date + procurement order-by dates."""
+
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    bom_id: uuid.UUID | None = None
+    bom_name: str | None = None
+    qty: Decimal
+    as_of: date
+    delivery_date: date
+    warehouse_id: uuid.UUID | None = None
+    procurement_days: int
+    manufacturing_days: int
+    total_days: int
+    earliest_promise_date: date
+    manufacturing_start_date: date
+    materials_ready_by: date
+    on_time: bool
+    slack_days: int
+    operation_mins: Decimal
+    procurement: list[ProcurementSuggestionOut] = []
+    components: list[LeadTimeComponentRowOut] = []
+    notes: list[str] = []
+
+
+class PeggingRowOut(BaseModel):
+    side: str  # demand | supply
+    source_type: str
+    source_id: uuid.UUID | None = None
+    source_name: str | None = None
+    qty: Decimal
+    due_date: date | None = None
+    notes: str | None = None
+
+
+class PeggingTimelineOut(BaseModel):
+    """Phase 7.2: demand → supply pegging for one item + CTP for uncovered qty."""
+
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    as_of: date
+    warehouse_id: uuid.UUID | None = None
+    demand_qty: Decimal
+    supply_qty: Decimal
+    net_shortfall: Decimal
+    earliest_promise_date: date | None = None
+    ctp: LeadTimeEstimateOut | None = None
+    rows: list[PeggingRowOut] = []
+    notes: list[str] = []
+
+
+class ForecastHistoryRowOut(BaseModel):
+    period: str
+    demand_qty: Decimal
+    is_forecast: bool = False
+
+
+class DemandForecastOut(BaseModel):
+    """Phase 7.3: light moving-average demand forecast from Sales Order history."""
+
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    lookback_months: int
+    horizon_months: int
+    method: str
+    average_monthly_demand: Decimal
+    rows: list[ForecastHistoryRowOut] = []
+    notes: list[str] = []
+
+
+class WhatIfStockOverride(BaseModel):
+    item_id: uuid.UUID
+    extra_qty: Decimal = Field(ge=0)
+
+
+class WhatIfLeadOverride(BaseModel):
+    item_id: uuid.UUID
+    lead_time_days: int = Field(ge=0)
+
+
+class WhatIfCtpIn(BaseModel):
+    """Phase 7.4: non-persistent CTP with stock / lead-time overrides."""
+
+    item_id: uuid.UUID
+    qty: Decimal = Field(gt=0)
+    as_of: date | None = None
+    warehouse_id: uuid.UUID | None = None
+    extra_stock: list[WhatIfStockOverride] = []
+    lead_time_overrides: list[WhatIfLeadOverride] = []
+
+
+class CapacityBoardRowOut(BaseModel):
+    workstation_id: uuid.UUID
+    workstation_name: str
+    working_hours_per_day: Decimal
+    capacity_mins_per_day: Decimal
+    planned_mins: Decimal
+    open_work_orders: int
+    utilization_pct: Decimal
+    overloaded: bool
+
+
+class CapacityBoardOut(BaseModel):
+    """Phase 7.5: soft workstation load vs daily capacity."""
+
+    as_of: date
+    rows: list[CapacityBoardRowOut] = []
+    notes: list[str] = []
+
+
+# --- Planning Dashboard context -------------------------------------------------------
+
+
+class PlanningContextLineOut(BaseModel):
+    item_id: uuid.UUID
+    item_code: str | None = None
+    item_name: str | None = None
+    qty: Decimal
+    delivery_date: date | None = None
+    warehouse_id: uuid.UUID | None = None
+    source_label: str | None = None
+
+
+class PlanningContextOut(BaseModel):
+    context_type: str
+    document_id: uuid.UUID | None = None
+    document_name: str | None = None
+    lines: list[PlanningContextLineOut] = []

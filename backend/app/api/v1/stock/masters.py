@@ -12,6 +12,7 @@ from app.core.permissions import require_permission
 from app.core.security import CurrentUser, get_tenant_db
 from app.schemas.common import ListResponse
 from app.schemas.stock import (
+    ItemAlternativeOption,
     ItemCreate,
     ItemGroupCreate,
     ItemGroupResponse,
@@ -28,6 +29,7 @@ from app.schemas.stock import (
     WarehouseUpdate,
 )
 from app.services import stock_masters as service
+from app.services.stock_common import get_item as get_item_master
 
 router = APIRouter(tags=["stock: masters"])
 
@@ -183,6 +185,30 @@ async def get_item_rate(
         item_id=item.id, rate=rate, source=source, uom=item.stock_uom,
         item_name=item.item_name, description=item.description,
     )
+
+
+@router.get(
+    "/items/{item_id}/alternatives",
+    response_model=list[ItemAlternativeOption],
+    summary="List Item Alternatives for an item",
+    description="Substitutes allowed on Work Order Finish when the BOM line has "
+                "Allow Alternative Item. Manage pairs under /m/item-alternative.",
+)
+async def list_item_alternatives(
+    item_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Item", "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> list[ItemAlternativeOption]:
+    await get_item_master(db, item_id, current_user.company_id)
+    from app.services import item_alternative as alt_svc
+
+    alts = await alt_svc.list_alternatives_for_item(db, current_user.company_id, item_id)
+    return [
+        ItemAlternativeOption(
+            id=a.id, item_code=a.item_code, item_name=a.item_name, stock_uom=a.stock_uom
+        )
+        for a in alts
+    ]
 
 
 @router.post("/price-lists", response_model=PriceListResponse, status_code=201,

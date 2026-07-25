@@ -137,3 +137,47 @@ export interface RFQDetail extends DocumentMeta {
     quote_status: string;
   }>;
 }
+
+/** Capable-to-promise + BOM cost estimate from check-fulfillment endpoints. */
+export interface OrderFulfillmentShortfall {
+  item_id: string;
+  item_code: string | null;
+  item_name: string | null;
+  shortfall_qty: string;
+  estimated_buy_cost: string;
+}
+
+export interface OrderFulfillmentLine {
+  item_id: string;
+  item_code: string | null;
+  item_name: string | null;
+  qty: string;
+  delivery_date: string | null;
+  warehouse_id: string | null;
+  bom_id: string | null;
+  bom_name: string | null;
+  on_time: boolean | null;
+  earliest_promise_date: string | null;
+  bom_cost_per_unit: string;
+  estimated_cost: string;
+  selling_amount: string;
+  estimated_margin: string;
+  estimated_margin_pct: string | null;
+  shortfalls: OrderFulfillmentShortfall[];
+  notes: string[];
+  skipped: boolean;
+}
+
+export interface OrderFulfillment {
+  mode: string;
+  can_fulfill_on_time: boolean | null;
+  earliest_promise_date: string | null;
+  estimated_cost: string;
+  estimated_selling_amount: string;
+  estimated_margin: string;
+  estimated_margin_pct: string | null;
+  lines: OrderFulfillmentLine[];
+  warnings: string[];
+  hard_block_reasons: string[];
+  planning_dashboard_path: string;
+}

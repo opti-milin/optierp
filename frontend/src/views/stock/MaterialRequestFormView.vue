@@ -12,7 +12,7 @@ import { formatDate, formatQty } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type { MaterialRequestDetail } from "@/types/stock";
 
-const MR_TYPES = ["Purchase", "Material Transfer", "Material Issue"] as const;
+const MR_TYPES = ["Purchase", "Material Transfer", "Material Issue", "Manufacture"] as const;
 type MrRow = { item_id: string; qty: number; warehouse_id: string; schedule_date: string };
 
 const route = useRoute();

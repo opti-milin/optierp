@@ -28,6 +28,12 @@ from app.models.accounts import (
 from app.models.assets import Asset, AssetCategory, AssetMaintenance, Location
 from app.models.buying import Supplier, SupplierGroup
 from app.models.compliance import IncomeTaxRateTable, TaxAdjustmentCategory
+from app.models.manufacturing import (
+    Operation,
+    Routing,
+    RoutingOperation,
+    Workstation,
+)
 from app.models.selling import (
     Address,
     BlanketOrder,
@@ -57,6 +63,7 @@ from app.models.stock import (
     Batch,
     DeliveryNoteItem,
     Item,
+    ItemAlternative,
     ItemGroup,
     PurchaseReceiptItem,
     StockEntryItem,
@@ -1289,6 +1296,229 @@ register(
         ),
         list_fields=("batch_no", "item_id", "expiry_date", "disabled"),
         hooks={"validate": _validate_batch, "before_delete": _block_batch_delete_if_referenced},
+    )
+)
+
+
+# --- Stock: Item Alternative -------------------------------------------------
+
+
+async def _validate_item_alternative(db, descriptor, obj, user):  # noqa: ANN001
+    """Item ≠ alternative; both in-company stock items; set list title; optional reverse."""
+    if obj.item_id == obj.alternative_item_id:
+        raise ValidationError(
+            "Item and alternative item must be different",
+            field="alternative_item_id",
+        )
+    item = await db.get(Item, obj.item_id)
+    if item is None or item.company_id != obj.company_id:
+        raise ValidationError("Item not found in this company", field="item_id")
+    alt = await db.get(Item, obj.alternative_item_id)
+    if alt is None or alt.company_id != obj.company_id:
+        raise ValidationError("Alternative item not found in this company", field="alternative_item_id")
+    if not item.is_stock_item:
+        raise ValidationError(f"'{item.item_code}' is not a stock item", field="item_id")
+    if not alt.is_stock_item:
+        raise ValidationError(
+            f"'{alt.item_code}' is not a stock item",
+            field="alternative_item_id",
+        )
+
+    obj.title = f"{item.item_code} → {alt.item_code}"
+
+    # Idempotent reverse link when two_way is set (reverse row itself stays one-way).
+    if obj.two_way:
+        existing_rev = await db.scalar(
+            select(ItemAlternative.id).where(
+                ItemAlternative.company_id == obj.company_id,
+                ItemAlternative.item_id == obj.alternative_item_id,
+                ItemAlternative.alternative_item_id == obj.item_id,
+            )
+        )
+        if existing_rev is None:
+            db.add(
+                ItemAlternative(
+                    company_id=obj.company_id,
+                    item_id=obj.alternative_item_id,
+                    alternative_item_id=obj.item_id,
+                    two_way=False,
+                    title=f"{alt.item_code} → {item.item_code}",
+                    owner=user.id,
+                    modified_by=user.id,
+                )
+            )
+
+
+register(
+    DocTypeDescriptor(
+        name="Item Alternative",
+        slug="item-alternative",
+        model=ItemAlternative,
+        title_field="title",
+        naming="field:title",
+        group="Stock",
+        permission_name="Item Alternative",
+        permissions={
+            "Stock Manager": _STOCK_MANAGER,
+            "Stock User": _STOCK_USER_RW,
+            "System Manager": _STOCK_MANAGER,
+        },
+        fields=(
+            FieldSpec("item_id", "Item", "Link", options="item", required=True, in_list=True),
+            FieldSpec(
+                "alternative_item_id",
+                "Alternative Item",
+                "Link",
+                options="item",
+                required=True,
+                in_list=True,
+            ),
+            FieldSpec(
+                "two_way",
+                "Two Way",
+                "Check",
+                in_list=True,
+                help="Also allow the original item as a substitute for the alternative",
+            ),
+            FieldSpec("title", "Title", "Data", in_list=True, read_only=True,
+                      help="Auto-set from item codes"),
+        ),
+        list_fields=("title", "item_id", "alternative_item_id", "two_way"),
+        hooks={"validate": _validate_item_alternative},
+    )
+)
+
+
+# --- Manufacturing: Operation / Workstation / Routing -------------------------
+
+
+_MFG_MANAGER = ("read", "write", "create", "delete", "report")
+_MFG_PERMS = {
+    "Manufacturing Manager": _MFG_MANAGER,
+    "System Manager": _MFG_MANAGER,
+}
+
+
+async def _validate_routing(db, descriptor, obj, user):  # noqa: ANN001
+    """Unique sequence numbers; operations must belong to this company."""
+    seen: set[int] = set()
+    for row in obj.operations or []:
+        if row.idx in seen:
+            raise ValidationError(
+                f"Duplicate sequence {row.idx} on Routing operations",
+                field="operations",
+            )
+        seen.add(row.idx)
+        op = await db.get(Operation, row.operation_id)
+        if op is None or op.company_id != obj.company_id:
+            raise ValidationError("Operation not found in this company", field="operations")
+        if op.disabled:
+            raise ValidationError(
+                f"Operation '{op.operation_name}' is disabled",
+                field="operations",
+            )
+        if row.workstation_id is not None:
+            ws = await db.get(Workstation, row.workstation_id)
+            if ws is None or ws.company_id != obj.company_id:
+                raise ValidationError("Workstation not found in this company", field="operations")
+            if ws.disabled:
+                raise ValidationError(
+                    f"Workstation '{ws.workstation_name}' is disabled",
+                    field="operations",
+                )
+        if row.time_in_mins is not None and row.time_in_mins < 0:
+            raise ValidationError("Time in minutes cannot be negative", field="operations")
+
+
+register(
+    DocTypeDescriptor(
+        name="Operation",
+        slug="operation",
+        model=Operation,
+        title_field="operation_name",
+        naming="field:operation_name",
+        group="Manufacturing",
+        permission_name="Operation",
+        permissions=_MFG_PERMS,
+        fields=(
+            FieldSpec(
+                "operation_name", "Operation Name", "Data",
+                required=True, in_list=True, span=2, unique=True,
+            ),
+            FieldSpec("default_hour_rate", "Default Hour Rate", "Currency", in_list=True),
+            FieldSpec("description", "Description", "Text", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("operation_name", "default_hour_rate", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Workstation",
+        slug="workstation",
+        model=Workstation,
+        title_field="workstation_name",
+        naming="field:workstation_name",
+        group="Manufacturing",
+        permission_name="Workstation",
+        permissions=_MFG_PERMS,
+        fields=(
+            FieldSpec(
+                "workstation_name", "Workstation Name", "Data",
+                required=True, in_list=True, span=2, unique=True,
+            ),
+            FieldSpec("hour_rate", "Hour Rate", "Currency", in_list=True),
+            FieldSpec(
+                "working_hours", "Working Hours / Day", "Float", in_list=True,
+                help="Used for soft capacity warnings on Work Order submit.",
+            ),
+            FieldSpec("description", "Description", "Text", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("workstation_name", "hour_rate", "working_hours", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Routing",
+        slug="routing",
+        model=Routing,
+        title_field="routing_name",
+        naming="field:routing_name",
+        group="Manufacturing",
+        permission_name="Routing",
+        permissions=_MFG_PERMS,
+        fields=(
+            FieldSpec(
+                "routing_name", "Routing Name", "Data",
+                required=True, in_list=True, span=2, unique=True,
+            ),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("routing_name", "disabled"),
+        children=(
+            ChildSpec(
+                field="operations",
+                label="Operations",
+                model=RoutingOperation,
+                fk_column="routing_id",
+                fields=(
+                    FieldSpec("idx", "Sequence", "Int", required=True),
+                    FieldSpec(
+                        "operation_id", "Operation", "Link",
+                        options="operation", required=True,
+                    ),
+                    FieldSpec(
+                        "workstation_id", "Workstation", "Link",
+                        options="workstation",
+                    ),
+                    FieldSpec("time_in_mins", "Time (mins)", "Float"),
+                ),
+            ),
+        ),
+        hooks={"validate": _validate_routing},
     )
 )
 

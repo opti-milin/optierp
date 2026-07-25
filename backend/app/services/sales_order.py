@@ -426,6 +426,33 @@ async def submit_sales_order(
 
     warnings = await _credit_limit_warnings(db, so, customer)
 
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        raise_if_blocked,
+    )
+
+    fulfillment = await check_order_fulfillment(
+        db,
+        so.company_id,
+        [
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=row.qty,
+                selling_amount=row.amount or ZERO,
+                delivery_date=row.delivery_date,
+                warehouse_id=row.warehouse_id or so.set_warehouse_id,
+            )
+            for row in so.items
+            if row.item_id is not None
+        ],
+        header_delivery_date=so.delivery_date,
+        document_context="sales-order",
+        document_id=so.id,
+    )
+    raise_if_blocked(fulfillment)
+    warnings.extend(fulfillment.warnings)
+
     for row in so.items:
         item = items.get(row.item_id)
         if item is not None and item.is_stock_item and row.warehouse_id is not None:
@@ -446,6 +473,82 @@ async def submit_sales_order(
     )
     await db.commit()
     return await get_sales_order(db, so.id, user.company_id), warnings
+
+
+async def check_sales_order_fulfillment(
+    db: AsyncSession, so_id: uuid.UUID, company_id: uuid.UUID
+):
+    """Explicit Check Fulfillment for a saved Sales Order (always runs CTP even if mode=off)."""
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        fulfillment_result_to_dict,
+    )
+
+    so = await get_sales_order(db, so_id, company_id)
+    result = await check_order_fulfillment(
+        db,
+        so.company_id,
+        [
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=row.qty,
+                selling_amount=row.amount or ZERO,
+                delivery_date=row.delivery_date,
+                warehouse_id=row.warehouse_id or so.set_warehouse_id,
+            )
+            for row in so.items
+            if row.item_id is not None
+        ],
+        header_delivery_date=so.delivery_date,
+        document_context="sales-order",
+        document_id=so.id,
+        force=True,
+    )
+    return fulfillment_result_to_dict(result)
+
+
+async def preview_sales_order_fulfillment(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+    *,
+    items: list,
+    delivery_date,
+    set_warehouse_id=None,
+    as_of=None,
+):
+    from app.services.order_fulfillment import (
+        FulfillmentLineIn,
+        check_order_fulfillment,
+        fulfillment_result_to_dict,
+    )
+
+    lines: list[FulfillmentLineIn] = []
+    for row in items:
+        if row.item_id is None:
+            continue
+        qty = row.qty
+        rate = row.rate or ZERO
+        amount = (qty * rate).quantize(Decimal("0.01"))
+        lines.append(
+            FulfillmentLineIn(
+                item_id=row.item_id,
+                qty=qty,
+                selling_amount=amount,
+                delivery_date=getattr(row, "delivery_date", None),
+                warehouse_id=row.warehouse_id or set_warehouse_id,
+            )
+        )
+    result = await check_order_fulfillment(
+        db,
+        company_id,
+        lines,
+        header_delivery_date=delivery_date,
+        as_of=as_of,
+        document_context="sales-order",
+        force=True,
+    )
+    return fulfillment_result_to_dict(result)
 
 
 async def cancel_sales_order(

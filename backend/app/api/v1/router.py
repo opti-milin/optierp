@@ -43,7 +43,11 @@ from app.api.v1.core import (
 )
 from app.api.v1.manufacturing import (
     boms as manufacturing_boms,
+    job_cards as manufacturing_job_cards,
+    production_plans as manufacturing_production_plans,
+    quality_inspections as manufacturing_quality,
     reports as manufacturing_reports,
+    subcontract_jobs as manufacturing_subcontract,
     work_orders as manufacturing_work_orders,
     workspace as manufacturing_workspace,
 )
@@ -123,6 +127,10 @@ api_v1_router.include_router(assets_reports.router)
 # Module — Manufacturing (BOM → Work Order → Manufacture)
 api_v1_router.include_router(manufacturing_boms.router)
 api_v1_router.include_router(manufacturing_work_orders.router)
+api_v1_router.include_router(manufacturing_job_cards.router)
+api_v1_router.include_router(manufacturing_production_plans.router)
+api_v1_router.include_router(manufacturing_subcontract.router)
+api_v1_router.include_router(manufacturing_quality.router)
 api_v1_router.include_router(manufacturing_reports.router)
 api_v1_router.include_router(manufacturing_workspace.router)
 
