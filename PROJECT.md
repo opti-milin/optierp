@@ -3,6 +3,12 @@
 > Handoff / context file for AI coding agents. Keep it current: when you finish a
 > chunk of work, update **Current Transition State** and tick **Remaining Todo List**.
 > Companion docs live in [`docs/`](docs/) — this file is the map, they are the detail.
+> Cursor agent plans are archived under [`docs/plans/`](docs/plans/README.md).
+>
+> **Agent ship rules:** (1) On plan confirm, always save the plan into `docs/plans/`
+> and index it in `docs/plans/README.md`. (2) After implementation, restart Docker
+> containers so changes are live. (3) Always give the user numbered manual
+> verification steps (UI/API path + expected result), not only automated tests.
 
 ---
 
@@ -38,9 +44,10 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 ## 2. Current Transition State
 
 - **Branch:** `develop`
-- **Latest migration head:** `0075_quality_inspection` (after `0074_subcontracting` / `0073_production_plan`).
-- **Exact spot:** **Manufacturing Phases 0–7 complete** (parity + soft USP planning: CTP, reverse, pegging, forecast, what-if, capacity board + FG-GEARBOX seed). True finite-capacity APS remains out of scope.
-- Income Tax (entity ITR) Phases 0–6 lean remain landed (see [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md)).
+- **Latest migration head:** `0084_tax_adjustment_engine` (after `0083_cm_cost_structure` / `0082` / `0081` / `0080` / `0079`).
+- **Exact spot:** **Manufacturing Phases 0–9 complete** (incl. live delivery-date chain + outbound transit days). True finite-capacity APS remains out of scope.
+- Income Tax (entity ITR) Phases 0–6 lean + **rule-engine refactor** + **Tax Adjustment Engine** (`0084`: provision catalogue, AY rule packs, evaluators, tax dep blocks) — [docs/plans/tax_adjustment_engine.plan.md](docs/plans/tax_adjustment_engine.plan.md).
+- **Contribution Margin** — GL actuals report (`0079`) + **pre-sales CM Planning** + **Cost Driver Framework** (`0083`) — [docs/plans/cm_cost_driver_framework.plan.md](docs/plans/cm_cost_driver_framework.plan.md).
 
 ---
 
@@ -55,8 +62,10 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 - [x] Manufacturing Phase 5: Quality Inspection gate on Finish / Subcontract Receive (`0075`).
 - [x] Manufacturing Phase 6: WO Summary / Production Analytics + Manufacturing module flag.
 - [x] Manufacturing Phase 7: CTP + reverse + pegging + demand forecast + what-if CTP + soft capacity board + FG-GEARBOX demo seed — [docs/MANUFACTURING_GAP_AND_PLAN.md](docs/MANUFACTURING_GAP_AND_PLAN.md). True APS/finite capacity still out of scope.
+- [x] Manufacturing Phase 8: Planning Dashboard + SO/Quotation fulfillment check.
+- [x] Manufacturing Phase 9: Live delivery-date chain (supply-aware CTP from open PO/MR/WO; SO stage timeline; suggest-only delivery date) — [docs/MANUFACTURING_GAP_AND_PLAN.md](docs/MANUFACTURING_GAP_AND_PLAN.md).
 - [ ] CRM: Lead, Opportunity, Campaign, Contact/Address; Lead→Opportunity→Quotation hand-off (hook); pipeline report. *(Masters via descriptors.)*
-- [ ] HR & Payroll: Employee, Leave (append-only Leave Ledger), Attendance, Salary Structure/Slip, Payroll Entry. **Source is `frappe/hrms`, not erpnext (`hr` moved out of `develop`).**
+- [ ] HR & Payroll: Employee, Leave (append-only Leave Ledger), Attendance, Salary Structure/Slip, Payroll Entry. **Source is `frappe/hrms`, not erpnext (`hr` moved out of `develop`).** Income Tax now exposes `IndividualHeads` + `seed-from-payroll` bridge hooks; wire Salary Slips / Payroll Entry into `backend/app/services/payroll_income_tax_bridge.py`.
 - [ ] Projects: Project, Task (dependency/topological-sort validation), Timesheet, Gantt endpoint.
 
 **Phase 5 — Supporting modules + SaaS layer**
@@ -70,7 +79,7 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 - [ ] Customer order-tracking dashboard (read-only customer role + timeline over the doc-status chain).
 - [ ] One-page reconciliation (sales · purchase · bank) with auto-match service.
 - [ ] MCA (India company-law) compliance calendar + form pre-fill.
-- [x] **Income Tax (entity ITR)** — Phases 0–6 lean done (settings, computation, entity ITR export, advance-tax calendar, 26AS JSON, sandbox e-file provider). Remaining: full portal schedules, real DSC/HTTPS adapter — [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md).
+- [x] **Income Tax (entity ITR)** — Phases 0–6 lean + data-driven rule engine (Tax Policy, slabs, surcharge+marginal relief, cess, 87A rebate, special rates; FlatRate / SlabBased / RuleBased). Remaining: full portal schedules, real DSC/HTTPS adapter — [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md).
 - [ ] POS + loyalty (till + points ledger hooked into pricing engine).
 
 **Technical debt / cross-cutting**
@@ -208,6 +217,7 @@ optierp-mig/
 - **Two Postgres roles, on purpose.** The app connects as **`erp_app`** (non-owner → RLS is *enforced*); Alembic migrations and `seed_demo` connect as **`erp_owner`** (owner → runs DDL). Using the wrong role either bypasses RLS or fails to migrate. `infra/init-db.sql` creates both — **it must run before migrations** (the `erp_app` grants are silently skipped if the role doesn't exist).
 - **`ltree` extension required** (COA tree, Item Group, Warehouse). Target Postgres needs the **contrib** package (Postgres 13+; compose uses 16).
 - **DB password mismatch between envs:** `docker-compose.yml` uses password `milin` for `erp_app`/`erp_owner`, while `.env.example` uses `erp_app_dev_pw` / `erp_owner_dev_pw`. Match your `.env` to whichever Postgres you actually started (compose vs. local). Passwords in the repo are dev placeholders — rotate before any shared/remote instance.
+- **Windows PostgreSQL on :5432:** if `postgresql-x64-*` is also installed, host `localhost:5432` may hit that server (no `erp_owner`), not Docker. Prefer migrations inside Compose: `docker compose exec backend alembic upgrade head`. Full stack: `docker compose up` (backend already runs `alembic upgrade head` on start via override).
 - **`scripts/seed_demo.py --reset-schema` is destructive** — it **drops schema `public`**, re-runs `alembic upgrade head`, then seeds. Omit `--reset-schema` to seed additively (aborts if the demo company already exists). After a partial/interrupted seed, recover with `--reset-schema`. There's a non-destructive `--phase3-topup` path for upgrading existing demo DBs.
 - **WeasyPrint needs native libs** (Pango / Cairo / gdk-pixbuf). They're in the backend Docker image; on bare Windows/local, PDF endpoints (`/sales-invoices/{id}/pdf`, `/purchase-invoices/{id}/pdf`) will fail until those libs are installed. Flagged `MANUAL_REVIEW` vs. wkhtmltopdf.
 - **HR module source differs:** `hr` no longer exists in erpnext `develop` — it moved to the separate `frappe/hrms` app. Module 08 must be migrated from HRMS sources, not erpnext.
