@@ -1,0 +1,97 @@
+{
+  "id": "manufacturing",
+  "label": "Manufacturing",
+  "description": "BOM material + labour, shipping freight, partner commission, factory fixed allocations.",
+  "drivers": [
+    {
+      "code": "variable_cost",
+      "label": "Variable Cost",
+      "is_group": true,
+      "cm_class": "variable_cost",
+      "children": [
+        {
+          "code": "material",
+          "label": "Material",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "bom_material",
+          "scope": "line"
+        },
+        {
+          "code": "labor",
+          "label": "Labor",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "bom_operating",
+          "scope": "line"
+        },
+        {
+          "code": "freight",
+          "label": "Freight",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "shipping_rule",
+          "scope": "header"
+        },
+        {
+          "code": "commission",
+          "label": "Commission",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "sales_partner",
+          "scope": "header"
+        },
+        {
+          "code": "packaging",
+          "label": "Packaging",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "cost_rate",
+          "scope": "line"
+        }
+      ]
+    },
+    {
+      "code": "product_channel_fixed",
+      "label": "Product / Channel fixed",
+      "cm_class": "product_channel_fixed",
+      "allocation_method": "percentage",
+      "allocation_basis": "revenue",
+      "method_params": { "pct": 4 },
+      "scope": "plan"
+    },
+    {
+      "code": "segment_bu_fixed",
+      "label": "Segment / BU fixed",
+      "cm_class": "segment_bu_fixed",
+      "allocation_method": "percentage",
+      "allocation_basis": "revenue",
+      "method_params": { "pct": 2 },
+      "scope": "plan"
+    },
+    {
+      "code": "corporate_overhead",
+      "label": "Corporate Overhead",
+      "is_group": true,
+      "cm_class": "corporate_overhead",
+      "children": [
+        {
+          "code": "corporate_overhead_default",
+          "label": "Corporate OH (default)",
+          "cm_class": "corporate_overhead",
+          "allocation_method": "percentage",
+          "allocation_basis": "revenue",
+          "method_params": { "pct": 5 },
+          "scope": "plan"
+        }
+      ]
+    }
+  ],
+  "allocations": {
+    "product_channel_fixed_pct_of_revenue": 4,
+    "segment_bu_fixed_pct_of_revenue": 2,
+    "corporate_overhead_pct_of_revenue": 5
+  },
+  "target_cm1_pct": 30,
+  "min_cm1_pct": 15
+}
