@@ -1,16 +1,18 @@
 # Manufacturing (MRP) — Gap Analysis & Build Plan
 
-**Status:** 🟢 **Phase 8 done** (Planning Dashboard + SO/Quotation fulfillment check).
-Phases 0–7 parity + USP planning engines complete. True finite-capacity APS remains out of scope.
-**Designed:** 2026-07-20. **Phase 0–6 closed:** 2026-07-20/22. **Phase 7 closed:** 2026-07-22.
-**Phase 8 closed:** 2026-07-22.
+**Status:** 🟢 **Phase 9 done** (live delivery-date chain: supply-aware CTP + SO timeline).
+Phases 0–9 parity + USP planning engines complete. True finite-capacity APS remains out of scope.
+**Designed:** 2026-07-20. **Phase 0–6 closed:** 2026-07-20/22. **Phase 7–8 closed:** 2026-07-22.
+**Phase 9 closed:** 2026-07-30.
 
 > **Scope:** bring OptiReach's Manufacturing module to ERPNext v15 "MRP-I" parity — BOM,
 > Work Order, Job Card, Production Plan, Subcontracting, Quality gates — while deliberately
 > simplifying the ceremony (§5) and deferring true APS/finite-capacity/forecast features to
 > a later USP phase (§9, out of scope for parity). Modelled on the same
 > plain-language-first → gap-matrix → phased structure as
-> [ITR_GAP_AND_PLAN.md](ITR_GAP_AND_PLAN.md).
+> [ITR_GAP_AND_PLAN.md](ITR_GAP_AND_PLAN.md). Original Cursor briefs:
+> [plans/manufacturing_gap_roadmap.plan.md](plans/manufacturing_gap_roadmap.plan.md),
+> [plans/mfg_planning_dashboard.plan.md](plans/mfg_planning_dashboard.plan.md).
 
 ---
 
@@ -334,6 +336,31 @@ master → column; a per-company toggle blob → `SystemSetting`.
   `off` | `warn` (default) | `block`.
 - ✅ **Selling UI** — Check Fulfillment panel + deep-link to Planning Dashboard.
 - ⬜ Still out of scope: finite APS / Gantt Planning Board.
+
+### Phase 9 — Live delivery-date chain *(done)*
+
+Closes the USP gap from the product notes: *“Delivery time back and forth estimation
+from purchase order → production → manufacturing → sourcing.”*
+
+Phases 7–8 CTP used **catalog** `Item.lead_time_days` only. Phase 9 prefers **open
+supply document dates** when they exist, and exposes a per–Sales Order stage timeline.
+
+| Slice | What | Status |
+|---|---|---|
+| **9.0** | Supply-aware CTP — shortfall wait from open PO `schedule_date`, open MR, open WO `planned_end_date`; else catalog lead time | ✅ |
+| **9.1** | SO delivery timeline — stages Sourcing (MR) → PO → WO → Finish → DN; forward promise + reverse vs promised date; `on_time` / `at_risk` / `late` | ✅ |
+| **9.2** | Suggest-only — `suggested_delivery_date` on estimate; never auto-write SO `delivery_date` | ✅ |
+| **9.3** | UI — Planning Dashboard timeline + SO Fulfillment panel stages | ✅ |
+| **9.4** | Outbound transit — warehouse → customer days (`outbound_delivery_days` setting + Shipping Rule `transit_days`); promise = ready-to-dispatch + outbound | ✅ |
+
+**APIs**
+- CTP / reverse / what-if / pegging reuse `estimate_lead_time(..., use_open_supply=True)` (default).
+- `GET /sales-orders/{id}/delivery-estimate` — full order timeline + suggested date.
+- Pegging supply rows include open **Purchase Orders**.
+- Services: `open_supply.py`, `delivery_estimate.py`; CTP in `lead_time.py`.
+
+**Out of scope (still):** true APS / Gantt, auto-reschedule of WO/PO, customer ETA portal
+(separate USP — Customer order-tracking dashboard).
 
 ---
 
@@ -690,4 +717,55 @@ Finish / Consume / material-availability now consume from **WIP** when
 | Phase 7.3 — Light demand forecast | ✅ done |
 | Phase 7.4 — What-if CTP | ✅ done |
 | Phase 7.5 — Soft capacity board | ✅ done |
+| Phase 8 — Planning Dashboard + order fulfillment | ✅ done |
+| Phase 9.0 — Supply-aware CTP (open PO/MR/WO dates) | ✅ done |
+| Phase 9.1 — SO delivery timeline (back/forward) | ✅ done |
+| Phase 9.2 — Suggest delivery date (no auto-write) | ✅ done |
+| Phase 9.3 — UI (Planning + SO fulfillment stages) | ✅ done |
+| Phase 9.4 — Outbound transit (warehouse → customer) | ✅ done |
 | True finite-capacity APS / Gantt | ⬜ out of scope |
+| Customer ETA portal | ⬜ separate USP |
+
+---
+
+## 8f. Manual test guide — Phase 9 (live delivery-date chain)
+
+Assumes Docker stack is up (`docker compose up --build`) and manufacturing demo kit exists
+(`--manufacturing-topup` or full `seed_demo`). Login: `admin@example.com` / `ChangeMe!123`.
+
+### A. Supply-aware CTP (catalog vs open PO)
+
+1. Open **Manufacturing → Planning Dashboard**.
+2. Context = **Finished Item** → pick **FG-GEARBOX** (or FG-BRACKET), qty **10**.
+3. Note **earliest promise** (uses catalog lead times when no open POs).
+4. Create a **Purchase Order** for shortfall raw (e.g. RAW-ALUM) with
+   `schedule_date` = today + 2 days; **Submit**.
+5. Re-run CTP for the same FG qty — promise should **shorten** toward the PO date
+   (component row shows Supply = `Purchase Order …`).
+6. Pegging for the raw item should list the PO under supply.
+
+### B. SO delivery timeline (UI)
+
+1. Open the demo **Sales Order** for FG-GEARBOX (or create one with delivery date soon).
+2. On the SO form click **Check Fulfillment**.
+3. Confirm the **Delivery health** block: stages Demand → Stock / MR / PO / WO → DN,
+   plus **Suggested delivery** (suggest-only — does not overwrite until you click
+   **Use promise** on a draft).
+4. From the panel open **Planning Dashboard** — Timeline shows the same SO chain.
+
+### C. API smoke
+
+```powershell
+# After login, copy access token into $TOKEN
+$SO = "<sales-order-uuid>"
+Invoke-RestMethod -Headers @{ Authorization = "Bearer $TOKEN" } `
+  "http://localhost:8000/api/v1/sales-orders/$SO/delivery-estimate"
+```
+
+Expect `health`, `suggested_delivery_date`, and per-line `stages`.
+
+### D. Suggest-only guard
+
+1. On a **submitted** SO, suggested date is shown but there is no auto-write of
+   `delivery_date`.
+2. On a **draft** SO, **Use promise** fills the delivery field; Save still required.

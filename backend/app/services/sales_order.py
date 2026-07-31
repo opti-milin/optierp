@@ -253,6 +253,7 @@ async def create_sales_order(
         territory_id=payload.territory_id,
         customer_group_id=payload.customer_group_id,
         sales_partner_id=payload.sales_partner_id,
+        shipping_rule_id=payload.shipping_rule_id,
         payment_terms_template_id=payload.payment_terms_template_id,
         set_warehouse_id=payload.set_warehouse_id,
         quotation_id=payload.quotation_id,
@@ -452,6 +453,12 @@ async def submit_sales_order(
     )
     raise_if_blocked(fulfillment)
     warnings.extend(fulfillment.warnings)
+
+    from app.services.cm_planning.plan import assert_margin_policy_for_sales_order
+
+    margin = await assert_margin_policy_for_sales_order(db, so.id, so.company_id)
+    if margin.message and not margin.ok and margin.policy == "warn":
+        warnings.append(margin.message)
 
     for row in so.items:
         item = items.get(row.item_id)

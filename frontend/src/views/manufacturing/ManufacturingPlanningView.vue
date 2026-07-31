@@ -16,6 +16,7 @@ import type {
   PlanningContextLine,
   ReverseSchedule,
 } from "@/types/manufacturing";
+import type { SalesOrderDeliveryEstimate } from "@/types/trade";
 
 type ContextType = "item" | "sales-order" | "quotation" | "production-plan";
 
@@ -59,6 +60,7 @@ const reverse = ref<ReverseSchedule | null>(null);
 const pegging = ref<PeggingTimeline | null>(null);
 const forecast = ref<DemandForecast | null>(null);
 const capacity = ref<CapacityBoard | null>(null);
+const soDelivery = ref<SalesOrderDeliveryEstimate | null>(null);
 
 const whatIfExtraItem = ref("");
 const whatIfExtraQty = ref(0);
@@ -96,6 +98,7 @@ async function resolveContext(): Promise<void> {
   reverse.value = null;
   pegging.value = null;
   forecast.value = null;
+  soDelivery.value = null;
   try {
     const params: Record<string, string | number> = { context: contextType.value };
     if (contextType.value === "item") {
@@ -143,7 +146,7 @@ async function runAllForLine(): Promise<void> {
       warehouse_id: line.warehouse_id || undefined,
     };
     const delivery = deliveryDate.value || line.delivery_date || undefined;
-    const [ctpRes, pegRes, fcRes, capRes, revRes] = await Promise.all([
+    const [ctpRes, pegRes, fcRes, capRes, revRes, soEstRes] = await Promise.all([
       api.get<LeadTimeEstimate>("/manufacturing-reports/capable-to-promise", { params: base }),
       api.get<PeggingTimeline>("/manufacturing-reports/pegging", {
         params: { item_id: line.item_id, as_of: asOf.value || undefined, warehouse_id: line.warehouse_id || undefined },
@@ -159,12 +162,18 @@ async function runAllForLine(): Promise<void> {
             params: { ...base, delivery_date: delivery },
           })
         : Promise.resolve({ data: null as ReverseSchedule | null }),
+      contextType.value === "sales-order" && documentId.value
+        ? api.get<SalesOrderDeliveryEstimate>(`/sales-orders/${documentId.value}/delivery-estimate`, {
+            params: { as_of: asOf.value || undefined },
+          })
+        : Promise.resolve({ data: null as SalesOrderDeliveryEstimate | null }),
     ]);
     ctp.value = ctpRes.data;
     pegging.value = pegRes.data;
     forecast.value = fcRes.data;
     capacity.value = capRes.data;
     reverse.value = revRes.data;
+    soDelivery.value = soEstRes.data;
   } catch (e) {
     error.value = e as ErrorEnvelope;
   } finally {
@@ -422,6 +431,28 @@ onMounted(async () => {
       <!-- Timeline -->
       <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <h2 class="mb-2 text-sm font-semibold text-gray-900">Timeline</h2>
+        <div v-if="soDelivery" class="mb-3 space-y-2 text-sm text-gray-700">
+          <p>
+            SO health
+            <strong class="capitalize">{{ soDelivery.health.replace("_", " ") }}</strong>
+            · suggest <strong>{{ soDelivery.suggested_delivery_date ?? "—" }}</strong>
+            <span v-if="soDelivery.slack_days != null">(slack {{ soDelivery.slack_days }}d)</span>
+          </p>
+          <div
+            v-for="ln in soDelivery.lines"
+            :key="ln.sales_order_item_id"
+            class="rounded border border-gray-100 bg-gray-50 p-2 text-xs"
+          >
+            <div class="mb-1 font-medium">{{ ln.item_name ?? ln.item_code }}</div>
+            <ol class="space-y-0.5 text-gray-600">
+              <li v-for="(st, si) in ln.stages" :key="si">
+                {{ st.stage }}
+                <span v-if="st.source_name"> — {{ st.source_name }}</span>
+                <span v-if="st.planned_date"> · {{ st.planned_date }}</span>
+              </li>
+            </ol>
+          </div>
+        </div>
         <div v-if="reverse" class="space-y-1 text-sm text-gray-700">
           <p>Delivery <strong>{{ reverse.delivery_date }}</strong>
             — {{ reverse.on_time ? "on time" : "late" }}
@@ -431,13 +462,14 @@ onMounted(async () => {
           <p>Earliest promise <strong>{{ reverse.earliest_promise_date }}</strong></p>
         </div>
         <div v-else-if="ctp" class="text-sm text-gray-700">
-          Earliest promise <strong>{{ ctp.earliest_promise_date }}</strong>
-          ({{ ctp.procurement_days }}d procurement + {{ ctp.manufacturing_days }}d manufacture)
+          Ready to dispatch <strong>{{ ctp.ready_to_dispatch_date }}</strong>
+          · customer receipt <strong>{{ ctp.earliest_promise_date }}</strong>
+          ({{ ctp.procurement_days }}d procurement + {{ ctp.manufacturing_days }}d manufacture
+          + {{ ctp.outbound_days }}d outbound)
         </div>
         <p v-else class="text-sm text-gray-500">Set a delivery date for reverse schedule.</p>
       </section>
     </div>
-
     <!-- Decision support -->
     <section v-if="selectedLine" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <h2 class="mb-3 text-sm font-semibold text-gray-900">Decision support</h2>
@@ -456,7 +488,8 @@ onMounted(async () => {
               <th class="px-3 py-1.5 text-right">Required</th>
               <th class="px-3 py-1.5 text-right">Available</th>
               <th class="px-3 py-1.5 text-right">Shortfall</th>
-              <th class="px-3 py-1.5 text-right">Lead days</th>
+              <th class="px-3 py-1.5 text-right">Lead / wait</th>
+              <th class="px-3 py-1.5">Supply</th>
             </tr>
           </thead>
           <tbody>
@@ -469,6 +502,10 @@ onMounted(async () => {
                 <span v-else class="text-gray-300">—</span>
               </td>
               <td class="px-3 py-1 text-right">{{ r.lead_time_days }}</td>
+              <td class="px-3 py-1 text-xs text-gray-500">
+                <span v-if="r.supply_source">{{ r.supply_source }}</span>
+                <span v-if="r.supply_ready_date"> · {{ r.supply_ready_date }}</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -484,15 +521,14 @@ onMounted(async () => {
         </RouterLink>
         <RouterLink to="/work-orders" class="btn-secondary">Open Work Orders</RouterLink>
         <button
-          v-if="ctp?.earliest_promise_date"
+          v-if="soDelivery?.suggested_delivery_date || ctp?.earliest_promise_date"
           type="button"
           class="btn-secondary"
-          @click="deliveryDate = ctp.earliest_promise_date; syncQuery()"
+          @click="deliveryDate = (soDelivery?.suggested_delivery_date || ctp?.earliest_promise_date)!; syncQuery()"
         >
-          Suggest delivery {{ ctp.earliest_promise_date }}
+          Suggest delivery {{ soDelivery?.suggested_delivery_date || ctp?.earliest_promise_date }}
         </button>
       </div>
-
       <div class="grid gap-3 rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <label class="form-label">What-if extra stock</label>

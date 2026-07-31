@@ -1,0 +1,19 @@
+{
+  "id": "hospitality",
+  "label": "Hospitality",
+  "description": "F&B / linen style variable costs; property and brand fixed allocations.",
+  "drivers": {
+    "material": { "prefer": "valuation" },
+    "labor": { "prefer": "bom_operating" },
+    "freight": { "prefer": "shipping_rule" },
+    "commission": { "prefer": "sales_partner" },
+    "packaging": { "prefer": "cost_rate" }
+  },
+  "allocations": {
+    "product_channel_fixed_pct_of_revenue": 12,
+    "segment_bu_fixed_pct_of_revenue": 5,
+    "corporate_overhead_pct_of_revenue": 5
+  },
+  "target_cm1_pct": 45,
+  "min_cm1_pct": 25
+}

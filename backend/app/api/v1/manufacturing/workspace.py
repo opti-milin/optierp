@@ -88,8 +88,9 @@ async def planning_context(
     "/settings",
     response_model=ManufacturingSettings,
     summary="Manufacturing settings",
-    description="Per-company defaults: source / WIP / finished-goods warehouses and the "
-    "over-production allowance applied to Work Order finishes.",
+    description="Per-company defaults: source / WIP / finished-goods warehouses, "
+    "over-production allowance, fulfillment mode, and outbound delivery days "
+    "(warehouse → customer) used by CTP when no Shipping Rule transit days apply.",
 )
 async def get_settings(
     current_user: Annotated[CurrentUser, Depends(require_permission("Work Order", "read"))],
@@ -133,6 +134,7 @@ async def update_settings(
         "over_production_percentage": str(payload.over_production_percentage),
         "capacity_planning_enabled": payload.capacity_planning_enabled,
         "order_fulfillment_mode": payload.order_fulfillment_mode,
+        "outbound_delivery_days": payload.outbound_delivery_days,
     }
     value = await manufacturing_common.update_manufacturing_settings(
         db, current_user.company_id, updates

@@ -357,6 +357,21 @@ const routes: RouteRecordRaw[] = [
         props: (route) => ({ kind: "quotation", id: route.params.id as string }),
       },
       {
+        path: "cm-plans",
+        name: "cm-plans",
+        component: () => import("@/views/selling/ContributionMarginPlanListView.vue"),
+      },
+      {
+        path: "cm-plans/:id",
+        name: "cm-plan-detail",
+        component: () => import("@/views/selling/ContributionMarginPlanView.vue"),
+      },
+      {
+        path: "cm-planning-settings",
+        name: "cm-planning-settings",
+        component: () => import("@/views/selling/CmPlanningSettingsView.vue"),
+      },
+      {
         path: "sales-orders",
         name: "sales-orders",
         component: () => import("@/views/trade/OrderListView.vue"),
@@ -435,6 +450,17 @@ const routes: RouteRecordRaw[] = [
         name: "accounting-workspace",
         component: () => import("@/views/ModuleWorkspace.vue"),
         props: { moduleKey: "accounting" },
+      },
+      {
+        path: "taxation",
+        name: "taxation-workspace",
+        component: () => import("@/views/ModuleWorkspace.vue"),
+        props: { moduleKey: "taxation" },
+      },
+      {
+        path: "taxation-settings",
+        name: "taxation-settings",
+        component: () => import("@/views/compliance/TaxationSettingsView.vue"),
       },
       {
         path: "manufacturing",

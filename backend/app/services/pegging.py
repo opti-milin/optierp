@@ -128,6 +128,23 @@ async def pegging_timeline(
             )
         )
 
+    # --- supply: open Purchase Orders for this item --------------------------------
+    from app.services.open_supply import open_purchase_slices
+
+    for sl in await open_purchase_slices(db, company_id, item_id):
+        supply_qty += sl.qty
+        rows.append(
+            PeggingRow(
+                side="supply",
+                source_type="Purchase Order",
+                source_id=sl.source_id,
+                source_name=sl.source_name,
+                qty=sl.qty,
+                due_date=sl.ready_date,
+                notes=sl.notes or "Open PO",
+            )
+        )
+
     # --- supply: open Work Orders (still to produce) ------------------------------
     wo_stmt = (
         select(WorkOrder)

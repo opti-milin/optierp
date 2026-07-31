@@ -27,7 +27,22 @@ from app.models.accounts import (
 )
 from app.models.assets import Asset, AssetCategory, AssetMaintenance, Location
 from app.models.buying import Supplier, SupplierGroup
-from app.models.compliance import IncomeTaxRateTable, TaxAdjustmentCategory
+from app.models.compliance import (
+    HealthEducationCessRule,
+    IncomeTaxRateTable,
+    IncomeTaxSlabLine,
+    IncomeTaxSlabSet,
+    RebateRule,
+    SpecialIncomeTaxRate,
+    SurchargeBracket,
+    SurchargeRuleSet,
+    TaxAdjustmentCategory,
+    TaxAdjustmentProvision,
+    TaxAdjustmentRule,
+    TaxAdjustmentRulePack,
+    TaxDepreciationBlock,
+    TaxPolicy,
+)
 from app.models.manufacturing import (
     Operation,
     Routing,
@@ -56,6 +71,7 @@ from app.models.selling import (
     Territory,
     UTMSource,
 )
+from app.models.cm_planning import CmCostRate
 from sqlalchemy import inspect as sa_inspect, select
 
 from app.core.exceptions import ValidationError
@@ -221,6 +237,29 @@ register(
             FieldSpec("disabled", "Disabled", "Check", in_list=True),
         ),
         list_fields=("partner_name", "partner_type", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="CM Cost Rate",
+        slug="cm-cost-rate",
+        model=CmCostRate,
+        title_field="rate_name",
+        naming="field:rate_name",
+        group="Selling",
+        permission_name="Contribution Margin Plan",
+        permissions={"Sales Manager": _SALES_MANAGER, "Sales User": _SALES_USER},
+        fields=(
+            FieldSpec("rate_name", "Rate Name", "Data", required=True, in_list=True, span=2),
+            FieldSpec("driver", "Driver", "Select", options="packaging\nmaterial\nlabor", in_list=True),
+            FieldSpec("item_id", "Item", "Link", options="Item"),
+            FieldSpec("item_group_id", "Item Group", "Link", options="Item Group"),
+            FieldSpec("rate", "Rate", "Currency", required=True, in_list=True),
+            FieldSpec("uom", "UOM", "Data"),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("rate_name", "driver", "rate", "disabled"),
     )
 )
 
@@ -690,7 +729,11 @@ register(
 )
 
 
-# --- Compliance: Income Tax Rate Table (entity ITR Phase 1) ------------------
+# --- Compliance: Income Tax rule masters (data-driven engine) ----------------
+_ENTITY_OPTS = "Company\nProprietor\nIndividual\nFirm\nLLP"
+_REGIME_OPTS = "Normal\nNew"
+_METHOD_OPTS = "FlatRate\nSlabBased\nRuleBased"
+
 register(
     DocTypeDescriptor(
         name="Income Tax Rate Table",
@@ -708,38 +751,392 @@ register(
             FieldSpec(
                 "assessment_year", "Assessment Year", "Data",
                 required=True, in_list=True,
-                help="e.g. 2025-26 (the AY that covers FY 2024-25).",
+                help="e.g. 2025-26. Flat-rate entities only (Company / Firm / LLP).",
             ),
             FieldSpec(
                 "entity_type", "Entity Type", "Select",
-                options="Company\nProprietor\nFirm\nLLP",
-                required=True, in_list=True,
+                options=_ENTITY_OPTS, required=True, in_list=True,
             ),
             FieldSpec(
                 "filing_regime", "Filing Regime", "Select",
-                options="Normal\nNew",
-                required=True, in_list=True,
+                options=_REGIME_OPTS, required=True, in_list=True,
             ),
             FieldSpec("tax_rate", "Tax Rate (%)", "Float", required=True, in_list=True),
-            FieldSpec("surcharge_rate", "Surcharge (%)", "Float", in_list=True),
-            FieldSpec("cess_rate", "Cess (%)", "Float", in_list=True),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
             FieldSpec("remarks", "Remarks", "Data", span=2),
             FieldSpec("disabled", "Disabled", "Check", in_list=True),
         ),
         list_fields=(
-            "assessment_year",
-            "entity_type",
-            "filing_regime",
-            "tax_rate",
-            "surcharge_rate",
-            "cess_rate",
-            "disabled",
+            "assessment_year", "entity_type", "filing_regime", "tax_rate", "disabled",
+        ),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Income Tax Slab Set",
+        slug="income-tax-slab-set",
+        model=IncomeTaxSlabSet,
+        title_field="set_name",
+        naming="field:set_name",
+        group="Accounts",
+        permission_name="Income Tax Slab Set",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("set_name", "Set Name", "Data", required=True, in_list=True, unique=True, span=2),
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("entity_type", "Entity Type", "Select", options=_ENTITY_OPTS, required=True, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, required=True, in_list=True),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("set_name", "assessment_year", "entity_type", "filing_regime", "disabled"),
+        children=(
+            ChildSpec(
+                field="lines",
+                label="Slab bands",
+                model=IncomeTaxSlabLine,
+                fk_column="slab_set_id",
+                fields=(
+                    FieldSpec("from_amount", "From", "Currency", required=True),
+                    FieldSpec("to_amount", "To (blank = open)", "Currency"),
+                    FieldSpec("rate_percent", "Rate (%)", "Float", required=True),
+                ),
+            ),
+        ),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Surcharge Rule Set",
+        slug="surcharge-rule-set",
+        model=SurchargeRuleSet,
+        title_field="set_name",
+        naming="field:set_name",
+        group="Accounts",
+        permission_name="Surcharge Rule Set",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("set_name", "Set Name", "Data", required=True, in_list=True, unique=True, span=2),
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("entity_type", "Entity Type", "Select", options=_ENTITY_OPTS, required=True, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, required=True, in_list=True),
+            FieldSpec(
+                "marginal_relief_enabled", "Marginal Relief", "Check", in_list=True,
+                help="Cap surcharge so crossing a threshold does not increase liability beyond the excess income.",
+            ),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("set_name", "assessment_year", "entity_type", "marginal_relief_enabled", "disabled"),
+        children=(
+            ChildSpec(
+                field="brackets",
+                label="Surcharge brackets (by taxable income)",
+                model=SurchargeBracket,
+                fk_column="rule_set_id",
+                fields=(
+                    FieldSpec("income_from", "Income From", "Currency", required=True),
+                    FieldSpec("income_to", "Income To (blank = open)", "Currency"),
+                    FieldSpec("rate_percent", "Surcharge (%)", "Float", required=True),
+                ),
+            ),
+        ),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Health & Education Cess Rule",
+        slug="health-education-cess-rule",
+        model=HealthEducationCessRule,
+        title_field="rule_name",
+        naming="field:rule_name",
+        group="Accounts",
+        permission_name="Health & Education Cess Rule",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("rule_name", "Rule Name", "Data", required=True, in_list=True, unique=True, span=2),
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("entity_type", "Entity Type", "Select", options=_ENTITY_OPTS, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, in_list=True),
+            FieldSpec("cess_rate", "Cess Rate (%)", "Float", required=True, in_list=True),
+            FieldSpec(
+                "cess_base", "Cess Base", "Select",
+                options="TaxPlusSurcharge", required=True, in_list=True,
+            ),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("rule_name", "assessment_year", "cess_rate", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Rebate Rule",
+        slug="rebate-rule",
+        model=RebateRule,
+        title_field="section_code",
+        naming="field:section_code",
+        group="Accounts",
+        permission_name="Rebate Rule",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("section_code", "Section", "Data", required=True, in_list=True, help="e.g. 87A"),
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, required=True, in_list=True),
+            FieldSpec("max_taxable_income", "Max Taxable Income", "Currency", required=True, in_list=True),
+            FieldSpec("max_rebate_amount", "Max Rebate", "Currency", required=True, in_list=True),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("section_code", "assessment_year", "filing_regime", "max_rebate_amount", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Special Income Tax Rate",
+        slug="special-income-tax-rate",
+        model=SpecialIncomeTaxRate,
+        title_field="income_category_code",
+        naming="field:income_category_code",
+        group="Accounts",
+        permission_name="Special Income Tax Rate",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec(
+                "income_category_code", "Category Code", "Data",
+                required=True, in_list=True, help="e.g. LTCG_EQUITY, LOTTERY, CRYPTO",
+            ),
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, required=True, in_list=True),
+            FieldSpec("rate_percent", "Rate (%)", "Float", required=True, in_list=True),
+            FieldSpec("description", "Description", "Data", span=2),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("income_category_code", "assessment_year", "rate_percent", "disabled"),
+    )
+)
+
+register(
+    DocTypeDescriptor(
+        name="Tax Policy",
+        slug="tax-policy",
+        model=TaxPolicy,
+        title_field="assessment_year",
+        naming="field:assessment_year",
+        group="Accounts",
+        permission_name="Tax Policy",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("assessment_year", "Assessment Year", "Data", required=True, in_list=True),
+            FieldSpec("entity_type", "Entity Type", "Select", options=_ENTITY_OPTS, required=True, in_list=True),
+            FieldSpec("filing_regime", "Filing Regime", "Select", options=_REGIME_OPTS, required=True, in_list=True),
+            FieldSpec(
+                "computation_method", "Computation Method", "Select",
+                options=_METHOD_OPTS, required=True, in_list=True,
+            ),
+            FieldSpec(
+                "ordinary_method", "Ordinary Method (for RuleBased)", "Select",
+                options="FlatRate\nSlabBased", required=True,
+            ),
+            FieldSpec("rate_table_id", "Flat Rate Table", "Link", options="income-tax-rate-table"),
+            FieldSpec("slab_set_id", "Slab Set", "Link", options="income-tax-slab-set"),
+            FieldSpec("surcharge_set_id", "Surcharge Set", "Link", options="surcharge-rule-set"),
+            FieldSpec("cess_rule_id", "Cess Rule", "Link", options="health-education-cess-rule"),
+            FieldSpec("rebate_rule_id", "Rebate Rule", "Link", options="rebate-rule"),
+            FieldSpec("effective_from", "Effective From", "Date"),
+            FieldSpec("effective_to", "Effective To", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=(
+            "assessment_year", "entity_type", "filing_regime", "computation_method", "disabled",
         ),
     )
 )
 
 
-# --- Compliance: Tax Adjustment Category (entity ITR Phase 1) ----------------
+# --- Compliance: Tax Adjustment Provision (catalogue) ------------------------
+register(
+    DocTypeDescriptor(
+        name="Tax Adjustment Provision",
+        slug="tax-adjustment-provision",
+        model=TaxAdjustmentProvision,
+        title_field="section_code",
+        naming="field:section_code",
+        group="Accounts",
+        permission_name="Tax Adjustment Provision",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec(
+                "section_code", "Section", "Data",
+                required=True, in_list=True, unique=True,
+                help="Income-tax Act section code, e.g. 40(a)(ia).",
+            ),
+            FieldSpec("title", "Title", "Data", required=True, in_list=True, span=2),
+            FieldSpec("act_reference", "Act reference", "Data", in_list=True),
+            FieldSpec(
+                "stage", "Stage", "Select",
+                options="PGBP\nICDS\nChapterVIA\nSetOff\nMAT\nOther",
+                required=True, in_list=True,
+            ),
+            FieldSpec(
+                "default_effect", "Effect", "Select",
+                options="Add\nDeduct\nInformational",
+                required=True, in_list=True,
+            ),
+            FieldSpec(
+                "applies_to_modes", "Modes", "Select",
+                options="EntityBooks\nIndividualHeads\nBoth",
+                required=True, in_list=True,
+            ),
+            FieldSpec(
+                "regime_scope", "Regime", "Select",
+                options="Normal\nNew\nBoth",
+                required=True, in_list=True,
+            ),
+            FieldSpec("itr_schedule_hint", "ITR schedule", "Data"),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("section_code", "title", "stage", "default_effect", "regime_scope", "disabled"),
+    )
+)
+
+
+register(
+    DocTypeDescriptor(
+        name="Tax Adjustment Rule Pack",
+        slug="tax-adjustment-rule-pack",
+        model=TaxAdjustmentRulePack,
+        title_field="pack_name",
+        naming="field:pack_name",
+        group="Accounts",
+        permission_name="Tax Adjustment Rule Pack",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("pack_name", "Name", "Data", required=True, in_list=True),
+            FieldSpec("assessment_year", "Assessment year", "Data", required=True, in_list=True),
+            FieldSpec(
+                "entity_type", "Entity", "Select",
+                options="Company\nProprietor\nIndividual\nFirm\nLLP",
+                required=True, in_list=True,
+            ),
+            FieldSpec(
+                "filing_regime", "Regime", "Select",
+                options="Normal\nNew",
+                required=True, in_list=True,
+            ),
+            FieldSpec("effective_from", "Effective from", "Date"),
+            FieldSpec("effective_to", "Effective to", "Date"),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=("pack_name", "assessment_year", "entity_type", "filing_regime", "disabled"),
+        children=(
+            ChildSpec(
+                field="rules",
+                label="Rules",
+                model=TaxAdjustmentRule,
+                fk_column="pack_id",
+                fields=(
+                    FieldSpec("rule_code", "Code", "Data", required=True, in_list=True),
+                    FieldSpec(
+                        "provision_id", "Provision", "Link",
+                        options="tax-adjustment-provision", required=True, in_list=True,
+                    ),
+                    FieldSpec(
+                        "evaluation_method", "Method", "Select",
+                        options=(
+                            "Manual\nPercentOfBase\nThresholdDisallow\nPaymentTiming\n"
+                            "DiffTwoSources\nScheduleCap\nFormulaSafe\nPriorYearReversal\nComposite"
+                        ),
+                        required=True, in_list=True,
+                    ),
+                    FieldSpec("sequence", "Seq", "Int", in_list=True),
+                    FieldSpec("include_in_seed_lines", "Seed on worksheet", "Check", in_list=True),
+                    FieldSpec("allow_manual_override", "Allow override", "Check"),
+                    FieldSpec("disabled", "Disabled", "Check", in_list=True),
+                ),
+            ),
+        ),
+    )
+)
+
+
+register(
+    DocTypeDescriptor(
+        name="Tax Depreciation Block",
+        slug="tax-depreciation-block",
+        model=TaxDepreciationBlock,
+        title_field="block_code",
+        naming="field:block_code",
+        group="Accounts",
+        permission_name="Tax Depreciation Block",
+        permissions={
+            "Accounts Manager": _ACCOUNTS_MANAGER,
+            "Accounts User": _ACCOUNTS_USER,
+        },
+        fields=(
+            FieldSpec("assessment_year", "Assessment year", "Data", required=True, in_list=True),
+            FieldSpec("block_code", "Block code", "Data", required=True, in_list=True),
+            FieldSpec("block_name", "Block name", "Data", required=True, in_list=True, span=2),
+            FieldSpec("rate_percent", "Rate %", "Float", required=True, in_list=True),
+            FieldSpec("opening_wdv", "Opening WDV", "Currency", in_list=True),
+            FieldSpec("additions", "Additions", "Currency"),
+            FieldSpec("deletions", "Deletions", "Currency"),
+            FieldSpec("depreciation_amount", "Depreciation", "Currency", in_list=True),
+            FieldSpec("closing_wdv", "Closing WDV", "Currency", in_list=True),
+            FieldSpec("remarks", "Remarks", "Data", span=2),
+            FieldSpec("disabled", "Disabled", "Check", in_list=True),
+        ),
+        list_fields=(
+            "assessment_year", "block_code", "block_name", "rate_percent",
+            "depreciation_amount", "closing_wdv", "disabled",
+        ),
+    )
+)
+
+
+# --- Compliance: Tax Adjustment Category (legacy bridge) ---------------------
 register(
     DocTypeDescriptor(
         name="Tax Adjustment Category",
@@ -757,13 +1154,17 @@ register(
             FieldSpec(
                 "category_code", "Code", "Data",
                 required=True, in_list=True, unique=True,
-                help="e.g. 40(a), 43B — Income-tax Act section / nature.",
+                help="Legacy alias — prefer Tax Adjustment Provision.",
             ),
             FieldSpec("category_name", "Name", "Data", required=True, in_list=True, span=2),
             FieldSpec(
                 "direction", "Direction", "Select", options="Add\nDeduct",
                 required=True, in_list=True,
                 help="Add = disallowance / add-back; Deduct = allowable deduction.",
+            ),
+            FieldSpec(
+                "provision_id", "Provision", "Link",
+                options="tax-adjustment-provision", in_list=True,
             ),
             FieldSpec("disabled", "Disabled", "Check", in_list=True),
         ),
@@ -1122,10 +1523,17 @@ register(
             FieldSpec("shipping_rule_name", "Shipping Rule Name", "Data", required=True, in_list=True, span=2),
             FieldSpec("shipping_amount", "Shipping Amount", "Currency", in_list=True),
             FieldSpec("free_above", "Free Above Subtotal", "Currency", help="0 = never free"),
+            FieldSpec(
+                "transit_days",
+                "Transit Days",
+                "Int",
+                in_list=True,
+                help="Calendar days from dispatch to customer receipt (outbound delivery)",
+            ),
             FieldSpec("account_id", "Freight Account", "Link", options="account"),
             FieldSpec("disabled", "Disabled", "Check", in_list=True),
         ),
-        list_fields=("shipping_rule_name", "shipping_amount", "disabled"),
+        list_fields=("shipping_rule_name", "shipping_amount", "transit_days", "disabled"),
     )
 )
 

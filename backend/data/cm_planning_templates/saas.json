@@ -1,0 +1,70 @@
+{
+  "id": "saas",
+  "label": "SaaS",
+  "description": "Low BOM; hosting-like variable via rate masters; sales & corp overhead.",
+  "drivers": [
+    {
+      "code": "variable_cost",
+      "label": "Variable Cost",
+      "is_group": true,
+      "cm_class": "variable_cost",
+      "children": [
+        {
+          "code": "commission",
+          "label": "Commission",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "sales_partner",
+          "scope": "header"
+        },
+        {
+          "code": "packaging",
+          "label": "Hosting / delivery",
+          "cm_class": "variable_cost",
+          "allocation_method": "from_source",
+          "source": "cost_rate",
+          "scope": "line"
+        }
+      ]
+    },
+    {
+      "code": "product_channel_fixed",
+      "label": "Product / Channel fixed",
+      "cm_class": "product_channel_fixed",
+      "allocation_method": "percentage",
+      "allocation_basis": "revenue",
+      "method_params": { "pct": 15 }
+    },
+    {
+      "code": "segment_bu_fixed",
+      "label": "Segment / BU fixed",
+      "cm_class": "segment_bu_fixed",
+      "allocation_method": "percentage",
+      "allocation_basis": "revenue",
+      "method_params": { "pct": 10 }
+    },
+    {
+      "code": "corporate_overhead",
+      "label": "Corporate Overhead",
+      "is_group": true,
+      "cm_class": "corporate_overhead",
+      "children": [
+        {
+          "code": "corporate_overhead_default",
+          "label": "Corporate OH",
+          "cm_class": "corporate_overhead",
+          "allocation_method": "percentage",
+          "allocation_basis": "revenue",
+          "method_params": { "pct": 8 }
+        }
+      ]
+    }
+  ],
+  "allocations": {
+    "product_channel_fixed_pct_of_revenue": 15,
+    "segment_bu_fixed_pct_of_revenue": 10,
+    "corporate_overhead_pct_of_revenue": 8
+  },
+  "target_cm1_pct": 70,
+  "min_cm1_pct": 50
+}

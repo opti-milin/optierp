@@ -6,11 +6,23 @@ companies) — a **net-new India compliance USP**. Not a re-implementation of ER
 **no** entity ITR compute/file feature (verified). Modelled on the same sequencing as
 [INDIA_COMPLIANCE_GAP_AND_PLAN.md](INDIA_COMPLIANCE_GAP_AND_PLAN.md) (data/JSON layer first, live
 portal later) and the MCA idea in [USP_AND_FUTURE_SCOPE.md](USP_AND_FUTURE_SCOPE.md) §4.
-**Status:** 🟢 **Phases 0–6 lean built.** Phase 0–1 worksheet + UI; Phase 2 ITR JSON/CSV;
-Phase 3 advance-tax calendar; Phase 4 entity-gated ITR-3/5 packs (lean worksheets);
-Phase 5 26AS JSON upload reconcile; Phase 6 pluggable e-file (`none` / `sandbox` stub —
-no portal HTTPS / DSC yet).
-**Designed:** 2026-07-19. **Built (0–6 lean):** 2026-07-19.
+**Status:** 🟢 **Phases 0–6 lean built, plus IndividualHeads extension, rule-engine refactor
+(`0077_income_tax_engine`), and Tax Adjustment Engine (`0084_tax_adjustment_engine`).** Phase 0–1
+worksheet + UI; Phase 2 ITR JSON/CSV; Phase 3 advance-tax calendar; Phase 4 entity-gated ITR-3/5
+packs (lean worksheets); Phase 5 26AS JSON upload reconcile; Phase 6 pluggable e-file
+(`none` / `sandbox` stub — no portal HTTPS / DSC yet). Follow-on: `Individual` + slab rates,
+`IndividualHeads` ITR-1 export, lean Form 16 PDF, payroll bridge stubs. **Tax math** is
+policy-driven (`FlatRate` / `SlabBased` / `RuleBased`) with separate masters for slabs,
+surcharge (+ marginal relief), cess, 87A rebate, and special rates — see §5.1.
+**Books → taxable** is now a metadata-driven **tax adjustment engine** (provisions + AY rule
+packs + evaluators) — see §5.2.
+**Designed:** 2026-07-19. **Built (0–6 lean):** 2026-07-19. **Rule engine:** 2026-07-29.
+**Adjustment engine:** 2026-07-31.
+
+> Cursor briefs: [plans/itr_gap_and_plan.plan.md](plans/itr_gap_and_plan.plan.md),
+> [plans/taxation_module_itr.plan.md](plans/taxation_module_itr.plan.md),
+> [plans/income_tax_engine_refactor.plan.md](plans/income_tax_engine_refactor.plan.md),
+> [plans/tax_adjustment_engine.plan.md](plans/tax_adjustment_engine.plan.md).
 
 > **SaaS framing:** many tenants will need entity ITR help; we cannot permanently skip
 > proprietor/firm forms, but we **sequence** them. Phase 1 targets **companies (ITR-6)** — matches
@@ -63,7 +75,52 @@ worksheet and an export pack so the owner / CA is not re-keying from scratch.
 | **ITR-3 / ITR-5** | Proprietor / firm / LLP | **sequenced** (entity_type) |
 | **Form 26AS / AIS reconcile** | Match credits claimed vs portal | **medium** |
 | **Live e-filing (DSC)** | Push to income-tax portal | **later** (pluggable) |
-| **Employee Form 16 / 24Q** | Payroll | **out of scope** until HR/Payroll |
+| **Employee Form 16 / 24Q** | Payroll | **bridge ready**; full Payroll still pending |
+
+---
+
+## Payroll linkage
+
+The original lean ITR build stopped at entity filing. The current extension adds
+`IndividualHeads` worksheets, Form 16 fields, and a **Payroll bridge contract**
+so HR/Payroll can auto-seed ITR without redesigning Taxation.
+
+### What exists now
+
+- `IncomeTaxComputation` supports:
+  - `assessee_mode = EntityBooks | IndividualHeads`
+  - salary / house-property / other-sources / capital-gains heads
+  - Form 16 fields (`employer_*`, `employee_*`, salary totals, deducted tax)
+  - bridge fields: `seed_source`, `employee_id`, `payroll_entry_id`, `salary_slip_ids`
+- `backend/app/services/payroll_income_tax_bridge.py` defines:
+  - `Form16Slice`
+  - `form16_slices_from_salary_slips(...)` stub
+  - `seed_individual_computation_from_payroll(...)`
+- `POST /income-tax-computations/seed-from-payroll` documents the intended handoff.
+  Until HR/Payroll exists it returns `PAYROLL_NOT_ENABLED`.
+
+### Implementation checklist for HR/Payroll
+
+When building HR/Payroll, **must**:
+
+1. Reuse `seed_individual_computation_from_payroll(...)` instead of rebuilding salary-tax math.
+2. Implement `form16_slices_from_salary_slips(...)` from real `Salary Slip` / `Payroll Entry` data.
+3. Trigger the bridge on Payroll Entry close and/or an explicit “Seed from Payroll” action.
+4. Map Payroll fields as follows:
+   - gross salary → `gross_salary` and `salary_income`
+   - exemptions → `exemptions_total`
+   - taxable salary → `taxable_salary`
+   - salary TDS → `tax_deducted` and `salary_tds`
+   - employer identity → `employer_name`, `employer_tan`, `employer_address`
+5. Prefer one active `IndividualHeads` computation per `(company, assessment_year, employee_id)`.
+6. Leave seeded computations in **Draft** for human review.
+7. Never overwrite a submitted computation; cancel + recreate or refuse.
+
+### Important design note
+
+Payroll should **not** reimplement slabs, rebate `87A`, cess, or export math.
+Those belong in the existing income-tax services so EntityBooks and IndividualHeads
+stay consistent.
 
 ---
 
@@ -132,10 +189,12 @@ Inspected **2026-07-19** against upstream git trees (not assumptions).
 ## 4. The gaps (what to build)
 
 1. **Company PAN / TAN** — today only `tax_id` (GSTIN). Needed for ITR header and to complete 26Q.
-2. **Books → taxable-income bridge** — adjustment lines (add-back / deduction) keyed to categories
-   (40(a), 43B, …); IT depreciation vs book depreciation (lean first: manual amounts).
+2. **Books → taxable-income bridge** — ✅ **Tax Adjustment Engine** (`0084`): provision catalogue
+   + AY rule packs + evaluators (PercentOfBase, ScheduleCap, PaymentTiming, DiffTwoSources, …).
+   ERP adapters best-effort; missing facts → `NeedsInput`. Full ICDS measurement / MAT compare
+   remain informational stubs (`phase_d`).
 3. **Corporate tax computation** — AY rate table (rate / surcharge / cess); tax on taxable income;
-   MAT depth **deferred**.
+   MAT depth **deferred** (catalogue stub only).
 4. **Credits** — TDS receivable from books + advance-tax payments; net payable / refundable.
 5. **ITR-6 export pack** — schedule-oriented JSON/CSV for offline utility / CA (Phase 2).
 6. **Advance-tax calendar + reminders** (Phase 3).
@@ -151,23 +210,65 @@ Inspected **2026-07-19** against upstream git trees (not assumptions).
 |---|---|
 | **Income Tax Settings** (`entity_type`, regime, default AY, flags) | Config blob like GST Settings — **not** a new master table |
 | **Company** `pan`, `tan` | Columns on existing Company |
-| **Income Tax Rate Table** (AY × base rate / surcharge % / cess %) | **Simple master → descriptor** (+ light `validate` for unique AY) |
-| **Tax Adjustment Category** (code, name, direction Add/Deduct) | **Simple master → descriptor** |
+| **Income Tax Rate Table** (AY × flat `tax_rate` only — Company/Firm/LLP) | **Simple master → descriptor** |
+| **Income Tax Slab Set** + child bands | **Descriptor** (Individual / Proprietor) |
+| **Surcharge Rule Set** + brackets (+ marginal relief flag) | **Descriptor** |
+| **Health & Education Cess Rule** | **Descriptor** |
+| **Rebate Rule** (e.g. 87A) | **Descriptor** |
+| **Special Income Tax Rate** (CG / lottery / crypto) | **Descriptor** |
+| **Tax Policy** (method + links to packs per AY × entity × regime) | **Descriptor** |
+| **Tax Adjustment Provision** (section taxonomy / stage / effect) | **Descriptor** |
+| **Tax Adjustment Rule Pack** + child **Rules** (method + JSON params) | **Descriptor** + eval in `tax_adjustment_engine/` |
+| **Tax Depreciation Block** (IT Act WDV) | **Descriptor** |
+| **Tax Adjustment Category** (legacy Add/Deduct alias → provision) | **Descriptor** (compat) |
 | **Income Tax Computation** (one per company × assessment year) | **Transaction / heavy logic → bespoke service**; `docstatus` 0/1/2 |
-| **Computation adjustment lines** (child) | Child of Computation (bespoke) |
+| **Computation adjustment lines** (child, audited) | Child of Computation (bespoke) |
+| **Special-income lines** (child) | Child of Computation (bespoke) |
 | **Advance Tax Payment** | Phase 3 — light submittable doc or child rows on Computation |
 | **ITR export (JSON/CSV)** | Read-only **bespoke generator** (mirror GSTR JSON) — no DocType |
-| Employee Form 16 / 24Q | **Out of scope** until HRMS Payroll |
+| Employee Form 16 / 24Q | **Out of scope** until HRMS Payroll (lean Form 16 PDF exists) |
 
 ```
-Books (P&L, TDS) ──► Income Tax Computation (bespoke) ──► ITR-6 export (later)
+Books (P&L, TDS) ──► Income Tax Computation (bespoke) ──► ITR export
          ▲                        ▲
-   IT Settings              Rate Table + Adjustment Categories
-   (SystemSetting)          (engine descriptors)
+   IT Settings              Tax Policy → Rate / Slabs / Surcharge / Cess / Rebate
+   (SystemSetting)          + Tax Adjustment Engine (provisions / rule packs)
+                            + Special Rates (descriptors)
+                            Engines: income_tax_engine/ + tax_adjustment_engine/
 ```
 
 **Decision rule:** posts GL / computes statutory tax figures → bespoke; a field on Company → column;
 a filing artifact → read-only generator; a rate/category list with no posting → descriptor.
+
+### 5.1 Rule-engine pipeline (data-driven)
+
+```
+taxable income (books + adjustments)
+  → Tax Policy selects FlatRate | SlabBased | RuleBased
+  → base tax (+ special-rate lines for RuleBased)
+  → rebate (e.g. 87A from Rebate Rule)
+  → surcharge brackets + optional marginal relief
+  → Health & Education Cess
+  → less TDS / TCS / advance tax → payable / refund
+```
+
+All statutory numbers live in masters (AY + optional effective dates). Submitted computations
+snapshot `policy_id`, `computation_method`, and `tax_breakdown` JSON for audit.
+
+### 5.2 Tax adjustment engine (books → taxable)
+
+```
+Books / heads / ERP facts
+  → Tax Adjustment Rule Pack (AY × entity × regime)
+  → methods: Manual | PercentOfBase | ThresholdDisallow | PaymentTiming
+             | DiffTwoSources | ScheduleCap | FormulaSafe | PriorYearReversal
+  → audited adjustment lines (status Computed / NeedsInput / Overridden / …)
+  → net_adjustments → existing tax pipeline (§5.1)
+```
+
+Catalogue seed: `backend/data/tax_adjustment_packs/`. Recompute:
+`POST /income-tax-computations/{id}/recompute-adjustments`. Legacy **Tax Adjustment Category**
+remains as a thin alias keyed to provisions.
 
 ---
 

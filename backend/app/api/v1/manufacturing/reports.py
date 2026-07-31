@@ -52,7 +52,9 @@ def _lead_time_out(est: LeadTimeEstimate) -> LeadTimeEstimateOut:
         warehouse_id=est.warehouse_id,
         procurement_days=est.procurement_days,
         manufacturing_days=est.manufacturing_days,
+        outbound_days=est.outbound_days,
         total_days=est.total_days,
+        ready_to_dispatch_date=est.ready_to_dispatch_date,
         earliest_promise_date=est.earliest_promise_date,
         operation_mins=est.operation_mins,
         components=[LeadTimeComponentRowOut(**c.__dict__) for c in est.components],
@@ -73,8 +75,10 @@ def _reverse_out(plan: ReverseSchedule) -> ReverseScheduleOut:
         warehouse_id=plan.warehouse_id,
         procurement_days=plan.procurement_days,
         manufacturing_days=plan.manufacturing_days,
+        outbound_days=plan.outbound_days,
         total_days=plan.total_days,
         earliest_promise_date=plan.earliest_promise_date,
+        ready_to_dispatch_date=plan.ready_to_dispatch_date,
         manufacturing_start_date=plan.manufacturing_start_date,
         materials_ready_by=plan.materials_ready_by,
         on_time=plan.on_time,
@@ -211,8 +215,10 @@ async def production_analytics(
     "/capable-to-promise",
     response_model=LeadTimeEstimateOut,
     summary="Capable-to-promise (lead-time estimate)",
-    description="Phase 7.0 USP: estimate procurement wait + manufacturing days for an "
-    "item/qty and return the earliest promise date. Soft estimate — not finite capacity.",
+    description="Phase 7.0 / 9.0: estimate procurement + manufacturing + outbound transit "
+    "for an item/qty. earliest_promise_date is customer receipt "
+    "(ready_to_dispatch + outbound_days). Prefers open PO/MR/WO dates when present. "
+    "Soft estimate — not finite capacity.",
 )
 async def capable_to_promise(
     item_id: uuid.UUID,
@@ -221,6 +227,8 @@ async def capable_to_promise(
     qty: Annotated[Decimal, Query(gt=0)] = Decimal("1"),
     as_of: date | None = None,
     warehouse_id: uuid.UUID | None = None,
+    outbound_days: Annotated[int | None, Query(ge=0, le=365)] = None,
+    shipping_rule_id: uuid.UUID | None = None,
 ) -> LeadTimeEstimateOut:
     if current_user.company_id is None:
         raise ValidationError("An active company is required")
@@ -231,6 +239,8 @@ async def capable_to_promise(
         qty,
         as_of=as_of,
         warehouse_id=warehouse_id,
+        outbound_days=outbound_days,
+        shipping_rule_id=shipping_rule_id,
     )
     return _lead_time_out(est)
 
@@ -239,9 +249,9 @@ async def capable_to_promise(
     "/reverse-schedule",
     response_model=ReverseScheduleOut,
     summary="Reverse schedule from delivery date",
-    description="Phase 7.1 USP: work backwards from a customer delivery date — when to "
-    "start manufacture, when materials must be ready, and latest purchase order dates "
-    "per shortfall component. Soft calendar estimate — not finite capacity.",
+    description="Phase 7.1 USP: work backwards from a customer *receipt* date — when to "
+    "dispatch (minus outbound transit), start manufacture, when materials must be ready, "
+    "and latest purchase order dates per shortfall. Soft calendar estimate — not finite capacity.",
 )
 async def reverse_schedule(
     item_id: uuid.UUID,
@@ -251,6 +261,8 @@ async def reverse_schedule(
     qty: Annotated[Decimal, Query(gt=0)] = Decimal("1"),
     as_of: date | None = None,
     warehouse_id: uuid.UUID | None = None,
+    outbound_days: Annotated[int | None, Query(ge=0, le=365)] = None,
+    shipping_rule_id: uuid.UUID | None = None,
 ) -> ReverseScheduleOut:
     if current_user.company_id is None:
         raise ValidationError("An active company is required")
@@ -262,6 +274,8 @@ async def reverse_schedule(
         delivery_date,
         as_of=as_of,
         warehouse_id=warehouse_id,
+        outbound_days=outbound_days,
+        shipping_rule_id=shipping_rule_id,
     )
     return _reverse_out(plan)
 
@@ -270,8 +284,9 @@ async def reverse_schedule(
     "/pegging",
     response_model=PeggingTimelineOut,
     summary="Demand → supply pegging timeline",
-    description="Phase 7.2 USP: for one item, list open Sales Order demand vs stock / "
-    "open Work Orders / Manufacture MRs, net shortfall, and CTP for uncovered qty.",
+    description="Phase 7.2 / 9.0: for one item, list open Sales Order demand vs stock / "
+    "open Work Orders / Purchase Orders / Manufacture MRs, net shortfall, and "
+    "supply-aware CTP for uncovered qty.",
 )
 async def pegging(
     item_id: uuid.UUID,

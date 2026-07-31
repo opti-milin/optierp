@@ -54,8 +54,8 @@ onMounted(load);
     <div>
       <h1 class="text-xl font-semibold text-gray-900">Income Tax Settings</h1>
       <p class="text-sm text-gray-500">
-        How this company files its entity income-tax return. PAN and TAN come from the Company
-        record.
+        How this company files its income-tax return (entity or individual). PAN and TAN come from
+        the Company record.
       </p>
     </div>
 
@@ -85,7 +85,8 @@ onMounted(load);
           <label class="form-label">Entity type</label>
           <select v-model="form.entity_type" class="form-input">
             <option value="Company">Company (ITR-6)</option>
-            <option value="Proprietor">Proprietor (ITR-3)</option>
+            <option value="Proprietor">Proprietor (ITR-3, slabs)</option>
+            <option value="Individual">Individual (ITR-1 / Form 16, slabs)</option>
             <option value="Firm">Firm (ITR-5)</option>
             <option value="LLP">LLP (ITR-5)</option>
           </select>

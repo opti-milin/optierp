@@ -1,0 +1,48 @@
+---
+description: OptiReach ERP — architecture boundaries, hard constraints & environment gotchas. Always on.
+globs:
+alwaysApply: true
+---
+
+# OptiReach ERP — Agent Rules
+
+**Full context lives in [PROJECT.md](mdc:PROJECT.md). Read it before non-trivial work.**
+OptiReach = a clean re-architecture of ERPNext onto **FastAPI + Vue 3 + PostgreSQL**, zero Frappe dependency, India-ready multi-tenant SaaS.
+
+## Architecture boundaries (never cross)
+- **4-layer rule:** logic lives ONLY in `backend/app/services/`. Routers stay thin; models are pure ORM. No logic in routers or models.
+- **Machine-first — classify every new DocType first:**
+  - Simple master (no logic) → a descriptor in `backend/app/registry/descriptors.py`. **No bespoke code.**
+  - Master + 1–2 rules → descriptor + a `validate`/`before_insert` hook.
+  - Transaction / heavy logic (GL posting, taxes & totals, stock moves, pricing, ledgers) → bespoke service, but list/form/permissions still from a descriptor.
+- Descriptor is the single source of truth for engine masters. Never express GL/taxes/stock/pricing/ledger logic in metadata.
+
+## Hard constraints
+- **No Frappe dependency** — never import `frappe`/`erpnext` or add such a dep.
+- **Python 3.12+**, fully type-annotated (Python *and* TypeScript). **All DB access async** (SQLAlchemy 2.0 + asyncpg) — no sync DB calls.
+- Preserve ERPNext semantics: `docstatus` 0/1/2 on every txn table; atomic per-company naming series; role matrix incl. `if_owner`; **append-only GL + stock ledgers (INSERT only)**.
+- Every tenant table has `company_id UUID NOT NULL`; enforce at **both** RLS and service layer.
+- No hardcoded secrets (config via `pydantic-settings`/env only).
+- 4xx errors use the envelope `{"detail", "code", "field"}`. Structured `structlog` JSON logs with `trace_id`. Every endpoint has `summary`/`description`/`response_model`.
+
+## Frontend
+- Vue 3 **Composition API only** (no Options API); TypeScript; **Pinia** (no Vuex); Tailwind.
+- Forms are schema-driven — reuse `FormBuilder` / `DataTable` / `useList` / `useDocument`. Engine masters render automatically at `/m/<slug>`.
+
+## Never do this
+- ❌ Emit user-visible "ERPNext" / "Frappe" strings — branding comes from `frontend/public/brand/config.json`.
+- ❌ Hand-code a simple master across all layers — use the engine.
+- ❌ UPDATE/DELETE a GL entry or stock ledger entry.
+- ❌ Put business logic in a router or model, or bypass `company_id` filtering in a service.
+
+## Environment gotchas
+- **Two Postgres roles:** app connects as `erp_app` (non-owner → RLS enforced); migrations/seed run as `erp_owner`. `infra/init-db.sql` creates both and MUST run before migrations. `ltree` (contrib) required.
+- **`scripts/seed_demo.py --reset-schema` is destructive** — it drops schema `public`. Omit it to seed additively.
+- DB password differs between `docker-compose.yml` (`milin`) and `.env.example` — match `.env` to the Postgres you actually started. Repo passwords are dev placeholders.
+- WeasyPrint (PDF) needs native libs (Pango/Cairo) — present in Docker, not bare Windows. Dev email → Mailhog (`localhost:8025`). HR module is sourced from `frappe/hrms`, not erpnext.
+
+## Plans, ship, and verify
+- **On plan confirm:** always copy/save the confirmed plan into [`docs/plans/`](mdc:docs/plans/README.md) (drop Cursor hash suffixes) and add a row to that README. Do not leave the only copy under `~/.cursor/plans/`.
+- **After implementation:** restart the app containers (`docker compose up -d --build` or restart the affected services) so the user can exercise the change against a live stack.
+- **Always end with manual verification steps** — numbered, UI/API paths the user can follow step by step (login → navigate → click → expected result). Automated tests alone are not enough.
+- Backend checks: `cd backend && ruff check . && pytest tests/unit`. Frontend types: `cd frontend && npm run build` (runs `vue-tsc`). Health: `curl localhost:8000/health`.

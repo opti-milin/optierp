@@ -178,6 +178,7 @@ async def create_quotation(
         territory_id=payload.territory_id,
         customer_group_id=payload.customer_group_id,
         sales_partner_id=payload.sales_partner_id,
+        shipping_rule_id=payload.shipping_rule_id,
         payment_terms_template_id=payload.payment_terms_template_id,
         currency=currency,
         conversion_rate=payload.conversion_rate,
@@ -314,6 +315,13 @@ async def submit_quotation(
     )
     raise_if_blocked(fulfillment)
 
+    from app.services.cm_planning.plan import assert_margin_policy_for_quotation
+
+    margin = await assert_margin_policy_for_quotation(db, quotation.id, quotation.company_id)
+    warnings = list(fulfillment.warnings)
+    if margin.message and not margin.ok and margin.policy == "warn":
+        warnings.append(margin.message)
+
     quotation.docstatus = DOCSTATUS_SUBMITTED
     quotation.status = "Open"
     quotation.modified_by = user.id
@@ -323,7 +331,7 @@ async def submit_quotation(
         user_id=user.id, company_id=quotation.company_id,
     )
     await db.commit()
-    return await get_quotation(db, quotation.id, user.company_id), list(fulfillment.warnings)
+    return await get_quotation(db, quotation.id, user.company_id), warnings
 
 
 async def check_quotation_fulfillment(

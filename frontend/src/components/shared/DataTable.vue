@@ -49,9 +49,9 @@ const emit = defineEmits<{ rowClick: [row: T] }>();
         >
           <td v-for="col in columns" :key="col.key" class="px-4 py-3 text-sm text-gray-700" :class="col.class">
             <slot :name="`cell-${col.key}`" :row="row" :value="row[col.key]">
-              <!-- Render booleans as a check / dash instead of the raw "true"/"false" -->
-              <span v-if="typeof row[col.key] === 'boolean'" :class="row[col.key] ? 'text-gray-700' : 'text-gray-300'">
-                {{ row[col.key] ? "✓" : "—" }}
+              <!-- Check fields: Yes/No (avoid "—" which looks like a missing value) -->
+              <span v-if="typeof row[col.key] === 'boolean'" :class="row[col.key] ? 'text-gray-700' : 'text-gray-400'">
+                {{ row[col.key] ? "Yes" : "No" }}
               </span>
               <template v-else>{{ row[col.key] }}</template>
             </slot>

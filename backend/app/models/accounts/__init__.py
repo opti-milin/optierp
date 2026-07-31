@@ -9,6 +9,7 @@ Everything is re-exported here so existing imports
 from app.models.accounts.budget import Budget, BudgetAccount, PeriodClosingVoucher
 from app.models.accounts.common import (
     CHARGE_TYPES,
+    CM_CLASSES,
     INVOICE_STATUSES,
     PARTY_TYPES,
     REPORT_TYPES,
@@ -21,6 +22,7 @@ from app.models.accounts.common import (
     TotalsMixin,
     VoucherMixin,
     charge_type_enum,
+    cm_class_enum,
     invoice_status_enum,
     party_type_enum,
     report_type_enum,
@@ -77,10 +79,11 @@ from app.models.accounts.share import (
 )
 
 __all__ = [
-    "CHARGE_TYPES", "INVOICE_STATUSES", "PARTY_TYPES", "REPORT_TYPES",
+    "CHARGE_TYPES", "CM_CLASSES", "INVOICE_STATUSES", "PARTY_TYPES", "REPORT_TYPES",
     "ROOT_TYPE_BALANCE", "ROOT_TYPE_REPORT", "ROOT_TYPES",
     "InvoiceItemMixin", "InvoiceMixin", "TaxRowMixin", "TotalsMixin", "VoucherMixin",
-    "charge_type_enum", "invoice_status_enum", "party_type_enum", "report_type_enum", "root_type_enum",
+    "charge_type_enum", "cm_class_enum", "invoice_status_enum", "party_type_enum",
+    "report_type_enum", "root_type_enum",
     "Account", "Bank", "BankAccount", "CostCenter", "FiscalYear", "ModeOfPayment",
     "PaymentRequest", "PaymentTerm", "PaymentTermsTemplate", "PaymentTermsTemplateDetail",
     "TaxCategory", "TaxTemplate", "TaxTemplateDetail", "TaxWithholdingCategory",

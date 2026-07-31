@@ -1106,6 +1106,9 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         await seed_supply_chain(db, actor, customers, suppliers, income_account, recent, extras)
         await seed_manufacturing(db, actor, recent)
+        from scripts.seed_cm_planning_demo import seed_cm_planning  # noqa: PLC0415
+
+        await seed_cm_planning(db, actor, company.id)
 
         # Assign each item the GST slab template that matches its HSN rate, so the
         # rate charged (via the item-tax-template override) agrees with the item's
@@ -1998,6 +2001,10 @@ async def manufacturing_topup_main() -> None:
 
         print(f"Manufacturing top-up for company '{company.company_name}' as {admin.email}…")
         await seed_manufacturing(db, actor, recent)
+        from scripts.seed_cm_planning_demo import seed_cm_planning  # noqa: PLC0415
+
+        await seed_cm_planning(db, actor, company.id)
+        await db.commit()
         print("Manufacturing top-up complete.")
     await engine.dispose()
 

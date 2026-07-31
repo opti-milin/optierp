@@ -17,6 +17,7 @@ from app.schemas.accounts import (
     BudgetVarianceRow,
     CashFlowRow,
     CollectionSummaryRow,
+    ContributionMarginReport,
     DunningNotice,
     EmailDunningBatchRequest,
     EmailDunningRequest,
@@ -277,6 +278,29 @@ async def gross_profit(
     to_date: date,
 ) -> GrossProfitReport:
     return await reports.gross_profit(db, _company(current_user), from_date=from_date, to_date=to_date)
+
+
+@router.get(
+    "/contribution-margin",
+    response_model=ContributionMarginReport,
+    summary="Contribution Margin (CM1 / CM2 / CM3)",
+    description="Managerial P&L waterfall from Account.cm_class tags. Optional cost_center_id "
+    "filters GL postings. Statutory Profit & Loss is unchanged.",
+)
+async def contribution_margin_report(
+    current_user: Annotated[CurrentUser, Depends(require_permission("GL Entry", "report"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    from_date: date,
+    to_date: date,
+    cost_center_id: uuid.UUID | None = None,
+) -> ContributionMarginReport:
+    return await reports.contribution_margin(
+        db,
+        _company(current_user),
+        from_date=from_date,
+        to_date=to_date,
+        cost_center_id=cost_center_id,
+    )
 
 
 @router.get(

@@ -219,6 +219,8 @@ export interface ManufacturingSettings {
   over_production_percentage: string;
   capacity_planning_enabled: boolean;
   order_fulfillment_mode: OrderFulfillmentMode;
+  /** Calendar days warehouse → customer when Shipping Rule has no transit_days. */
+  outbound_delivery_days: number;
 }
 
 export interface JobCardTimeLogRow {
@@ -525,6 +527,8 @@ export interface LeadTimeComponentRow {
   shortfall_qty: string;
   lead_time_days: number;
   drives_wait: boolean;
+  supply_ready_date?: string | null;
+  supply_source?: string | null;
 }
 
 export interface LeadTimeEstimate {
@@ -538,7 +542,9 @@ export interface LeadTimeEstimate {
   warehouse_id: string | null;
   procurement_days: number;
   manufacturing_days: number;
+  outbound_days: number;
   total_days: number;
+  ready_to_dispatch_date: string;
   earliest_promise_date: string;
   operation_mins: string;
   components: LeadTimeComponentRow[];
@@ -555,7 +561,7 @@ export interface ProcurementSuggestion {
   days_until_order: number;
 }
 
-/** Phase 7.1 reverse schedule from a delivery date. */
+/** Phase 7.1 reverse schedule from a customer receipt date. */
 export interface ReverseSchedule {
   item_id: string;
   item_code: string | null;
@@ -568,8 +574,10 @@ export interface ReverseSchedule {
   warehouse_id: string | null;
   procurement_days: number;
   manufacturing_days: number;
+  outbound_days: number;
   total_days: number;
   earliest_promise_date: string;
+  ready_to_dispatch_date: string;
   manufacturing_start_date: string;
   materials_ready_by: string;
   on_time: boolean;

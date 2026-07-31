@@ -16,6 +16,7 @@ from app.models.core import SystemSetting
 MODULE_FLAGS_KEY = "module_flags"
 MODULE_FLAGS_DEFAULTS: dict[str, bool] = {
     "manufacturing": True,
+    "taxation": True,
 }
 
 

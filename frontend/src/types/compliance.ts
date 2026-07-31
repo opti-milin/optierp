@@ -222,9 +222,33 @@ export interface IncomeTaxAdjustmentLine {
   id: string;
   idx: number;
   category_id: string | null;
+  provision_id?: string | null;
+  rule_id?: string | null;
+  section_code?: string;
+  stage?: string;
   description: string;
   direction: string;
   amount: string;
+  base_amount?: string;
+  computed_amount?: string;
+  override_amount?: string | null;
+  final_amount?: string;
+  status?: string;
+  explanation?: Record<string, unknown>;
+  inputs?: Record<string, unknown>;
+  source_refs?: Record<string, unknown>;
+  prior_year_line_id?: string | null;
+}
+
+export interface IncomeTaxSpecialIncomeLine {
+  id: string;
+  idx: number;
+  special_rate_id: string | null;
+  income_category_code: string;
+  amount: string;
+  rate_percent: string;
+  tax_amount: string;
+  description: string | null;
 }
 
 export interface IncomeTaxComputation {
@@ -234,20 +258,49 @@ export interface IncomeTaxComputation {
   from_date: string;
   to_date: string;
   rate_table_id: string | null;
+  policy_id: string | null;
+  computation_method: string | null;
+  assessee_mode: string;
   book_profit: string;
+  salary_income: string;
+  house_property_income: string;
+  other_sources_income: string;
+  capital_gains_income: string;
+  chapter_via_deduction: string;
+  standard_deduction: string;
   net_adjustments: string;
   taxable_income: string;
   tax_amount: string;
   surcharge_amount: string;
   cess_amount: string;
+  rebate_amount: string;
+  rebate_87a: string;
+  marginal_relief_amount: string;
   total_tax: string;
   tds_credit: string;
+  tcs_credit: string;
+  salary_tds: string;
   advance_tax_paid: string;
   tax_payable: string;
+  tax_breakdown: Record<string, unknown>;
+  employer_name: string | null;
+  employer_tan: string | null;
+  employer_address: string | null;
+  employee_name: string | null;
+  employee_pan: string | null;
+  gross_salary: string;
+  exemptions_total: string;
+  taxable_salary: string;
+  tax_deducted: string;
+  seed_source: string;
+  employee_id: string | null;
+  payroll_entry_id: string | null;
+  salary_slip_ids: string[];
   status: string;
   docstatus: number;
   remarks: string | null;
   adjustments: IncomeTaxAdjustmentLine[];
+  special_income_lines: IncomeTaxSpecialIncomeLine[];
 }
 
 export interface IncomeTaxComputationListItem {
@@ -256,9 +309,11 @@ export interface IncomeTaxComputationListItem {
   assessment_year: string;
   from_date: string;
   to_date: string;
+  assessee_mode?: string;
   taxable_income: string;
   total_tax: string;
   tax_payable: string;
   status: string;
   docstatus: number;
+  employee_name?: string | null;
 }
