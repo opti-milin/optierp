@@ -4,6 +4,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import { useStockStore } from "@/stores/stock";
 import { useAccountsStore } from "@/stores/accounts";
 import { useCompanyCurrency } from "@/composables/useCompanyCurrency";
@@ -269,10 +270,7 @@ onMounted(async () => {
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="form-label">Service (item)*</label>
-            <select v-model="form.item_id" class="form-input">
-              <option value="" disabled>Select a service…</option>
-              <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
+            <ItemSelect v-model="form.item_id" :options="store.itemOptions" placeholder="Select a service…" />
             <p v-if="selectedUom" class="mt-1 text-xs text-gray-400">Measured in <strong>{{ selectedUom }}</strong> (the item's UOM)</p>
           </div>
           <div>

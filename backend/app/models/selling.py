@@ -360,6 +360,10 @@ class ShippingRule(Base, DocumentMixin, CompanyScopedMixin):
     free_above: Mapped[Decimal] = mapped_column(
         Numeric(21, 6), nullable=False, default=0, server_default=text("0")
     )  # subtotal at/above which shipping is free (0 = never free)
+    # Calendar days warehouse → customer (outbound). Used by supply-aware CTP.
+    transit_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"))
     disabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
@@ -511,6 +515,10 @@ class Quotation(Base, DocumentMixin, CompanyScopedMixin, VoucherMixin, TotalsMix
     sales_partner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sales_partners.id", use_alter=True, name="fk_qtn_partner", ondelete="SET NULL")
     )
+    shipping_rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shipping_rules.id", use_alter=True, name="fk_qtn_shipping_rule", ondelete="SET NULL"),
+    )
     payment_terms_template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("payment_terms_templates.id", use_alter=True, name="fk_qtn_payment_terms", ondelete="SET NULL"),
@@ -618,6 +626,10 @@ class SalesOrder(Base, DocumentMixin, CompanyScopedMixin, VoucherMixin, TotalsMi
     )
     sales_partner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sales_partners.id", use_alter=True, name="fk_so_partner", ondelete="SET NULL")
+    )
+    shipping_rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shipping_rules.id", use_alter=True, name="fk_so_shipping_rule", ondelete="SET NULL"),
     )
     payment_terms_template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

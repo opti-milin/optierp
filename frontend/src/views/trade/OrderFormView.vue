@@ -27,9 +27,10 @@ import { useAuthStore } from "@/stores/auth";
 import { api } from "@/api/client";
 import { formatCurrency, formatDate, formatQty } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
-import type { OrderDetail, OrderFulfillment, OrderItemIn } from "@/types/trade";
+import type { OrderDetail, OrderFulfillment, OrderItemIn, SalesOrderDeliveryEstimate } from "@/types/trade";
 import type { TaxRowIn } from "@/types/accounts";
 import type { OrderKind } from "@/views/trade/OrderListView.vue";
+import type { CmPlan } from "@/types/cm_planning";
 
 const props = defineProps<{ kind: OrderKind; id?: string }>();
 const router = useRouter();
@@ -55,6 +56,9 @@ const warnings = ref<string[]>([]);
 const saving = ref(false);
 const fulfillment = ref<OrderFulfillment | null>(null);
 const fulfillmentBusy = ref(false);
+const cmPlan = ref<CmPlan | null>(null);
+const cmBusy = ref(false);
+const deliveryEstimate = ref<SalesOrderDeliveryEstimate | null>(null);
 
 const partyId = ref("");
 const postingDate = ref(new Date().toISOString().slice(0, 10));
@@ -519,11 +523,19 @@ async function checkFulfillment(): Promise<void> {
   if (props.kind === "purchase-order") return;
   fulfillmentBusy.value = true;
   error.value = null;
+  deliveryEstimate.value = null;
   try {
     if (doc.value) {
       fulfillment.value = (
         await api.post<OrderFulfillment>(`${cfg.value.endpoint}/${doc.value.id}/check-fulfillment`)
       ).data;
+      if (props.kind === "sales-order") {
+        deliveryEstimate.value = (
+          await api.get<SalesOrderDeliveryEstimate>(
+            `/sales-orders/${doc.value.id}/delivery-estimate`,
+          )
+        ).data;
+      }
     } else {
       const body = {
         items: items.value
@@ -549,9 +561,37 @@ async function checkFulfillment(): Promise<void> {
   }
 }
 
+async function estimateCmPlan(): Promise<void> {
+  if (!doc.value) return;
+  if (props.kind !== "quotation" && props.kind !== "sales-order") return;
+  cmBusy.value = true;
+  error.value = null;
+  try {
+    const path =
+      props.kind === "quotation"
+        ? `/cm-plans/from-quotation/${doc.value.id}`
+        : `/cm-plans/from-sales-order/${doc.value.id}`;
+    cmPlan.value = (await api.post<CmPlan>(path)).data;
+  } catch (e) {
+    error.value = e as ErrorEnvelope;
+  } finally {
+    cmBusy.value = false;
+  }
+}
+
 function applySuggestedDelivery(): void {
-  if (!fulfillment.value?.earliest_promise_date) return;
-  extraDate.value = fulfillment.value.earliest_promise_date;
+  const suggested =
+    deliveryEstimate.value?.suggested_delivery_date
+    ?? fulfillment.value?.earliest_promise_date;
+  if (!suggested) return;
+  extraDate.value = suggested;
+}
+
+function healthClass(health: string): string {
+  if (health === "late") return "text-red-600";
+  if (health === "at_risk") return "text-amber-700";
+  if (health === "on_time") return "text-emerald-700";
+  return "text-gray-700";
 }
 
 async function prefill(): Promise<void> {
@@ -645,6 +685,15 @@ onMounted(async () => {
           >
             Check Fulfillment
           </button>
+          <button
+            v-if="(kind === 'quotation' || kind === 'sales-order') && doc.id"
+            type="button"
+            class="btn-secondary"
+            :disabled="cmBusy"
+            @click="estimateCmPlan"
+          >
+            Estimate CM
+          </button>
           <button v-if="kind === 'quotation' && doc.status === 'Open'" class="btn-primary"
                   @click="createSalesOrder">Create Sales Order</button>
           <button v-if="kind !== 'quotation' && doc.docstatus === 1 && pendingRows.length"
@@ -669,12 +718,16 @@ onMounted(async () => {
           <h2 class="text-sm font-semibold text-gray-900">Fulfillment &amp; cost</h2>
           <div class="flex flex-wrap gap-2 text-sm">
             <button
-              v-if="fulfillment.earliest_promise_date && doc.docstatus === 0"
+              v-if="
+                (deliveryEstimate?.suggested_delivery_date || fulfillment.earliest_promise_date)
+                && doc?.docstatus === 0
+              "
               type="button"
               class="btn-secondary"
               @click="applySuggestedDelivery"
             >
-              Use promise {{ fulfillment.earliest_promise_date }}
+              Use promise
+              {{ deliveryEstimate?.suggested_delivery_date ?? fulfillment.earliest_promise_date }}
             </button>
             <RouterLink
               :to="fulfillment.planning_dashboard_path"
@@ -682,6 +735,54 @@ onMounted(async () => {
             >
               Open Planning Dashboard
             </RouterLink>
+          </div>
+        </div>
+        <div
+          v-if="deliveryEstimate"
+          class="mb-3 rounded-md border border-gray-100 bg-gray-50 p-3 text-sm"
+        >
+          <div class="mb-2 flex flex-wrap gap-4">
+            <div>
+              <div class="text-xs uppercase text-gray-400">Delivery health</div>
+              <div class="font-medium capitalize" :class="healthClass(deliveryEstimate.health)">
+                {{ deliveryEstimate.health.replace("_", " ") }}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">Suggested delivery</div>
+              <div class="font-medium text-gray-900">
+                {{ deliveryEstimate.suggested_delivery_date ?? "—" }}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">Slack</div>
+              <div class="font-medium text-gray-900">
+                {{ deliveryEstimate.slack_days != null ? `${deliveryEstimate.slack_days}d` : "—" }}
+              </div>
+            </div>
+          </div>
+          <p class="mb-2 text-xs text-gray-500">
+            Live chain (MR → PO → WO → DN). Dates are suggestions only — not auto-written.
+          </p>
+          <div
+            v-for="ln in deliveryEstimate.lines"
+            :key="ln.sales_order_item_id"
+            class="mb-2 last:mb-0"
+          >
+            <div class="text-xs font-medium text-gray-700">
+              {{ ln.item_name ?? ln.item_code }}
+              <span class="font-normal capitalize text-gray-500" :class="healthClass(ln.health)">
+                · {{ ln.health.replace("_", " ") }}
+              </span>
+            </div>
+            <ol class="mt-1 space-y-0.5 text-xs text-gray-600">
+              <li v-for="(st, si) in ln.stages" :key="si">
+                <span class="font-medium text-gray-800">{{ st.stage }}</span>
+                <span v-if="st.source_name"> — {{ st.source_name }}</span>
+                <span v-if="st.planned_date"> · {{ st.planned_date }}</span>
+                <span class="text-gray-400"> ({{ st.status }})</span>
+              </li>
+            </ol>
           </div>
         </div>
         <div class="mb-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -739,6 +840,50 @@ onMounted(async () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div
+        v-if="cmPlan"
+        class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-5"
+      >
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold text-gray-900">Contribution Margin Plan — {{ cmPlan.name }}</h2>
+          <router-link class="text-sm text-primary hover:underline" :to="`/cm-plans/${cmPlan.id}`">
+            Open scenarios →
+          </router-link>
+        </div>
+        <div
+          v-if="cmPlan.scenarios.find((s) => s.is_baseline) as any"
+          class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5"
+        >
+          <template v-for="s in [cmPlan.scenarios.find((x) => x.is_baseline)!]" :key="s.id">
+            <div>
+              <div class="text-xs uppercase text-gray-400">Revenue</div>
+              <div class="font-medium">{{ formatCurrency(s.revenue, doc.currency) }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">CM1</div>
+              <div class="font-medium">
+                {{ formatCurrency(s.cm1, doc.currency) }}
+                <span v-if="s.cm1_pct" class="text-gray-500">({{ s.cm1_pct }}%)</span>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">CM2 / CM3</div>
+              <div class="font-medium">
+                {{ formatCurrency(s.cm2, doc.currency) }} / {{ formatCurrency(s.cm3, doc.currency) }}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">Op. profit</div>
+              <div class="font-medium">{{ formatCurrency(s.operating_profit, doc.currency) }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-400">Min selling</div>
+              <div class="font-medium">{{ formatCurrency(s.min_selling_total ?? "0", doc.currency) }}</div>
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- fulfilment dialog -->
@@ -913,17 +1058,30 @@ onMounted(async () => {
           <h2 class="text-sm font-semibold text-gray-900">Fulfillment &amp; cost</h2>
           <div class="flex flex-wrap gap-2 text-sm">
             <button
-              v-if="fulfillment.earliest_promise_date"
+              v-if="
+                (deliveryEstimate?.suggested_delivery_date || fulfillment.earliest_promise_date)
+              "
               type="button"
               class="btn-secondary"
               @click="applySuggestedDelivery"
             >
-              Use promise {{ fulfillment.earliest_promise_date }}
+              Use promise
+              {{ deliveryEstimate?.suggested_delivery_date ?? fulfillment.earliest_promise_date }}
             </button>
             <RouterLink :to="fulfillment.planning_dashboard_path" class="btn-secondary">
               Open Planning Dashboard
             </RouterLink>
           </div>
+        </div>
+        <div
+          v-if="deliveryEstimate"
+          class="mb-3 rounded-md border border-gray-100 bg-gray-50 p-3 text-sm"
+        >
+          <div class="mb-1 text-xs font-medium capitalize" :class="healthClass(deliveryEstimate.health)">
+            Delivery health: {{ deliveryEstimate.health.replace("_", " ") }}
+            · suggest {{ deliveryEstimate.suggested_delivery_date ?? "—" }}
+          </div>
+          <p class="text-xs text-gray-500">Live chain — suggestions only, not auto-written.</p>
         </div>
         <div class="mb-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
@@ -972,7 +1130,6 @@ onMounted(async () => {
           </button>
         </nav>
       </div>
-
       <div v-show="activeTab === 'Details'" class="space-y-8">
         <!-- header fields -->
         <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-3">

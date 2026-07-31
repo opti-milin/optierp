@@ -3,6 +3,7 @@
 
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import { api } from "@/api/client";
 import { useStockStore } from "@/stores/stock";
@@ -190,10 +191,7 @@ onMounted(async () => {
           <div class="col-span-3 text-right">Valuation Rate</div>
         </div>
         <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 items-center gap-2">
-          <select v-model="row.item_id" class="form-input col-span-5">
-            <option value="" disabled>Item…</option>
-            <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <ItemSelect v-model="row.item_id" class="col-span-5" :options="store.itemOptions" placeholder="Select item…" />
           <div class="col-span-2 pr-2 text-right text-sm text-gray-500">
             {{ currentFor(row.item_id) ? currentFor(row.item_id)!.qty : "—" }}
           </div>

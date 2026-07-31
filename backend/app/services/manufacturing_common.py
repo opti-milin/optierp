@@ -34,6 +34,8 @@ MFG_SETTINGS_DEFAULTS: dict = {
     "capacity_planning_enabled": False,  # soft workstation overload warnings on WO submit
     # SO/Quotation fulfillability gate: off | warn (default) | block
     "order_fulfillment_mode": "warn",
+    # Calendar days FG warehouse → customer when no Shipping Rule transit_days
+    "outbound_delivery_days": 0,
 }
 
 
@@ -60,6 +62,11 @@ def _sanitize_mfg_settings(raw: dict) -> dict:
     value["capacity_planning_enabled"] = bool(raw.get("capacity_planning_enabled", False))
     mode = str(raw.get("order_fulfillment_mode") or "warn").strip().lower()
     value["order_fulfillment_mode"] = mode if mode in FULFILLMENT_MODES else "warn"
+    try:
+        outbound = int(raw.get("outbound_delivery_days") or 0)
+    except (TypeError, ValueError):
+        outbound = 0
+    value["outbound_delivery_days"] = max(0, min(outbound, 365))
     return value
 
 

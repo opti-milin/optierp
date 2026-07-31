@@ -338,6 +338,8 @@ class ManufacturingSettings(BaseModel):
     capacity_planning_enabled: bool = False
     # off = skip SO/QTN check; warn = soft warnings on submit; block = hard 422
     order_fulfillment_mode: str = Field(default="warn", pattern="^(off|warn|block)$")
+    # Calendar days FG warehouse → customer (when Shipping Rule has no transit_days)
+    outbound_delivery_days: int = Field(default=0, ge=0, le=365)
 
 
 # --- Job Card ------------------------------------------------------------------------
@@ -710,10 +712,12 @@ class LeadTimeComponentRowOut(BaseModel):
     shortfall_qty: Decimal
     lead_time_days: int
     drives_wait: bool = False
+    supply_ready_date: date | None = None
+    supply_source: str | None = None
 
 
 class LeadTimeEstimateOut(BaseModel):
-    """Capable-to-promise estimate: materials wait + manufacture days → promise date."""
+    """Capable-to-promise: materials + manufacture + outbound → customer receipt."""
 
     item_id: uuid.UUID
     item_code: str | None = None
@@ -725,7 +729,9 @@ class LeadTimeEstimateOut(BaseModel):
     warehouse_id: uuid.UUID | None = None
     procurement_days: int
     manufacturing_days: int
+    outbound_days: int = 0
     total_days: int
+    ready_to_dispatch_date: date | None = None
     earliest_promise_date: date
     operation_mins: Decimal
     components: list[LeadTimeComponentRowOut] = []
@@ -743,7 +749,7 @@ class ProcurementSuggestionOut(BaseModel):
 
 
 class ReverseScheduleOut(BaseModel):
-    """Phase 7.1: reverse schedule from a customer delivery date + procurement order-by dates."""
+    """Phase 7.1: reverse schedule from customer receipt date + procurement order-by."""
 
     item_id: uuid.UUID
     item_code: str | None = None
@@ -756,8 +762,10 @@ class ReverseScheduleOut(BaseModel):
     warehouse_id: uuid.UUID | None = None
     procurement_days: int
     manufacturing_days: int
+    outbound_days: int = 0
     total_days: int
     earliest_promise_date: date
+    ready_to_dispatch_date: date | None = None
     manufacturing_start_date: date
     materials_ready_by: date
     on_time: bool

@@ -22,6 +22,7 @@ const fFg = ref("");
 const fOverProd = ref<number>(0);
 const fCapacity = ref(false);
 const fFulfillmentMode = ref<OrderFulfillmentMode>("warn");
+const fOutboundDays = ref(0);
 const fModuleEnabled = ref(true);
 
 async function load(): Promise<void> {
@@ -39,6 +40,7 @@ async function load(): Promise<void> {
     fOverProd.value = Number(s.data.over_production_percentage) || 0;
     fCapacity.value = !!s.data.capacity_planning_enabled;
     fFulfillmentMode.value = (s.data.order_fulfillment_mode as OrderFulfillmentMode) || "warn";
+    fOutboundDays.value = Number(s.data.outbound_delivery_days) || 0;
     fModuleEnabled.value = flags.flags.manufacturing !== false;
     loaded.value = true;
   } catch (e) {
@@ -51,14 +53,19 @@ async function save(): Promise<void> {
   error.value = null;
   notice.value = null;
   try {
-    await api.put("/manufacturing/settings", {
+    const { data } = await api.put<ManufacturingSettings>("/manufacturing/settings", {
       default_source_warehouse_id: fSource.value || null,
       default_wip_warehouse_id: fWip.value || null,
       default_fg_warehouse_id: fFg.value || null,
       over_production_percentage: fOverProd.value || 0,
       capacity_planning_enabled: fCapacity.value,
       order_fulfillment_mode: fFulfillmentMode.value,
+      outbound_delivery_days: Number(fOutboundDays.value) || 0,
     });
+    fOutboundDays.value = Number(data.outbound_delivery_days) || 0;
+    fOverProd.value = Number(data.over_production_percentage) || 0;
+    fCapacity.value = !!data.capacity_planning_enabled;
+    fFulfillmentMode.value = (data.order_fulfillment_mode as OrderFulfillmentMode) || "warn";
     await flags.setManufacturing(fModuleEnabled.value);
     notice.value = "Settings saved.";
   } catch (e) {
@@ -126,6 +133,14 @@ onMounted(load);
         </select>
         <p class="mt-1 text-xs text-gray-500">
           Uses capable-to-promise + BOM cost estimate before committing to a customer.
+        </p>
+      </div>
+      <div class="mt-4">
+        <label class="form-label">Outbound delivery days (warehouse → customer)</label>
+        <input v-model.number="fOutboundDays" type="number" min="0" max="365" class="form-input" />
+        <p class="mt-1 text-xs text-gray-500">
+          Added after goods are ready to dispatch. A Shipping Rule’s
+          <em>Transit Days</em> overrides this when set to a positive value on CTP.
         </p>
       </div>
       <label class="mt-3 flex items-center gap-2 text-sm text-gray-700">

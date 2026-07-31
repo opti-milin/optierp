@@ -4,6 +4,7 @@
 // Orders. Pick a production item + components; rates default from each item's valuation.
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import { api } from "@/api/client";
 import { formatCurrency, formatQty } from "@/utils/format";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
@@ -32,6 +33,10 @@ const fComponents = ref<BomItemIn[]>([{ item_id: "", qty: 1, allow_alternative_i
 const fScrap = ref<BomScrapItemIn[]>([]);
 const fOps = ref<BomOperationIn[]>([]);
 const saving = ref(false);
+
+const itemOptions = computed(() =>
+  items.value.map((item) => ({ value: item.id, label: `${item.item_code} — ${item.item_name}` })),
+);
 
 const validComponents = computed(() =>
   fComponents.value.filter((c) => c.item_id && Number(c.qty) > 0),
@@ -150,10 +155,7 @@ onMounted(async () => {
       <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
         <div class="md:col-span-2">
           <label class="form-label">Finished good (production item)*</label>
-          <select v-model="fProduction" required class="form-input">
-            <option value="" disabled>Select…</option>
-            <option v-for="i in items" :key="i.id" :value="i.id">{{ i.item_code }} — {{ i.item_name }}</option>
-          </select>
+          <ItemSelect v-model="fProduction" :options="itemOptions" placeholder="Select item…" />
         </div>
         <div>
           <label class="form-label">Batch quantity*</label>
@@ -182,10 +184,7 @@ onMounted(async () => {
           <tbody>
             <tr v-for="(c, idx) in fComponents" :key="idx">
               <td class="py-1 pr-2">
-                <select v-model="c.item_id" class="form-input">
-                  <option value="" disabled>Select…</option>
-                  <option v-for="i in items" :key="i.id" :value="i.id">{{ i.item_code }} — {{ i.item_name }}</option>
-                </select>
+                <ItemSelect v-model="c.item_id" :options="itemOptions" placeholder="Select item…" />
               </td>
               <td class="py-1 pr-2">
                 <input v-model.number="c.qty" type="number" min="0" step="any" class="form-input" />
@@ -218,10 +217,7 @@ onMounted(async () => {
           <tbody>
             <tr v-for="(c, idx) in fScrap" :key="idx">
               <td class="py-1 pr-2">
-                <select v-model="c.item_id" class="form-input">
-                  <option value="" disabled>Select…</option>
-                  <option v-for="i in items" :key="i.id" :value="i.id">{{ i.item_code }} — {{ i.item_name }}</option>
-                </select>
+                <ItemSelect v-model="c.item_id" :options="itemOptions" placeholder="Select item…" />
               </td>
               <td class="py-1 pr-2">
                 <input v-model.number="c.qty" type="number" min="0" step="any" class="form-input" />

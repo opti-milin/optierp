@@ -4,6 +4,7 @@
 
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
 import SendEmailButton from "@/components/shared/SendEmailButton.vue";
@@ -258,10 +259,12 @@ onMounted(async () => {
           <div v-else class="col-span-3" />
         </div>
         <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 gap-2 items-center">
-          <select v-model="row.item_id" :class="['form-input', isRepack ? 'col-span-5' : 'col-span-6']">
-            <option value="" disabled>Item…</option>
-            <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <ItemSelect
+            v-model="row.item_id"
+            :class="[isRepack ? 'col-span-5' : 'col-span-6']"
+            :options="store.itemOptions"
+            placeholder="Select item…"
+          />
           <div v-if="isRepack" class="col-span-2">
             <select
               class="form-input text-xs"
