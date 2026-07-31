@@ -15,6 +15,7 @@ from app.models import (  # noqa: F401
     core,
     manufacturing,
     selling,
+    statutory,
     stock,
 )
 
@@ -27,5 +28,6 @@ __all__ = [
     "core",
     "manufacturing",
     "selling",
+    "statutory",
     "stock",
 ]
