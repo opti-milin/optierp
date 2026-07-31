@@ -76,6 +76,13 @@ from app.schemas.accounts.reports import PartyLedgerSummaryRow
 from app.schemas.accounts.reports import GrossProfitRow
 from app.schemas.accounts.reports import GrossProfitReport
 from app.schemas.accounts.reports import BudgetVarianceRow
+from app.schemas.accounts.reports import ContributionMarginSection
+from app.schemas.accounts.reports import ContributionMarginReport
+from app.schemas.accounts.reports import CmTemplateInfo
+from app.schemas.accounts.reports import CmApplyTemplateRequest
+from app.schemas.accounts.reports import CmApplyTemplateResult
+from app.schemas.accounts.reports import CmUnclassifiedAccount
+from app.schemas.accounts.reports import CmSettings
 from app.schemas.accounts.reports import StatementLine
 from app.schemas.accounts.reports import StatementOfAccounts
 from app.schemas.accounts.reports import EmailStatementRequest
@@ -177,6 +184,13 @@ __all__ = [
     "GrossProfitRow",
     "GrossProfitReport",
     "BudgetVarianceRow",
+    "ContributionMarginSection",
+    "ContributionMarginReport",
+    "CmTemplateInfo",
+    "CmApplyTemplateRequest",
+    "CmApplyTemplateResult",
+    "CmUnclassifiedAccount",
+    "CmSettings",
     "StatementLine",
     "StatementOfAccounts",
     "EmailStatementRequest",

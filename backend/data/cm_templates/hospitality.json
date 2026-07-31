@@ -1,0 +1,17 @@
+{
+  "id": "hospitality",
+  "label": "Hospitality",
+  "description": "Food/beverage and linens variable; property rent/utilities product-channel; brand/region segment.",
+  "rules": [
+    { "match": { "account_category": "Revenue from Operations" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Income Account" }, "cm_class": "revenue" },
+    { "match": { "name_contains": ["Room", "F&B", "Food", "Beverage", "Banquet"] }, "cm_class": "revenue" },
+    { "match": { "account_type": "Cost of Goods Sold" }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Food Cost", "Beverage Cost", "Linen", "Amenities", "Commission"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Property Rent", "Utilities", "Housekeeping", "Depreciation"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Brand", "Regional", "Franchise Fee"] }, "cm_class": "segment_bu_fixed" },
+    { "match": { "account_category": "Finance Costs" }, "cm_class": "corporate_overhead" },
+    { "match": { "name_contains": ["Corporate", "HQ", "Admin", "Legal"] }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Operating Expenses" }, "cm_class": "corporate_overhead" }
+  ]
+}

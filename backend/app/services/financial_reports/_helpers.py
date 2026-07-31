@@ -29,8 +29,13 @@ async def _balances(
     *,
     from_date: date | None = None,
     to_date: date | None = None,
+    cost_center_id: uuid.UUID | None = None,
 ) -> dict[uuid.UUID, tuple[Decimal, Decimal]]:
-    """(debit, credit) sums per leaf account in the window."""
+    """(debit, credit) sums per leaf account in the window.
+
+    Optional ``cost_center_id`` filters GL rows posted to that cost center
+    (lines with a null cost center are excluded when the filter is set).
+    """
     stmt: Select = select(
         GLEntry.account_id,
         func.coalesce(func.sum(GLEntry.debit), 0),
@@ -40,6 +45,8 @@ async def _balances(
         stmt = stmt.where(GLEntry.posting_date >= from_date)
     if to_date:
         stmt = stmt.where(GLEntry.posting_date <= to_date)
+    if cost_center_id is not None:
+        stmt = stmt.where(GLEntry.cost_center_id == cost_center_id)
     rows = (await db.execute(stmt.group_by(GLEntry.account_id))).all()
     return {account_id: (Decimal(d), Decimal(c)) for account_id, d, c in rows}
 

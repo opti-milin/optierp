@@ -14,6 +14,16 @@ from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 ROOT_TYPES = ("Asset", "Liability", "Equity", "Income", "Expense")
 REPORT_TYPES = ("Balance Sheet", "Profit and Loss")
 
+# Contribution Margin cost classes (P&L accounts only). See docs/accounting/contribution-margin.md.
+CM_CLASSES = (
+    "revenue",
+    "variable_cost",
+    "product_channel_fixed",
+    "segment_bu_fixed",
+    "corporate_overhead",
+)
+cm_class_enum = Enum(*CM_CLASSES, name="cm_class")
+
 # Normal balance side per root type (Section 3, Module 02, rule 4)
 ROOT_TYPE_BALANCE = {
     "Asset": "Debit",

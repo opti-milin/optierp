@@ -14,7 +14,7 @@ from app.models.base import Base, CompanyScopedMixin, DocumentMixin
 from app.models.types import Ltree
 
 from app.models.accounts.common import (
-    ROOT_TYPE_BALANCE, TaxRowMixin, report_type_enum, root_type_enum,
+    ROOT_TYPE_BALANCE, TaxRowMixin, cm_class_enum, report_type_enum, root_type_enum,
 )
 
 class Account(Base, DocumentMixin, CompanyScopedMixin):
@@ -25,6 +25,7 @@ class Account(Base, DocumentMixin, CompanyScopedMixin):
         UniqueConstraint("company_id", "account_name", "parent_account_id", name="uq_account_name"),
         Index("ix_accounts_path", "path", postgresql_using="gist"),
         Index("ix_accounts_company_root", "company_id", "root_type"),
+        Index("ix_accounts_company_cm_class", "company_id", "cm_class"),
     )
 
     account_name: Mapped[str] = mapped_column(String(140), nullable=False)
@@ -36,6 +37,8 @@ class Account(Base, DocumentMixin, CompanyScopedMixin):
     report_type: Mapped[str] = mapped_column(report_type_enum, nullable=False)
     account_type: Mapped[str | None] = mapped_column(String(60))  # Bank, Cash, Receivable, ...
     account_category: Mapped[str | None] = mapped_column(String(80))
+    # Contribution Margin class (P&L leaves). Null = unclassified.
+    cm_class: Mapped[str | None] = mapped_column(cm_class_enum)
     is_group: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     account_currency: Mapped[str | None] = mapped_column(String(3))
     freeze_account: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

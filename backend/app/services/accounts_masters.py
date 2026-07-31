@@ -12,6 +12,7 @@ from app.core.exceptions import DuplicateError, NotFoundError, ValidationError
 from app.core.security import CurrentUser
 from app.models.accounts import (
     ROOT_TYPE_REPORT,
+    CM_CLASSES,
     Account,
     FiscalYear,
     TaxCategory,
@@ -39,6 +40,25 @@ def _slugify(label: str) -> str:
     return slug or "node"
 
 
+def _validate_cm_class(cm_class: str | None, report_type: str, is_group: bool) -> str | None:
+    """cm_class is only meaningful on P&L leaf accounts."""
+    if cm_class is None or cm_class == "":
+        return None
+    if cm_class not in CM_CLASSES:
+        raise ValidationError(
+            f"cm_class must be one of {', '.join(CM_CLASSES)}",
+            field="cm_class",
+        )
+    if report_type != "Profit and Loss":
+        raise ValidationError(
+            "cm_class is only allowed on Profit and Loss accounts",
+            field="cm_class",
+        )
+    if is_group:
+        raise ValidationError("cm_class is only allowed on leaf accounts", field="cm_class")
+    return cm_class
+
+
 # --- Account CRUD (tree-aware) ------------------------------------------------------
 
 
@@ -59,6 +79,8 @@ async def create_account(db: AsyncSession, payload: AccountCreate, user: Current
     if duplicate:
         raise DuplicateError("An account with this name already exists here", field="account_name")
 
+    cm_class = _validate_cm_class(payload.cm_class, ROOT_TYPE_REPORT[parent.root_type], payload.is_group)
+
     account = Account(
         id=uuid.uuid4(),
         company_id=parent.company_id,
@@ -68,6 +90,7 @@ async def create_account(db: AsyncSession, payload: AccountCreate, user: Current
         root_type=parent.root_type,
         report_type=ROOT_TYPE_REPORT[parent.root_type],
         account_type=payload.account_type,
+        cm_class=cm_class,
         is_group=payload.is_group,
         account_currency=payload.account_currency or parent.account_currency,
         path=f"{parent.path}.{_slugify(payload.account_name)}",
@@ -136,6 +159,11 @@ async def update_account(
         account.account_number = payload.account_number or None
     if payload.account_type is not None:
         account.account_type = payload.account_type or None
+    if "cm_class" in payload.model_fields_set:
+        # Explicit null clears classification; omitted leaves unchanged.
+        account.cm_class = _validate_cm_class(
+            payload.cm_class, account.report_type, account.is_group
+        )
     if payload.account_currency is not None:
         account.account_currency = payload.account_currency or None
     if payload.freeze_account is not None:

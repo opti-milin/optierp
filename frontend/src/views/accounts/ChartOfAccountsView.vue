@@ -22,6 +22,23 @@ const ACCOUNT_TYPES = [
   "Equity", "Depreciation", "Accumulated Depreciation", "Temporary",
 ];
 
+const CM_CLASSES = [
+  { value: "", label: "—" },
+  { value: "revenue", label: "Revenue" },
+  { value: "variable_cost", label: "Variable cost" },
+  { value: "product_channel_fixed", label: "Product / Channel fixed" },
+  { value: "segment_bu_fixed", label: "Segment / BU fixed" },
+  { value: "corporate_overhead", label: "Corporate overhead" },
+];
+
+const CM_CLASS_SHORT: Record<string, string> = {
+  revenue: "Rev",
+  variable_cost: "Var",
+  product_channel_fixed: "Prod",
+  segment_bu_fixed: "Seg",
+  corporate_overhead: "Corp",
+};
+
 const showForm = ref(false);
 const saving = ref(false);
 const editId = ref<string | null>(null); // null = creating a child; set = editing
@@ -30,6 +47,7 @@ const form = ref({
   account_name: "",
   account_number: "",
   account_type: "",
+  cm_class: "",
   is_group: false,
   account_currency: "",
   freeze_account: false,
@@ -86,7 +104,7 @@ function toggle(id: string): void {
 
 function resetForm(): void {
   form.value = {
-    account_name: "", account_number: "", account_type: "",
+    account_name: "", account_number: "", account_type: "", cm_class: "",
     is_group: false, account_currency: "", freeze_account: false, disabled: false,
   };
 }
@@ -106,6 +124,7 @@ function openEdit(node: AccountNode): void {
     account_name: node.account_name,
     account_number: node.account_number ?? "",
     account_type: node.account_type ?? "",
+    cm_class: node.cm_class ?? "",
     is_group: node.is_group,
     account_currency: node.account_currency ?? "",
     freeze_account: !!node.freeze_account,
@@ -115,6 +134,14 @@ function openEdit(node: AccountNode): void {
 }
 
 const parentName = computed(() => accountsById.value.get(parentId.value)?.account_name ?? "");
+const editingIsPnlLeaf = computed(() => {
+  if (!editId.value) {
+    const parent = accountsById.value.get(parentId.value);
+    return parent?.report_type === "Profit and Loss" && !form.value.is_group;
+  }
+  const node = accountsById.value.get(editId.value);
+  return node?.report_type === "Profit and Loss" && !node.is_group;
+});
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -140,6 +167,7 @@ async function save(): Promise<void> {
         account_name: form.value.account_name,
         account_number: form.value.account_number || null,
         account_type: form.value.account_type || null,
+        cm_class: editingIsPnlLeaf.value ? (form.value.cm_class || null) : null,
         account_currency: form.value.account_currency || null,
         freeze_account: form.value.freeze_account,
         disabled: form.value.disabled,
@@ -150,6 +178,7 @@ async function save(): Promise<void> {
         parent_account_id: parentId.value,
         account_number: form.value.account_number || null,
         account_type: form.value.account_type || null,
+        cm_class: editingIsPnlLeaf.value ? (form.value.cm_class || null) : null,
         is_group: form.value.is_group,
         account_currency: form.value.account_currency || null,
       });
@@ -204,6 +233,12 @@ onMounted(load);
             <option v-for="t in ACCOUNT_TYPES" :key="t" :value="t">{{ t || "—" }}</option>
           </select>
         </div>
+        <div v-if="editingIsPnlLeaf">
+          <label class="form-label">CM Class</label>
+          <select v-model="form.cm_class" class="form-input">
+            <option v-for="c in CM_CLASSES" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
+        </div>
         <div>
           <label class="form-label">Currency</label>
           <input v-model="form.account_currency" class="form-input" placeholder="defaults to company" />
@@ -237,6 +272,7 @@ onMounted(load);
           <tr>
             <th class="px-4 py-2">Account</th>
             <th class="px-4 py-2">Type</th>
+            <th class="px-4 py-2">CM</th>
             <th class="px-4 py-2">Root</th>
             <th class="px-4 py-2 text-right">Actions</th>
           </tr>
@@ -260,6 +296,12 @@ onMounted(load);
               </span>
             </td>
             <td class="px-4 py-2 text-gray-600">{{ row.node.account_type || "—" }}</td>
+            <td class="px-4 py-2 text-gray-500">
+              <span v-if="row.node.cm_class" class="rounded bg-slate-100 px-1.5 text-[10px] uppercase text-slate-700">
+                {{ CM_CLASS_SHORT[row.node.cm_class] || row.node.cm_class }}
+              </span>
+              <span v-else>—</span>
+            </td>
             <td class="px-4 py-2 text-gray-500">{{ row.node.root_type }}</td>
             <td class="px-4 py-2 text-right whitespace-nowrap">
               <button class="text-xs font-medium text-gray-500 hover:underline" @click="openEdit(row.node)">Edit</button>
@@ -271,7 +313,7 @@ onMounted(load);
             </td>
           </tr>
           <tr v-if="!rows.length">
-            <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+            <td colspan="5" class="px-4 py-8 text-center text-gray-400">
               {{ loading ? "Loading…" : "No accounts yet." }}
             </td>
           </tr>

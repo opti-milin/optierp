@@ -1,0 +1,17 @@
+{
+  "id": "services",
+  "label": "Professional Services",
+  "description": "Delivery labour and subcontractors variable; practice leads product fixed; regional P&L segment.",
+  "rules": [
+    { "match": { "account_category": "Revenue from Operations" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Income Account" }, "cm_class": "revenue" },
+    { "match": { "name_contains": ["Consulting", "Professional Fee", "Service Income"] }, "cm_class": "revenue" },
+    { "match": { "name_contains": ["Subcontractor", "Contractor", "Freelance", "Travel", "Per Diem"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Salary", "Wages", "Payroll"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Practice", "Delivery Manager", "Tools License"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Business Development", "Sales", "Marketing"] }, "cm_class": "segment_bu_fixed" },
+    { "match": { "account_category": "Finance Costs" }, "cm_class": "corporate_overhead" },
+    { "match": { "name_contains": ["Admin", "Office", "Rent", "Legal"] }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Operating Expenses" }, "cm_class": "corporate_overhead" }
+  ]
+}

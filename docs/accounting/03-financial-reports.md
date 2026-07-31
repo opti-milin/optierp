@@ -52,7 +52,9 @@ These cover the statutory core. The gaps are **operational/analytical** reports.
   the UI). `financial_reports.gross_profit` → `/reports/gross-profit` → Gross Profit tab. Verified live.
   *Simplification:* current valuation, not the exact cost at each sale (which would need the delivery's
   SLE) — good enough for "which items/customers earn margin".
-
+- ✅ **Contribution Margin** DONE (2026‑07‑30): CM1/CM2/CM3 waterfall from `Account.cm_class`;
+  industry templates; optional Cost Center filter. See [contribution-margin.md](contribution-margin.md).
+  `GET /reports/contribution-margin` + Reports tab.
 ### Phase 3 — Summaries & trends
 - AR/AP **Summary** variants, **Invoice Trends**, **Payment Period** report.
 - *Acceptance:* AR summary totals equal the detailed AR aging totals for the same date.

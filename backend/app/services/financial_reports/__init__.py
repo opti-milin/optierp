@@ -20,6 +20,7 @@ from app.services.financial_reports.registers import customer_ledger_summary
 from app.services.financial_reports.registers import supplier_ledger_summary
 from app.services.financial_reports.analysis import gross_profit
 from app.services.financial_reports.analysis import budget_variance
+from app.services.financial_reports.contribution_margin import contribution_margin
 
 __all__ = [
     "general_ledger",
@@ -39,4 +40,5 @@ __all__ = [
     "supplier_ledger_summary",
     "gross_profit",
     "budget_variance",
+    "contribution_margin",
 ]
