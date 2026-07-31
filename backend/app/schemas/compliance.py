@@ -1,14 +1,30 @@
 """India compliance schemas — GST Settings (per-company config the GST layer reads),
 the HSN → GST-rate lookup result, and the GST returns (GSTR-1 / GSTR-3B)."""
 
+import re
 import uuid
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 REGISTRATION_TYPES = ("Regular", "Composition")
 FILING_CADENCES = ("Monthly", "QRMP")
+
+# Indian assessment year label, e.g. "2025-26" (start year + hyphen + last two of next).
+_AY_RE = re.compile(r"^(20\d{2})-(\d{2})$")
+
+
+def _validate_assessment_year(v: str) -> str:
+    raw = (v or "").strip()
+    m = _AY_RE.match(raw)
+    if not m:
+        raise ValueError("assessment_year must look like '2025-26'")
+    start = int(m.group(1))
+    end_yy = int(m.group(2))
+    if end_yy != (start + 1) % 100:
+        raise ValueError("assessment_year must be consecutive years like '2025-26'")
+    return raw
 
 
 class HsnCodeMatch(BaseModel):
@@ -345,14 +361,16 @@ class Form16A(BaseModel):
 # See docs/ITR_GAP_AND_PLAN.md. Live e-filing is deferred.
 # ---------------------------------------------------------------------------
 
-ENTITY_TYPES = ("Company", "Proprietor", "Firm", "LLP")
-FILING_REGIMES = ("Normal", "New")  # lean corporate rate regimes
+ENTITY_TYPES = ("Company", "Proprietor", "Individual", "Firm", "LLP")
+FILING_REGIMES = ("Normal", "New")
+ASSESSEE_MODES = ("EntityBooks", "IndividualHeads")
+SEED_SOURCES = ("Manual", "Payroll", "Books")
 
 
 class IncomeTaxSettings(BaseModel):
     """Per-company income-tax policy. ``pan`` / ``tan`` are derived from Company."""
 
-    entity_type: str = "Company"  # Company | Proprietor | Firm | LLP
+    entity_type: str = "Company"  # Company | Proprietor | Individual | Firm | LLP
     filing_regime: str = "Normal"
     default_assessment_year: str | None = None  # e.g. "2025-26"
     # Empty / "none" ⇒ JSON-only; "sandbox" ⇒ stub ack; future live adapters register by name.
@@ -376,12 +394,32 @@ class IncomeTaxSettings(BaseModel):
             raise ValueError(f"filing_regime must be one of {FILING_REGIMES}")
         return v
 
+    @field_validator("default_assessment_year")
+    @classmethod
+    def _valid_default_ay(cls, v: str | None) -> str | None:
+        if v is None or not str(v).strip():
+            return None
+        return _validate_assessment_year(str(v))
+
 
 class IncomeTaxAdjustmentLineIn(BaseModel):
     category_id: uuid.UUID | None = None
+    provision_id: uuid.UUID | None = None
+    rule_id: uuid.UUID | None = None
+    section_code: str = ""
+    stage: str = "PGBP"
     description: str = ""
     direction: str = "Add"  # Add | Deduct
     amount: Decimal = Decimal("0")
+    base_amount: Decimal = Decimal("0")
+    computed_amount: Decimal = Decimal("0")
+    override_amount: Decimal | None = None
+    final_amount: Decimal | None = None
+    status: str = "Manual"
+    explanation: dict = {}
+    inputs: dict = {}
+    source_refs: dict = {}
+    prior_year_line_id: uuid.UUID | None = None
 
     @field_validator("direction")
     @classmethod
@@ -397,9 +435,43 @@ class IncomeTaxAdjustmentLineOut(BaseModel):
     id: uuid.UUID
     idx: int
     category_id: uuid.UUID | None = None
+    provision_id: uuid.UUID | None = None
+    rule_id: uuid.UUID | None = None
+    section_code: str = ""
+    stage: str = "PGBP"
     description: str
     direction: str
     amount: Decimal
+    base_amount: Decimal = Decimal("0")
+    computed_amount: Decimal = Decimal("0")
+    override_amount: Decimal | None = None
+    final_amount: Decimal = Decimal("0")
+    status: str = "Manual"
+    explanation: dict = {}
+    inputs: dict = {}
+    source_refs: dict = {}
+    prior_year_line_id: uuid.UUID | None = None
+
+
+class IncomeTaxSpecialIncomeLineIn(BaseModel):
+    special_rate_id: uuid.UUID | None = None
+    income_category_code: str = ""
+    amount: Decimal = Decimal("0")
+    rate_percent: Decimal = Decimal("0")
+    description: str | None = None
+
+
+class IncomeTaxSpecialIncomeLineOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    idx: int
+    special_rate_id: uuid.UUID | None = None
+    income_category_code: str
+    amount: Decimal
+    rate_percent: Decimal
+    tax_amount: Decimal
+    description: str | None = None
 
 
 class IncomeTaxComputationCreate(BaseModel):
@@ -407,25 +479,84 @@ class IncomeTaxComputationCreate(BaseModel):
     from_date: date
     to_date: date
     rate_table_id: uuid.UUID | None = None
+    policy_id: uuid.UUID | None = None
     advance_tax_paid: Decimal = Decimal("0")
     remarks: str | None = None
     adjustments: list[IncomeTaxAdjustmentLineIn] = []
-    # When True (default), seed book_profit from P&L and tds_credit from purchase TDS.
+    special_income: list[IncomeTaxSpecialIncomeLineIn] = []
+    assessee_mode: str | None = None  # default from settings entity_type
+    employee_id: uuid.UUID | None = None
+    # When True (default), seed book_profit from P&L and tds_credit from purchase TDS (EntityBooks).
     seed_from_books: bool = True
-    book_profit: Decimal | None = None  # override when seed_from_books is False
+    book_profit: Decimal | None = None
     tds_credit: Decimal | None = None
+    tcs_credit: Decimal = Decimal("0")
+    # IndividualHeads
+    salary_income: Decimal = Decimal("0")
+    house_property_income: Decimal = Decimal("0")
+    other_sources_income: Decimal = Decimal("0")
+    capital_gains_income: Decimal = Decimal("0")
+    chapter_via_deduction: Decimal = Decimal("0")
+    standard_deduction: Decimal = Decimal("0")
+    salary_tds: Decimal = Decimal("0")
+    employer_name: str | None = None
+    employer_tan: str | None = None
+    employer_address: str | None = None
+    employee_name: str | None = None
+    employee_pan: str | None = None
+    gross_salary: Decimal = Decimal("0")
+    exemptions_total: Decimal = Decimal("0")
+    taxable_salary: Decimal = Decimal("0")
+    tax_deducted: Decimal = Decimal("0")
+
+    @field_validator("assessee_mode")
+    @classmethod
+    def _valid_mode(cls, v: str | None) -> str | None:
+        if v is not None and v not in ASSESSEE_MODES:
+            raise ValueError(f"assessee_mode must be one of {ASSESSEE_MODES}")
+        return v
+
+    @field_validator("assessment_year")
+    @classmethod
+    def _valid_ay(cls, v: str) -> str:
+        return _validate_assessment_year(v)
+
+    @model_validator(mode="after")
+    def _period_order(self) -> "IncomeTaxComputationCreate":
+        if self.from_date > self.to_date:
+            raise ValueError("from_date must be on or before to_date")
+        return self
 
 
 class IncomeTaxComputationUpdate(BaseModel):
     rate_table_id: uuid.UUID | None = None
+    policy_id: uuid.UUID | None = None
     advance_tax_paid: Decimal | None = None
     remarks: str | None = None
     adjustments: list[IncomeTaxAdjustmentLineIn] | None = None
+    special_income: list[IncomeTaxSpecialIncomeLineIn] | None = None
     book_profit: Decimal | None = None
     tds_credit: Decimal | None = None
+    tcs_credit: Decimal | None = None
     reseeds_from_books: bool = False
-    # Re-pick rate table from Income Tax Settings entity_type + filing_regime + AY.
     resolve_rate_from_settings: bool = False
+    salary_income: Decimal | None = None
+    house_property_income: Decimal | None = None
+    other_sources_income: Decimal | None = None
+    capital_gains_income: Decimal | None = None
+    chapter_via_deduction: Decimal | None = None
+    standard_deduction: Decimal | None = None
+    salary_tds: Decimal | None = None
+    employer_name: str | None = None
+    employer_tan: str | None = None
+    employer_address: str | None = None
+    employee_name: str | None = None
+    employee_pan: str | None = None
+    gross_salary: Decimal | None = None
+    exemptions_total: Decimal | None = None
+    taxable_salary: Decimal | None = None
+    tax_deducted: Decimal | None = None
+    employee_id: uuid.UUID | None = None
 
 
 class IncomeTaxComputationResponse(BaseModel):
@@ -437,20 +568,49 @@ class IncomeTaxComputationResponse(BaseModel):
     from_date: date
     to_date: date
     rate_table_id: uuid.UUID | None = None
+    policy_id: uuid.UUID | None = None
+    computation_method: str | None = None
+    assessee_mode: str = "EntityBooks"
     book_profit: Decimal
+    salary_income: Decimal = Decimal("0")
+    house_property_income: Decimal = Decimal("0")
+    other_sources_income: Decimal = Decimal("0")
+    capital_gains_income: Decimal = Decimal("0")
+    chapter_via_deduction: Decimal = Decimal("0")
+    standard_deduction: Decimal = Decimal("0")
     net_adjustments: Decimal
     taxable_income: Decimal
     tax_amount: Decimal
     surcharge_amount: Decimal
     cess_amount: Decimal
+    rebate_amount: Decimal = Decimal("0")
+    rebate_87a: Decimal = Decimal("0")
+    marginal_relief_amount: Decimal = Decimal("0")
     total_tax: Decimal
     tds_credit: Decimal
+    tcs_credit: Decimal = Decimal("0")
+    salary_tds: Decimal = Decimal("0")
     advance_tax_paid: Decimal
     tax_payable: Decimal
+    tax_breakdown: dict = {}
+    employer_name: str | None = None
+    employer_tan: str | None = None
+    employer_address: str | None = None
+    employee_name: str | None = None
+    employee_pan: str | None = None
+    gross_salary: Decimal = Decimal("0")
+    exemptions_total: Decimal = Decimal("0")
+    taxable_salary: Decimal = Decimal("0")
+    tax_deducted: Decimal = Decimal("0")
+    seed_source: str = "Manual"
+    employee_id: uuid.UUID | None = None
+    payroll_entry_id: uuid.UUID | None = None
+    salary_slip_ids: list = []
     status: str
     docstatus: int
     remarks: str | None = None
     adjustments: list[IncomeTaxAdjustmentLineOut] = []
+    special_income_lines: list[IncomeTaxSpecialIncomeLineOut] = []
 
 
 class IncomeTaxComputationListItem(BaseModel):
@@ -461,11 +621,21 @@ class IncomeTaxComputationListItem(BaseModel):
     assessment_year: str
     from_date: date
     to_date: date
+    assessee_mode: str = "EntityBooks"
     taxable_income: Decimal
     total_tax: Decimal
     tax_payable: Decimal
     status: str
     docstatus: int
+    employee_name: str | None = None
+
+
+class SeedFromPayrollRequest(BaseModel):
+    assessment_year: str
+    employee_id: uuid.UUID | None = None
+    payroll_entry_id: uuid.UUID | None = None
+    from_date: date | None = None
+    to_date: date | None = None
 
 
 class AdvanceTaxInstalment(BaseModel):

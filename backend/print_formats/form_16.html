@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Form 16 — {{ assessment_year }}</title>
+  <style>
+    body { font-family: DejaVu Sans, sans-serif; font-size: 11pt; color: #111; margin: 24px; }
+    h1 { font-size: 16pt; margin-bottom: 4px; }
+    h2 { font-size: 12pt; margin-top: 20px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    .muted { color: #555; font-size: 9pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    td, th { padding: 4px 6px; text-align: left; vertical-align: top; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .box { border: 1px solid #ccc; padding: 10px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Form 16 (lean handoff)</h1>
+  <p class="muted">
+    Certificate under section 203 of the Income-tax Act, 1961 — preview / CA handoff.
+    Not the Income-tax portal CPC XML. Generated {{ generated_on }} · Ref {{ computation_ref }}
+  </p>
+
+  <h2>Part A — Deductor / Employee</h2>
+  <div class="box">
+    <table>
+      <tr><th>Assessment Year</th><td>{{ assessment_year }}</td></tr>
+      <tr><th>Period</th><td>{{ from_date }} to {{ to_date }}</td></tr>
+      <tr><th>Employer / Deductor</th><td>{{ employer_name }}</td></tr>
+      <tr><th>TAN</th><td>{{ employer_tan }}</td></tr>
+      <tr><th>Address</th><td>{{ employer_address }}</td></tr>
+      <tr><th>Employee</th><td>{{ employee_name }}</td></tr>
+      <tr><th>Employee PAN</th><td>{{ employee_pan }}</td></tr>
+      <tr><th>Company (tenant)</th><td>{{ company_name }}</td></tr>
+    </table>
+  </div>
+
+  <h2>Part B — Salary & tax</h2>
+  <table>
+    <tr><th>Gross salary</th><td class="num">{{ gross_salary }}</td></tr>
+    <tr><th>Exemptions (total)</th><td class="num">{{ exemptions_total }}</td></tr>
+    <tr><th>Standard deduction</th><td class="num">{{ standard_deduction }}</td></tr>
+    <tr><th>Taxable salary</th><td class="num">{{ taxable_salary }}</td></tr>
+    <tr><th>Tax deducted (TDS)</th><td class="num">{{ tax_deducted }}</td></tr>
+    <tr><th>Tax on total income</th><td class="num">{{ tax_amount }}</td></tr>
+    <tr><th>Health & education cess</th><td class="num">{{ cess_amount }}</td></tr>
+    <tr><th>Total tax</th><td class="num">{{ total_tax }}</td></tr>
+    <tr><th>Tax payable / (refundable)</th><td class="num">{{ tax_payable }}</td></tr>
+  </table>
+
+  <p class="muted" style="margin-top: 24px;">
+    Verify figures against books / Salary Slips before filing. When Payroll is enabled,
+    use Seed from Payroll to auto-fill this certificate.
+  </p>
+</body>
+</html>

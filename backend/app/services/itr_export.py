@@ -54,7 +54,7 @@ def advance_tax_instalments(assessment_year: str) -> list[dict]:
 async def build_itr_pack(
     db: AsyncSession, doc_id: uuid.UUID, company_id: uuid.UUID
 ) -> Itr6ExportPack:
-    """Assemble an entity ITR handoff pack (ITR-6 / ITR-3 / ITR-5) from a submitted computation."""
+    """Assemble an ITR handoff pack (ITR-6 / ITR-3 / ITR-5 / ITR-1) from a submitted computation."""
     doc = await get_computation(db, doc_id, company_id)
     if doc.docstatus != DOCSTATUS_SUBMITTED:
         raise ValidationError(
@@ -62,7 +62,10 @@ async def build_itr_pack(
         )
     company = await get_company(db, company_id)
     settings = await get_income_tax_settings(db, company_id)
-    form = entity_form_for(settings)
+    form = form_for_computation(settings, doc.assessee_mode)
+
+    if form == "ITR-1":
+        return await _build_itr1_pack(db, doc, company, settings)
 
     pl = await profit_and_loss(
         db, company_id, from_date=doc.from_date, to_date=doc.to_date
@@ -73,9 +76,16 @@ async def build_itr_pack(
         {
             "idx": ln.idx,
             "category_id": str(ln.category_id) if ln.category_id else None,
+            "provision_id": str(ln.provision_id) if getattr(ln, "provision_id", None) else None,
+            "rule_id": str(ln.rule_id) if getattr(ln, "rule_id", None) else None,
+            "section_code": getattr(ln, "section_code", None) or "",
+            "stage": getattr(ln, "stage", None) or "PGBP",
             "description": ln.description,
             "direction": ln.direction,
             "amount": str(_q(ln.amount)),
+            "final_amount": str(_q(getattr(ln, "final_amount", None) or ln.amount)),
+            "status": getattr(ln, "status", None) or "Manual",
+            "explanation": getattr(ln, "explanation", None) or {},
         }
         for ln in doc.adjustments
     ]
@@ -83,6 +93,7 @@ async def build_itr_pack(
     payload: dict = {
         "form": form,
         "entity_type": settings.entity_type,
+        "assessee_mode": doc.assessee_mode,
         "assessment_year": doc.assessment_year,
         "filing_regime": settings.filing_regime,
         "company": {
@@ -118,11 +129,23 @@ async def build_itr_pack(
             "tax_amount": str(_q(doc.tax_amount)),
             "surcharge_amount": str(_q(doc.surcharge_amount)),
             "cess_amount": str(_q(doc.cess_amount)),
+            "rebate_87a": str(_q(doc.rebate_87a)),
             "total_tax": str(_q(doc.total_tax)),
             "tds_credit": str(_q(doc.tds_credit)),
+            "salary_tds": str(_q(doc.salary_tds)),
             "advance_tax_paid": str(_q(doc.advance_tax_paid)),
             "tax_payable": str(_q(doc.tax_payable)),
         },
+        "special_income": [
+            {
+                "income_category_code": ln.income_category_code,
+                "amount": str(_q(ln.amount)),
+                "rate_percent": str(_q(ln.rate_percent)),
+                "tax_amount": str(_q(ln.tax_amount)),
+                "description": ln.description,
+            }
+            for ln in (doc.special_income_lines or [])
+        ],
         "advance_tax_calendar": [
             {
                 "instalment": i["instalment"],
@@ -137,11 +160,10 @@ async def build_itr_pack(
         ],
     }
 
-    # Phase 4 lean entity worksheets (heads for CA mapping; not full portal schedules).
     if form == "ITR-3":
         payload["business_income"] = {
             "pgbp_from_books": str(_q(pl["net_profit"])),
-            "note": "Proprietor PGBP seeded from P&L net profit; refine with CA before filing.",
+            "note": "Proprietor/Individual PGBP seeded from P&L net profit; refine with CA before filing.",
         }
     elif form == "ITR-5":
         payload["partner_share"] = {
@@ -157,6 +179,80 @@ async def build_itr_pack(
     )
 
 
+async def _build_itr1_pack(db, doc, company, settings) -> Itr6ExportPack:
+    """Lean ITR-1 handoff from IndividualHeads computation."""
+    _ = db
+    payload = {
+        "form": "ITR-1",
+        "entity_type": settings.entity_type,
+        "assessee_mode": doc.assessee_mode,
+        "assessment_year": doc.assessment_year,
+        "filing_regime": settings.filing_regime,
+        "assessee": {
+            "name": doc.employee_name or company.company_name,
+            "pan": doc.employee_pan or company.pan,
+        },
+        "company": {
+            "name": company.company_name,
+            "pan": company.pan,
+            "tan": company.tan,
+        },
+        "period": {
+            "from_date": doc.from_date.isoformat(),
+            "to_date": doc.to_date.isoformat(),
+        },
+        "computation_ref": doc.name,
+        "income_heads": {
+            "salary": str(_q(doc.salary_income)),
+            "house_property": str(_q(doc.house_property_income)),
+            "other_sources": str(_q(doc.other_sources_income)),
+            "capital_gains": str(_q(doc.capital_gains_income)),
+            "chapter_via_deduction": str(_q(doc.chapter_via_deduction)),
+            "standard_deduction": str(_q(doc.standard_deduction)),
+            "taxable_income": str(_q(doc.taxable_income)),
+        },
+        "form_16": {
+            "employer_name": doc.employer_name,
+            "employer_tan": doc.employer_tan,
+            "gross_salary": str(_q(doc.gross_salary)),
+            "exemptions_total": str(_q(doc.exemptions_total)),
+            "taxable_salary": str(_q(doc.taxable_salary)),
+            "tax_deducted": str(_q(doc.tax_deducted)),
+        },
+        "part_b_tti": {
+            "tax_amount": str(_q(doc.tax_amount)),
+            "surcharge_amount": str(_q(doc.surcharge_amount)),
+            "cess_amount": str(_q(doc.cess_amount)),
+            "rebate_87a": str(_q(doc.rebate_87a)),
+            "total_tax": str(_q(doc.total_tax)),
+            "tds_credit": str(_q(doc.tds_credit)),
+            "salary_tds": str(_q(doc.salary_tds)),
+            "advance_tax_paid": str(_q(doc.advance_tax_paid)),
+            "tax_payable": str(_q(doc.tax_payable)),
+        },
+        "special_income": [
+            {
+                "income_category_code": ln.income_category_code,
+                "amount": str(_q(ln.amount)),
+                "rate_percent": str(_q(ln.rate_percent)),
+                "tax_amount": str(_q(ln.tax_amount)),
+                "description": ln.description,
+            }
+            for ln in (doc.special_income_lines or [])
+        ],
+        "notes": [
+            "OptiReach ITR-1 lean handoff — not the Income-tax portal schema.",
+            "Salary / HP / other sources entered manually or seeded from Payroll when available.",
+        ],
+    }
+    return Itr6ExportPack(
+        computation_id=doc.id,
+        assessment_year=doc.assessment_year,
+        form="ITR-1",
+        payload=payload,
+    )
+
+
 async def build_itr6_pack(
     db: AsyncSession, doc_id: uuid.UUID, company_id: uuid.UUID
 ) -> Itr6ExportPack:
@@ -165,7 +261,7 @@ async def build_itr6_pack(
     if settings.entity_type != "Company":
         raise ValidationError(
             f"ITR-6 export is for Company entities; this tenant is '{settings.entity_type}'. "
-            "Use GET …/itr for the entity-matched pack (ITR-3/5).",
+            "Use GET …/itr for the entity-matched pack (ITR-3/5/1).",
             field="entity_type",
         )
     return await build_itr_pack(db, doc_id, company_id)
@@ -180,10 +276,21 @@ def itr6_csv(pack: Itr6ExportPack) -> str:
     company = p.get("company", {})
     for k in ("name", "pan", "tan", "gstin"):
         w.writerow(["company", k, company.get(k, "")])
+    assessee = p.get("assessee", {})
+    for k, v in assessee.items():
+        w.writerow(["assessee", k, v])
     w.writerow(["meta", "assessment_year", pack.assessment_year])
     w.writerow(["meta", "form", pack.form])
     w.writerow(["meta", "entity_type", p.get("entity_type", "")])
-    for section in ("part_a_pl", "schedule_bp", "part_b_tti", "business_income", "partner_share"):
+    for section in (
+        "part_a_pl",
+        "schedule_bp",
+        "part_b_tti",
+        "business_income",
+        "partner_share",
+        "income_heads",
+        "form_16",
+    ):
         block = p.get(section)
         if not isinstance(block, dict):
             continue
@@ -199,14 +306,32 @@ def itr6_csv(pack: Itr6ExportPack) -> str:
                 f"{adj.get('direction')}:{adj.get('amount')}",
             ]
         )
+    for ln in p.get("special_income") or []:
+        w.writerow(
+            [
+                "special_income",
+                ln.get("income_category_code", ""),
+                f"{ln.get('amount')}@{ln.get('rate_percent')}%={ln.get('tax_amount')}",
+            ]
+        )
     return buf.getvalue()
 
 
 def entity_form_for(settings: IncomeTaxSettings) -> str:
-    """Map entity_type → ITR form code (Phase 4)."""
+    """Map entity_type → default ITR form code (settings alone; no computation mode)."""
     return {
         "Company": "ITR-6",
         "Proprietor": "ITR-3",
+        "Individual": "ITR-1",
         "Firm": "ITR-5",
         "LLP": "ITR-5",
     }.get(settings.entity_type, "ITR-6")
+
+
+def form_for_computation(settings: IncomeTaxSettings, assessee_mode: str) -> str:
+    """ITR form from settings + computation mode (IndividualHeads → ITR-1)."""
+    if assessee_mode == "IndividualHeads":
+        return "ITR-1"
+    if settings.entity_type == "Individual":
+        return "ITR-3"
+    return entity_form_for(settings)

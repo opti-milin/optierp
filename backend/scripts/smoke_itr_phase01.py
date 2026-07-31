@@ -77,16 +77,16 @@ def main() -> None:
         settings,
     )
 
-    # --- Rate table via registry ---
+    # --- Rate table via registry (flat rate only; surcharge/cess are separate masters) ---
     code, rate = req(
         "POST",
         "/registry/income-tax-rate-table",
         token,
         {
             "assessment_year": "2025-26",
+            "entity_type": "Company",
+            "filing_regime": "Normal",
             "tax_rate": "25",
-            "surcharge_rate": "0",
-            "cess_rate": "4",
             "remarks": "smoke corporate rate",
             "disabled": False,
         },

@@ -72,7 +72,8 @@ async def reconcile_26as(
 
     portal = _portal_credits(form26as)
     portal_total = _q(sum((r["amount"] for r in portal), ZERO))
-    books_credit = _q(doc.tds_credit)
+    # IndividualHeads claim salary TDS separately from purchase/other TDS credit.
+    books_credit = _q(doc.tds_credit) + _q(doc.salary_tds)
     diff = _q(portal_total - books_credit)
 
     if portal_total == ZERO and books_credit == ZERO:

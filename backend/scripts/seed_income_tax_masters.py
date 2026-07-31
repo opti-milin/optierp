@@ -31,8 +31,11 @@ async def main() -> None:
         await db.commit()
         print(
             f"Income Tax masters for {company.company_name}: "
-            f"+{counts['rate_tables']} rate tables, "
-            f"+{counts['adjustment_categories']} adjustment categories"
+            f"+{counts.get('rate_tables', 0)} rate tables, "
+            f"+{counts.get('adjustment_provisions', 0)} provisions, "
+            f"+{counts.get('adjustment_rule_packs', 0)} rule packs, "
+            f"+{counts.get('adjustment_rules', 0)} rules, "
+            f"+{counts.get('adjustment_categories', 0)} legacy categories"
         )
 
 
