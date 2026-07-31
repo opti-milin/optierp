@@ -329,6 +329,7 @@ class AccountListItem(ORMModel):
     root_type: str
     report_type: str
     account_type: str | None
+    cm_class: str | None = None
     is_group: bool
     account_currency: str | None
     freeze_account: bool

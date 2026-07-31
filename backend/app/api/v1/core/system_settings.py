@@ -18,10 +18,12 @@ router = APIRouter(prefix="/settings", tags=["core: settings"])
 
 class ModuleFlags(BaseModel):
     manufacturing: bool = True
+    taxation: bool = True
 
 
 class ModuleFlagsUpdate(BaseModel):
     manufacturing: bool | None = None
+    taxation: bool | None = None
 
 
 @router.get(

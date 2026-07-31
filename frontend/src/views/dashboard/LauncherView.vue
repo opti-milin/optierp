@@ -13,7 +13,7 @@ interface Tile {
   label: string;
   to: string;
   icon: string;
-  flag?: "manufacturing";
+  flag?: "manufacturing" | "taxation";
 }
 
 const ALL_TILES: Tile[] = [
@@ -22,6 +22,7 @@ const ALL_TILES: Tile[] = [
   { label: "Inventory", to: "/stock", icon: "📦" },
   { label: "Manufacturing", to: "/manufacturing", icon: "🏭", flag: "manufacturing" },
   { label: "Accounting", to: "/accounting", icon: "📊" },
+  { label: "Taxation", to: "/taxation", icon: "🧾", flag: "taxation" },
   { label: "Assets", to: "/assets", icon: "🏗" },
   { label: "Setup", to: "/companies", icon: "⚙" },
   { label: "Reports", to: "/reports", icon: "📈" },

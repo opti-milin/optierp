@@ -25,6 +25,7 @@ const GLOBAL_NAV: WsNavGroup[] = [
       { label: "Inventory", to: "/stock", icon: "📦" },
       { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
       { label: "Accounting", to: "/accounting", icon: "📊" },
+      { label: "Taxation", to: "/taxation", icon: "🧾" },
     ],
   },
   {
@@ -39,10 +40,13 @@ const GLOBAL_NAV: WsNavGroup[] = [
 ];
 
 const filteredGlobalNav = computed<WsNavGroup[]>(() => {
-  if (flags.flags.manufacturing) return GLOBAL_NAV;
   return GLOBAL_NAV.map((g) => ({
     ...g,
-    items: g.items.filter((i) => i.to !== "/manufacturing"),
+    items: g.items.filter((i) => {
+      if (i.to === "/manufacturing" && !flags.flags.manufacturing) return false;
+      if (i.to === "/taxation" && !flags.flags.taxation) return false;
+      return true;
+    }),
   }));
 });
 
@@ -83,7 +87,16 @@ function updateModule(path: string): void {
   } else if (path === "/" || GLOBAL_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     currentModule.value = null;
   } else if (path.startsWith("/m/")) {
-    currentModule.value = currentModule.value ?? "selling"; // engine masters are Selling-group
+    // Engine masters: prefer the unique owning module (e.g. Tax Policy → Taxation).
+    // Shared masters keep sticky context; cold deep-links fall back to selling.
+    const owners = ownersForPath(path);
+    if (owners.size === 1) {
+      currentModule.value = [...owners][0];
+    } else if (currentModule.value && (owners.size === 0 || owners.has(currentModule.value))) {
+      // keep sticky module
+    } else if (currentModule.value === null) {
+      currentModule.value = owners.size ? [...owners][0] : "selling";
+    }
   } else {
     const owners = ownersForPath(path);
     if (owners.size === 1) {

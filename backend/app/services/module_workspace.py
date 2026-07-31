@@ -13,9 +13,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.accounts import SalesInvoice
-from app.models.base import DOCSTATUS_SUBMITTED
+from app.models.base import DOCSTATUS_DRAFT, DOCSTATUS_SUBMITTED
 from app.models.buying import PurchaseOrder
-from app.models.core import Company
+from app.models.compliance import IncomeTaxComputation
+from app.models.core import Company, SystemSetting
 from app.models.manufacturing import BOM, WorkOrder
 from app.models.selling import SalesOrder
 from app.models.stock import Item, StockEntry, Warehouse
@@ -225,6 +226,67 @@ async def get_stock_workspace(db: AsyncSession, company_id: uuid.UUID) -> dict[s
             {"label": "Items", "value": int(items), "format": "int"},
             {"label": "Warehouses", "value": int(warehouses), "format": "int"},
             {"label": "Stock Entries", "value": int(entries), "format": "int"},
+        ],
+        "trend": trend,
+    }
+
+
+async def get_taxation_workspace(db: AsyncSession, company_id: uuid.UUID) -> dict[str, Any]:
+    """Lean Taxation home: ITR draft/submitted counts + GST settings presence."""
+    currency = await _company_currency(db, company_id)
+    draft_itr = (
+        await db.execute(
+            select(func.count())
+            .select_from(IncomeTaxComputation)
+            .where(
+                IncomeTaxComputation.company_id == company_id,
+                IncomeTaxComputation.docstatus == DOCSTATUS_DRAFT,
+            )
+        )
+    ).scalar_one()
+    submitted_itr = (
+        await db.execute(
+            select(func.count())
+            .select_from(IncomeTaxComputation)
+            .where(
+                IncomeTaxComputation.company_id == company_id,
+                IncomeTaxComputation.docstatus == DOCSTATUS_SUBMITTED,
+            )
+        )
+    ).scalar_one()
+    gst_row = await db.scalar(
+        select(SystemSetting.id).where(
+            SystemSetting.company_id == company_id,
+            SystemSetting.key == "gst_settings",
+        )
+    )
+    gst_configured = 1 if gst_row is not None else 0
+
+    months = _last_12_months(date.today())
+    start = date(months[0][0], months[0][1], 1)
+    year_col = func.extract("year", IncomeTaxComputation.creation)
+    month_col = func.extract("month", IncomeTaxComputation.creation)
+    rows = (
+        await db.execute(
+            select(year_col.label("y"), month_col.label("m"), func.count().label("v"))
+            .where(
+                IncomeTaxComputation.company_id == company_id,
+                IncomeTaxComputation.creation >= start,
+            )
+            .group_by(year_col, month_col)
+        )
+    ).all()
+    bucket = {(int(r.y), int(r.m)): int(r.v) for r in rows}
+    trend = [{"label": _MONTH_ABBR[m - 1], "value": bucket.get((y, m), 0)} for (y, m) in months]
+
+    return {
+        "currency": currency,
+        "chart_title": "Income Tax Computations Created",
+        "trend_format": "int",
+        "cards": [
+            {"label": "Draft ITR Worksheets", "value": int(draft_itr), "format": "int"},
+            {"label": "Submitted ITR Worksheets", "value": int(submitted_itr), "format": "int"},
+            {"label": "GST Settings", "value": int(gst_configured), "format": "int"},
         ],
         "trend": trend,
     }

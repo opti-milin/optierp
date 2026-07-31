@@ -11,11 +11,13 @@ from app.api.v1.compliance import (
     income_tax_computations as compliance_income_tax_computations,
     income_tax_settings as compliance_income_tax_settings,
     returns as compliance_returns,
+    taxation_workspace as compliance_taxation_workspace,
     tds_returns as compliance_tds_returns,
 )
 from app.api.v1.accounts import (
     bank_reconciliation,
     budgets,
+    contribution_margin as accounts_cm,
     journal_entries,
     masters as accounts_masters,
     payment_entries,
@@ -52,7 +54,7 @@ from app.api.v1.manufacturing import (
     workspace as manufacturing_workspace,
 )
 from app.api.v1 import registry as metadata_engine
-from app.api.v1.selling import quotations, sales_orders, workspace as selling_workspace
+from app.api.v1.selling import cm_plans, quotations, sales_orders, workspace as selling_workspace
 from app.api.v1.stock import (
     delivery_notes,
     masters as stock_masters,
@@ -95,6 +97,7 @@ api_v1_router.include_router(share_transfers.router)
 api_v1_router.include_router(bank_reconciliation.router)
 api_v1_router.include_router(budgets.router)
 api_v1_router.include_router(accounts_reports.router)
+api_v1_router.include_router(accounts_cm.router)
 api_v1_router.include_router(accounts_workspace.router)
 
 # Module 03 — Stock
@@ -118,6 +121,7 @@ api_v1_router.include_router(buying_workspace.router)
 # Module 05 — Selling
 api_v1_router.include_router(quotations.router)
 api_v1_router.include_router(sales_orders.router)
+api_v1_router.include_router(cm_plans.router)
 api_v1_router.include_router(selling_workspace.router)
 
 # Module — Assets (fixed-asset register + depreciation)
@@ -142,6 +146,7 @@ api_v1_router.include_router(compliance_e_documents.router)
 api_v1_router.include_router(compliance_tds_returns.router)
 api_v1_router.include_router(compliance_income_tax_settings.router)
 api_v1_router.include_router(compliance_income_tax_computations.router)
+api_v1_router.include_router(compliance_taxation_workspace.router)
 
 # Metadata engine ("the machine") — generic CRUD/list/form for every registered
 # DocType (app.registry). Adding a master needs no new router here.

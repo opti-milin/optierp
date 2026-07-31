@@ -43,6 +43,8 @@ const SELLING: WorkspaceConfig = {
         { label: "Dashboard", to: "/selling", icon: "▦" },
         { label: "Quotation", to: "/quotations", icon: "📝" },
         { label: "Sales Order", to: "/sales-orders", icon: "🛒" },
+        { label: "CM Plans", to: "/cm-plans", icon: "📊" },
+        { label: "CM Settings", to: "/cm-planning-settings", icon: "⚙" },
         { label: "Sales Invoice", to: "/sales-invoices", icon: "🧾" },
         { label: "Delivery Note", to: "/delivery-notes", icon: "🚚" },
       ],
@@ -58,6 +60,7 @@ const SELLING: WorkspaceConfig = {
         { label: "Monthly Distribution", to: "/m/monthly-distribution" },
         { label: "Sales Partner", to: "/m/sales-partner" },
         { label: "Sales Person", to: "/m/sales-person" },
+        { label: "CM Cost Rate", to: "/m/cm-cost-rate" },
         { label: "Territory", to: "/m/territory" },
         { label: "Payment Terms Template", to: "/m/payment-terms-template" },
         { label: "Tax Category", to: "/m/tax-category" },
@@ -81,6 +84,7 @@ const SELLING: WorkspaceConfig = {
         { label: "Customer", to: "/m/customer" },
         { label: "Quotation", to: "/quotations" },
         { label: "Sales Order", to: "/sales-orders" },
+        { label: "CM Plans", to: "/cm-plans" },
         { label: "Sales Invoice", to: "/sales-invoices" },
         { label: "Delivery Note", to: "/delivery-notes" },
         { label: "Blanket Order", to: "/m/blanket-order" },
@@ -361,13 +365,6 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS", to: "/m/tax-withholding-category" },
-        { label: "GST Settings", to: "/gst-settings" },
-        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
-        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
-        { label: "Income Tax Settings", to: "/income-tax-settings" },
-        { label: "Income Tax Computation", to: "/income-tax" },
-        { label: "Income Tax Rate Table", to: "/m/income-tax-rate-table" },
-        { label: "Tax Adjustment Category", to: "/m/tax-adjustment-category" },
       ],
     },
     {
@@ -444,11 +441,6 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS Category", to: "/m/tax-withholding-category" },
-        { label: "GST Settings", to: "/gst-settings" },
-        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
-        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
-        { label: "Income Tax Settings", to: "/income-tax-settings" },
-        { label: "Income Tax Computation", to: "/income-tax" },
       ],
     },
     {
@@ -482,6 +474,8 @@ const ACCOUNTING: WorkspaceConfig = {
       links: [
         { label: "Trial Balance", to: "/reports?tab=trial-balance" },
         { label: "Profit & Loss", to: "/reports?tab=profit-loss" },
+        { label: "Contribution Margin", to: "/reports?tab=contribution-margin" },
+        { label: "CM Planning Settings", to: "/cm-planning-settings" },
         { label: "Balance Sheet", to: "/reports?tab=balance-sheet" },
         { label: "Gross Profit", to: "/reports?tab=gross-profit" },
         { label: "Receivable / Payable", to: "/reports?tab=receivable" },
@@ -559,6 +553,89 @@ const ASSETS: WorkspaceConfig = {
       links: [
         { label: "Maintenance & Repair", to: "/m/asset-maintenance" },
       ],
+    },
+  ],
+};
+
+// Taxation — India GST + TDS returns + Income Tax filing (invoice tax masters stay in Accounting).
+const TAXATION: WorkspaceConfig = {
+  key: "taxation",
+  title: "Taxation",
+  statsEndpoint: "/taxation/workspace",
+  sidebar: [
+    {
+      items: [
+        { label: "Home", to: "/", icon: "⌂" },
+        { label: "Dashboard", to: "/taxation", icon: "▦" },
+      ],
+    },
+    {
+      title: "GST",
+      items: [
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+      ],
+    },
+    {
+      title: "TDS",
+      items: [{ label: "TDS Returns (26Q / 16A)", to: "/tds-returns" }],
+    },
+    {
+      title: "Income Tax",
+      items: [
+        { label: "Income Tax Settings", to: "/income-tax-settings" },
+        { label: "Income Tax Computation", to: "/income-tax" },
+        { label: "Tax Policy", to: "/m/tax-policy" },
+        { label: "Income Tax Rate Table", to: "/m/income-tax-rate-table" },
+        { label: "Income Tax Slab Set", to: "/m/income-tax-slab-set" },
+        { label: "Surcharge Rule Set", to: "/m/surcharge-rule-set" },
+        { label: "Health & Education Cess", to: "/m/health-education-cess-rule" },
+        { label: "Rebate Rule (87A)", to: "/m/rebate-rule" },
+        { label: "Special Income Tax Rate", to: "/m/special-income-tax-rate" },
+        { label: "Tax Adjustment Provision", to: "/m/tax-adjustment-provision" },
+        { label: "Tax Adjustment Rule Pack", to: "/m/tax-adjustment-rule-pack" },
+        { label: "Tax Depreciation Block", to: "/m/tax-depreciation-block" },
+        { label: "Tax Adjustment Category", to: "/m/tax-adjustment-category" },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [{ label: "Taxation Settings", to: "/taxation-settings" }],
+    },
+  ],
+  cards: [
+    {
+      title: "GST",
+      links: [
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+      ],
+    },
+    {
+      title: "TDS",
+      links: [{ label: "TDS Returns (26Q / 16A)", to: "/tds-returns" }],
+    },
+    {
+      title: "Income Tax",
+      links: [
+        { label: "Income Tax Settings", to: "/income-tax-settings" },
+        { label: "Income Tax Computation", to: "/income-tax" },
+        { label: "Tax Policy", to: "/m/tax-policy" },
+        { label: "Income Tax Rate Table", to: "/m/income-tax-rate-table" },
+        { label: "Income Tax Slab Set", to: "/m/income-tax-slab-set" },
+        { label: "Surcharge Rule Set", to: "/m/surcharge-rule-set" },
+        { label: "Health & Education Cess", to: "/m/health-education-cess-rule" },
+        { label: "Rebate Rule (87A)", to: "/m/rebate-rule" },
+        { label: "Special Income Tax Rate", to: "/m/special-income-tax-rate" },
+        { label: "Tax Adjustment Provision", to: "/m/tax-adjustment-provision" },
+        { label: "Tax Adjustment Rule Pack", to: "/m/tax-adjustment-rule-pack" },
+        { label: "Tax Depreciation Block", to: "/m/tax-depreciation-block" },
+        { label: "Tax Adjustment Category", to: "/m/tax-adjustment-category" },
+      ],
+    },
+    {
+      title: "Setup",
+      links: [{ label: "Taxation Settings", to: "/taxation-settings" }],
     },
   ],
 };
@@ -665,5 +742,6 @@ export const WORKSPACES: Record<string, WorkspaceConfig> = {
   stock: STOCK,
   accounting: ACCOUNTING,
   assets: ASSETS,
+  taxation: TAXATION,
   manufacturing: MANUFACTURING,
 };

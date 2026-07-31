@@ -62,12 +62,12 @@ const { nextName, loading, error, preview } = useNamingSeries();
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-sm font-semibold text-gray-900">GST / India Compliance</h2>
+          <h2 class="text-sm font-semibold text-gray-900">Taxation (GST & Income Tax)</h2>
           <p class="mt-1 text-sm text-gray-500">
-            Registration type, filing cadence, and e-invoice / e-way-bill applicability.
+            GST settings, returns, TDS returns, and income-tax computation live in the Taxation module.
           </p>
         </div>
-        <RouterLink to="/gst-settings" class="btn-secondary">Configure</RouterLink>
+        <RouterLink to="/taxation" class="btn-secondary">Open Taxation</RouterLink>
       </div>
     </section>
   </div>
