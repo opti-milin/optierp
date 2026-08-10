@@ -4,46 +4,46 @@ overview: Rebuild the Income Tax module around a hard separation between statuto
 todos:
   - id: save-plan
     content: Copy the confirmed plan to docs/plans/itr_enterprise_rearchitecture.plan.md and index it in docs/plans/README.md (PROJECT.md ship rule)
-    status: pending
+    status: completed
   - id: phase1-catalogue
     content: "Phase 1 (0085): create the `statutory` Postgres schema with assessment_year, finance_act_version, assessee_class, tax_regime, income_character, rate_schedule/band, surcharge, cess, rebate, provision, rule_pack/rule, deduction_section, depreciation_block, due_date_rule, interest_rule, itr_form/field_map; GRANT SELECT only to erp_app"
-    status: pending
+    status: completed
   - id: phase1-packs
     content: "Phase 1: author corrected statutory JSON packs for AY 2024-25/2025-26/2026-27 under backend/data/statutory/in/, build the idempotent loader CLI plus pack validator, and expose the read-only /tax/catalogue API"
-    status: pending
+    status: completed
   - id: phase2-registration
     content: "Phase 2 (0086): tax_registrations, tax_regime_elections, tax_policy_overrides; migrate the SystemSetting income_tax_settings blob; PAN-vs-assessee-class validation; settings UI"
-    status: pending
+    status: completed
   - id: phase3-kernel
     content: "Phase 3: pure taxation/kernel/ - money with ROUND_HALF_UP and s.288A/288B rounding, slab and flat engine, correct re-run-based marginal relief, character-aware surcharge with the 15% cap, rebate with character exclusions and 87A marginal relief"
-    status: pending
+    status: completed
   - id: phase3-tests
     content: "Phase 3: golden-vector tests per AY from CBDT illustrations plus monotonicity property tests across every surcharge threshold"
-    status: pending
+    status: completed
   - id: phase4-documents
     content: "Phase 4 (0087): tax_computations header, income_lines, adjustment_lines, append-only computation_runs and results; drop the 8 legacy tables and TaxAdjustmentCategory"
-    status: pending
+    status: completed
   - id: phase4-pipeline
     content: "Phase 4: resolver producing a frozen hashed ResolvedRuleSet, Decimal-only fact adapters, ordered pipeline stages, append-only recompute with rule-keyed override preservation and cycle-detecting topological sort"
-    status: pending
+    status: completed
   - id: phase5-credits-gl
     content: "Phase 5 (0088): tax_challans posting through services/gl.py, append-only tax_credit_entries, persisted 26AS reconciliation, current-tax provision JE on submit"
-    status: pending
+    status: completed
   - id: phase6-corporate
     content: "Phase 6 (0089): asset-linked tax depreciation register with the <180-day rule, loss carry-forward ledger with set-off order and expiry, 115JB MAT with the 115JAA credit ledger and MAT-vs-normal comparison"
-    status: pending
+    status: completed
   - id: phase7-interest
     content: "Phase 7 (0090): 234A/234B/234C interest from real challan dates, advance-tax shortfall projection, scheduler reminders"
-    status: pending
+    status: completed
   - id: phase8-forms
     content: "Phase 8 (0091): itr_field_map-driven ITR-6 generator against the CBDT schema, tax_filings with JSON hash and acknowledgement, revised/belated/updated return chaining"
-    status: pending
+    status: completed
   - id: phase9-ui
     content: "Phase 9: decompose IncomeTaxView.vue into a tax workspace with Heads/Adjustments/Depreciation/SetOff/MAT/Credits/Challans/Result/RunsAudit/FormPreview tabs; delete fillDummyData; make catalogue descriptors read-only"
-    status: pending
+    status: completed
   - id: phase10-decommission
     content: "Phase 10: delete income_tax_engine/, tax_adjustment_engine/, income_tax_masters.py, income_tax_settings.py, itr_export.py, the legacy router and descriptors; rewrite the docs as docs/TAXATION_ARCHITECTURE.md"
-    status: pending
+    status: completed
 isProject: false
 ---
 
