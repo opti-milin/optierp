@@ -22,9 +22,8 @@ SCHEDULED_JOBS: list[dict[str, Any]] = [
     {"func": "app.jobs.subscription.process_subscriptions", "trigger": "cron", "hour": 2},
     # Post due asset depreciation (idempotent; never double-books a period).
     {"func": "app.jobs.assets.process_depreciation", "trigger": "cron", "hour": 3},
-    # Populated by later modules, e.g.:
-    # {"func": "app.jobs.stock.reorder_level_check", "trigger": "cron", "hour": 6},
-    # {"func": "app.jobs.support.sla_breach_check", "trigger": "interval", "minutes": 15},
+    # Advance-tax shortfall reminders (idempotent via tax_compliance_reminders).
+    {"func": "app.jobs.tax_reminders.process_tax_reminders", "trigger": "cron", "hour": 7},
 ]
 
 scheduler = AsyncIOScheduler()
