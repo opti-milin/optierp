@@ -88,6 +88,8 @@ class AssetCategory(Base, DocumentMixin, CompanyScopedMixin):
     is_non_depreciable: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false")
     )
+    # IT Act block code from statutory.depreciation_block (e.g. PLANT_15) — drives tax dep register.
+    tax_block_code: Mapped[str | None] = mapped_column(String(40))
     fixed_asset_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id")
     )

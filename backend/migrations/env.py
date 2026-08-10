@@ -21,6 +21,7 @@ from app.models import (  # noqa: F401
     selling,
     statutory,
     stock,
+    tax_config,
 )
 
 config = context.config
