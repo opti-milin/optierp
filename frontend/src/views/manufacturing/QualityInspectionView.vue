@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Quality Inspection list — Accepted/Rejected gate for manufacturing finishes.
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import { formatDate, formatQty } from "@/utils/format";
@@ -97,6 +97,27 @@ watch(fRefType, () => {
   fItem.value = "";
 });
 watch(fRefId, () => applyReferenceDefaults());
+
+// A Work Order / Subcontract Job links here with a ?reference_id= prefill, and the
+// sidebar's bare link only drops that query — neither remounts the view, so the
+// prefill is re-applied here. fRefType clears the reference in its own watcher,
+// so let that settle before writing the rest.
+watch(
+  () => [
+    route.query.reference_type,
+    route.query.reference_id,
+    route.query.item_id,
+    route.query.qty,
+  ],
+  async () => {
+    fRefType.value = (route.query.reference_type as string) || "Work Order";
+    await nextTick();
+    fRefId.value = (route.query.reference_id as string) || "";
+    fItem.value = (route.query.item_id as string) || "";
+    fQty.value = Number(route.query.qty) || 1;
+    showForm.value = Boolean(route.query.reference_id);
+  },
+);
 
 async function save(): Promise<void> {
   if (!fRefId.value || !fItem.value) {

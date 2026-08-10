@@ -43,10 +43,10 @@ interface MaintenanceRow {
 
 const route = useRoute();
 type Tab = "register" | "ledger" | "maintenance";
-const initialTab = ["ledger", "maintenance"].includes(String(route.query.tab))
-  ? (route.query.tab as Tab)
-  : "register";
-const tab = ref<Tab>(initialTab);
+function tabFromQuery(value: unknown): Tab {
+  return value === "ledger" || value === "maintenance" ? value : "register";
+}
+const tab = ref<Tab>(tabFromQuery(route.query.tab));
 const today = new Date().toISOString().slice(0, 10);
 const asOf = ref(today);
 const includeDisposed = ref(false);
@@ -116,6 +116,14 @@ function reload(): void {
 }
 
 watch(tab, reload);
+// The sidebar links to /asset-reports, ?tab=ledger and ?tab=maintenance — same path,
+// different query — so the view is not remounted when moving between them.
+watch(
+  () => route.query.tab,
+  (value) => {
+    tab.value = tabFromQuery(value);
+  },
+);
 onMounted(reload);
 </script>
 

@@ -44,13 +44,25 @@ function partyName(row: InvoiceListItem): string {
   return (props.kind === "sales" ? row.customer_name : row.supplier_name) ?? "—";
 }
 
-onMounted(() => {
-  // deep link support: /sales-invoices?status=Overdue (e.g. from the dashboard)
+// Deep link support: /sales-invoices?status=Overdue (e.g. from the dashboard).
+// Applied reactively because the sidebar's bare list link only drops the query
+// without remounting the view, and must clear the filter that link set.
+function applyStatusFromRoute(): void {
   const queryStatus = route.query.status;
-  if (typeof queryStatus === "string" && STATUSES.includes(queryStatus)) {
-    statusFilter.value = queryStatus;
-    filters.value = { status: queryStatus };
-  }
+  const next =
+    typeof queryStatus === "string" && STATUSES.includes(queryStatus) ? queryStatus : "";
+  statusFilter.value = next;
+  filters.value = next ? { status: next } : {};
+  page.value = 1;
+}
+
+watch(() => route.query.status, () => {
+  applyStatusFromRoute();
+  void fetchList();
+});
+
+onMounted(() => {
+  applyStatusFromRoute();
   void fetchList();
 });
 

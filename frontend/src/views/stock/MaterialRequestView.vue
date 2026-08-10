@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Material Request: list. Create/view via MaterialRequestFormView.
 
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import DataTable, { type Column } from "@/components/shared/DataTable.vue";
 import PaginationFooter from "@/components/shared/PaginationFooter.vue";
@@ -17,8 +17,16 @@ const route = useRoute();
 const { items, total, page, pageSize, loading, fetchList, goToPage } =
   useList<MaterialRequestListItem>("/material-requests");
 const error = ref<ErrorEnvelope | null>(null);
-// confirmation banner when redirected from Reorder
+// Confirmation banner when redirected from Reorder. Kept in sync with the query
+// because the sidebar's bare list link only drops it without remounting the view
+// (a ref rather than a computed so Dismiss can clear the banner).
 const createdNotice = ref<string | null>(route.query.created ? String(route.query.created) : null);
+watch(
+  () => route.query.created,
+  (created) => {
+    createdNotice.value = created ? String(created) : null;
+  },
+);
 
 const columns: Column[] = [
   { key: "name", label: "Request" },

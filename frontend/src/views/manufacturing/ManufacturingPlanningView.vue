@@ -80,15 +80,18 @@ async function loadMasters(): Promise<void> {
   productionPlans.value = pp.data.items ?? [];
 }
 
+// The URL carries the whole planning context, so absent params reset to defaults
+// rather than keep the previous context — a query-only navigation (the sidebar's
+// bare Planning Dashboard link) no longer remounts this view.
 function applyQuery(): void {
   const c = String(route.query.context ?? "item") as ContextType;
-  if (["item", "sales-order", "quotation", "production-plan"].includes(c)) {
-    contextType.value = c;
-  }
-  if (typeof route.query.id === "string") documentId.value = route.query.id;
-  if (typeof route.query.item_id === "string") itemId.value = route.query.item_id;
-  if (typeof route.query.qty === "string") qty.value = Number(route.query.qty) || 1;
-  if (typeof route.query.delivery === "string") deliveryDate.value = route.query.delivery;
+  contextType.value = ["item", "sales-order", "quotation", "production-plan"].includes(c)
+    ? c
+    : "item";
+  documentId.value = typeof route.query.id === "string" ? route.query.id : "";
+  itemId.value = typeof route.query.item_id === "string" ? route.query.item_id : "";
+  qty.value = typeof route.query.qty === "string" ? Number(route.query.qty) || 1 : 1;
+  deliveryDate.value = typeof route.query.delivery === "string" ? route.query.delivery : "";
 }
 
 async function resolveContext(): Promise<void> {
@@ -215,7 +218,7 @@ async function runWhatIf(): Promise<void> {
   }
 }
 
-function syncQuery(): void {
+function queryFromState(): Record<string, string> {
   const q: Record<string, string> = { context: contextType.value };
   if (contextType.value === "item" && itemId.value) {
     q.item_id = itemId.value;
@@ -224,28 +227,56 @@ function syncQuery(): void {
     q.id = documentId.value;
   }
   if (deliveryDate.value) q.delivery = deliveryDate.value;
-  void router.replace({ query: q });
+  return q;
+}
+
+function syncQuery(): void {
+  void router.replace({ query: queryFromState() });
+}
+
+function queryMatchesState(): boolean {
+  const state = queryFromState();
+  const keys = Object.keys(route.query);
+  return (
+    keys.length === Object.keys(state).length && keys.every((k) => route.query[k] === state[k])
+  );
+}
+
+async function loadForContext(): Promise<void> {
+  if (
+    (contextType.value === "item" && itemId.value) ||
+    (contextType.value !== "item" && documentId.value)
+  ) {
+    await resolveContext();
+    return;
+  }
+  ctx.value = null;
+  capacity.value = (
+    await api.get<CapacityBoard>("/manufacturing-reports/capacity-board", {
+      params: { as_of: asOf.value || undefined },
+    })
+  ).data;
 }
 
 watch(selectedLineIdx, () => {
   void runAllForLine();
 });
 
+// Re-apply the context when only the query changes (the sidebar's bare Planning
+// Dashboard link), skipping the echo of this view's own syncQuery writes.
+watch(
+  () => route.query,
+  () => {
+    if (queryMatchesState()) return;
+    applyQuery();
+    void loadForContext();
+  },
+);
+
 onMounted(async () => {
   applyQuery();
   await loadMasters();
-  if (
-    (contextType.value === "item" && itemId.value) ||
-    (contextType.value !== "item" && documentId.value)
-  ) {
-    await resolveContext();
-  } else {
-    capacity.value = (
-      await api.get<CapacityBoard>("/manufacturing-reports/capacity-board", {
-        params: { as_of: asOf.value || undefined },
-      })
-    ).data;
-  }
+  await loadForContext();
 });
 </script>
 
