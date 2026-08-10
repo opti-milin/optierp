@@ -1,0 +1,42 @@
+{
+  "assessee_classes": [
+    {"code": "Company", "title": "Domestic Company", "default_itr_form": "ITR-6", "pan_4th_chars": "C"},
+    {"code": "Firm", "title": "Partnership Firm", "default_itr_form": "ITR-5", "pan_4th_chars": "F"},
+    {"code": "LLP", "title": "Limited Liability Partnership", "default_itr_form": "ITR-5", "pan_4th_chars": "F"},
+    {"code": "Individual", "title": "Individual", "default_itr_form": "ITR-2", "pan_4th_chars": "P"},
+    {"code": "HUF", "title": "Hindu Undivided Family", "default_itr_form": "ITR-2", "pan_4th_chars": "H"},
+    {"code": "AOP", "title": "Association of Persons / Body of Individuals", "default_itr_form": "ITR-5", "pan_4th_chars": "A"},
+    {"code": "Cooperative", "title": "Co-operative Society", "default_itr_form": "ITR-5", "pan_4th_chars": "J"},
+    {"code": "Trust", "title": "Trust / AOP (Trust)", "default_itr_form": "ITR-7", "pan_4th_chars": "T"}
+  ],
+  "income_characters": [
+    {"code": "ORDINARY", "title": "Ordinary / slab or flat-rate income", "surcharge_cap_percent": null, "rebate_eligible": true, "setoff_group": "ORDINARY", "loss_carry_years": 8},
+    {"code": "LTCG_112A", "title": "LTCG on equity / equity-oriented MF (s.112A)", "surcharge_cap_percent": "15", "rebate_eligible": false, "setoff_group": "LTCG", "loss_carry_years": 8},
+    {"code": "LTCG_112", "title": "Other long-term capital gains (s.112)", "surcharge_cap_percent": null, "rebate_eligible": false, "setoff_group": "LTCG", "loss_carry_years": 8},
+    {"code": "STCG_111A", "title": "STCG on equity / equity-oriented MF (s.111A)", "surcharge_cap_percent": "15", "rebate_eligible": false, "setoff_group": "STCG", "loss_carry_years": 8},
+    {"code": "LOTTERY_115BB", "title": "Winnings from lottery etc. (s.115BB)", "surcharge_cap_percent": null, "rebate_eligible": false, "setoff_group": "SPECIAL", "loss_carry_years": 0},
+    {"code": "VDA_115BBH", "title": "Virtual digital assets (s.115BBH)", "surcharge_cap_percent": null, "rebate_eligible": false, "setoff_group": "SPECIAL", "loss_carry_years": 0},
+    {"code": "DIVIDEND", "title": "Dividend income", "surcharge_cap_percent": null, "rebate_eligible": true, "setoff_group": "OS", "loss_carry_years": 8}
+  ],
+  "depreciation_blocks": [
+    {"block_code": "BUILDING_5", "title": "Buildings — residential", "rate_percent": "5", "additional_depreciation_eligible": false},
+    {"block_code": "BUILDING_10", "title": "Buildings — other", "rate_percent": "10", "additional_depreciation_eligible": false},
+    {"block_code": "FURNITURE_10", "title": "Furniture and fittings", "rate_percent": "10", "additional_depreciation_eligible": false},
+    {"block_code": "PLANT_15", "title": "Plant and machinery — general", "rate_percent": "15", "additional_depreciation_eligible": true},
+    {"block_code": "PLANT_30", "title": "Motor cars other than hire", "rate_percent": "15", "additional_depreciation_eligible": false},
+    {"block_code": "PLANT_40", "title": "Computers / software / wind mills etc.", "rate_percent": "40", "additional_depreciation_eligible": true},
+    {"block_code": "INTANGIBLE_25", "title": "Intangible assets (know-how, patents, etc.)", "rate_percent": "25", "additional_depreciation_eligible": false}
+  ],
+  "provisions": [
+    {"section_code": "37-personal", "title": "Personal / capital / non-business expenditure", "act_reference": "s.37(1)", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "37-penalty", "title": "Penalty / fine for infringement of law", "act_reference": "s.37(1) Expl.", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "37-CSR", "title": "Corporate social responsibility expenditure — disallowance", "act_reference": "s.37(1) Expl. 2", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "40(a)(ia)", "title": "Tax not deducted or not paid at source — thirty per cent disallowance", "act_reference": "s.40(a)(ia)", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "40A(3)", "title": "Cash payments above threshold", "act_reference": "s.40A(3)", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "43B", "title": "Statutory dues unpaid by return due date", "act_reference": "s.43B", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "36(1)(va)", "title": "Employee contributions not deposited by due date", "act_reference": "s.36(1)(va)", "stage": "PGBP", "default_effect": "Add", "itr_schedule": "BP"},
+    {"section_code": "32", "title": "Depreciation under the Income-tax Act", "act_reference": "s.32", "stage": "PGBP", "default_effect": "Less", "itr_schedule": "BP"},
+    {"section_code": "115JB", "title": "Minimum Alternate Tax — book profit", "act_reference": "s.115JB", "stage": "MAT", "default_effect": "Info", "itr_schedule": "MAT"},
+    {"section_code": "70-74", "title": "Loss set-off and carry-forward", "act_reference": "ss.70-74", "stage": "SetOff", "default_effect": "Info", "itr_schedule": "CYLA"}
+  ]
+}
