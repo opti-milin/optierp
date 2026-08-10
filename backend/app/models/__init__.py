@@ -17,6 +17,12 @@ from app.models import (  # noqa: F401
     selling,
     statutory,
     stock,
+    tax_computation,
+    tax_config,
+    tax_corporate,
+    tax_credits,
+    tax_filings,
+    tax_interest,
 )
 
 __all__ = [
@@ -30,4 +36,10 @@ __all__ = [
     "selling",
     "statutory",
     "stock",
+    "tax_computation",
+    "tax_config",
+    "tax_corporate",
+    "tax_credits",
+    "tax_filings",
+    "tax_interest",
 ]

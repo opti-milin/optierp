@@ -8,12 +8,21 @@ from app.api.v1.compliance import (
     e_documents as compliance_e_documents,
     gst_settings as compliance_gst_settings,
     hsn_codes as compliance_hsn_codes,
-    income_tax_computations as compliance_income_tax_computations,
-    income_tax_settings as compliance_income_tax_settings,
     returns as compliance_returns,
     taxation_workspace as compliance_taxation_workspace,
     tds_returns as compliance_tds_returns,
 )
+from app.api.v1.tax import catalogue as tax_catalogue
+from app.api.v1.tax import calendar as tax_calendar
+from app.api.v1.tax import challans as tax_challans
+from app.api.v1.tax import computations as tax_computations
+from app.api.v1.tax import credits as tax_credits
+from app.api.v1.tax import depreciation as tax_depreciation
+from app.api.v1.tax import filings as tax_filings
+from app.api.v1.tax import losses as tax_losses
+from app.api.v1.tax import mat_credits as tax_mat_credits
+from app.api.v1.tax import registrations as tax_registrations
+from app.api.v1.tax import workspace as tax_workspace
 from app.api.v1.accounts import (
     bank_reconciliation,
     budgets,
@@ -144,9 +153,20 @@ api_v1_router.include_router(compliance_hsn_codes.router)
 api_v1_router.include_router(compliance_returns.router)
 api_v1_router.include_router(compliance_e_documents.router)
 api_v1_router.include_router(compliance_tds_returns.router)
-api_v1_router.include_router(compliance_income_tax_settings.router)
-api_v1_router.include_router(compliance_income_tax_computations.router)
 api_v1_router.include_router(compliance_taxation_workspace.router)
+
+# Tax — statutory catalogue (Tier 1, read-only) and later Tier 2–3 resources
+api_v1_router.include_router(tax_catalogue.router)
+api_v1_router.include_router(tax_registrations.router)
+api_v1_router.include_router(tax_computations.router)
+api_v1_router.include_router(tax_challans.router)
+api_v1_router.include_router(tax_credits.router)
+api_v1_router.include_router(tax_depreciation.router)
+api_v1_router.include_router(tax_losses.router)
+api_v1_router.include_router(tax_mat_credits.router)
+api_v1_router.include_router(tax_calendar.router)
+api_v1_router.include_router(tax_filings.router)
+api_v1_router.include_router(tax_workspace.router)
 
 # Metadata engine ("the machine") — generic CRUD/list/form for every registered
 # DocType (app.registry). Adding a master needs no new router here.
