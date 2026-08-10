@@ -43,7 +43,8 @@ onMounted(load);
   <div class="mx-auto max-w-2xl">
     <h1 class="text-xl font-semibold text-gray-900">Taxation Settings</h1>
     <p class="mb-4 text-sm text-gray-500">
-      Show or hide the Taxation module (GST returns, TDS returns, Income Tax) in navigation.
+      Show or hide the Taxation module — Goods and Services Tax returns, Tax Deducted at Source
+      returns and Income Tax — in navigation.
     </p>
 
     <p v-if="notice" class="mb-3 rounded bg-green-50 px-3 py-2 text-sm text-green-700">{{ notice }}</p>
