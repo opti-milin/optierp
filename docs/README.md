@@ -12,7 +12,8 @@ Archived Cursor `.plan.md` briefs → **[`plans/`](plans/README.md)**.
 | Doc | Topic |
 |-----|--------|
 | [MANUFACTURING_GAP_AND_PLAN.md](MANUFACTURING_GAP_AND_PLAN.md) | Manufacturing parity + planning USP (Phases 0–9) |
-| [ITR_GAP_AND_PLAN.md](ITR_GAP_AND_PLAN.md) | Entity / individual income tax + rule engine |
+| [TAXATION_ARCHITECTURE.md](TAXATION_ARCHITECTURE.md) | Income Tax — statutory catalogue, kernel, filings, Tax Workspace (engineers) |
+| [INCOME_TAX_USER_GUIDE.md](INCOME_TAX_USER_GUIDE.md) | Income Tax — plain-language how-to, glossary, use cases (everyone) |
 | [INDIA_COMPLIANCE_GAP_AND_PLAN.md](INDIA_COMPLIANCE_GAP_AND_PLAN.md) | GST / TDS / e-invoice / GSP |
 | [ACCOUNTING_GAP_AND_PLAN.md](ACCOUNTING_GAP_AND_PLAN.md) | Accounts module (+ [`accounting/`](accounting/) sub-guides) |
 | [STOCK_GAP_AND_PLAN.md](STOCK_GAP_AND_PLAN.md) | Stock / inventory |
