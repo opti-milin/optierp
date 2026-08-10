@@ -4,7 +4,7 @@
 // portal's offline-tool JSON. See India Compliance Phase 2.
 import { computed, onMounted, ref } from "vue";
 import { api } from "@/api/client";
-import { formatCurrency, formatDate, formatNumber } from "@/utils/format";
+import { formatCurrency, formatDate, formatNumber, toISODateLocal } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type {
   Gstr1Report,
@@ -15,9 +15,13 @@ import type {
 type Tab = "gstr-1" | "gstr-3b" | "gstr-2b";
 
 const tab = ref<Tab>("gstr-1");
-// default to the current month
-const now = new Date();
-const period = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+// Default to the previous calendar month — GSTR-1/3B is filed for the month just closed.
+const prevMonth = new Date();
+prevMonth.setDate(1);
+prevMonth.setMonth(prevMonth.getMonth() - 1);
+const period = ref(
+  `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}`,
+);
 const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 const gstr1 = ref<Gstr1Report | null>(null);
@@ -30,7 +34,7 @@ const lastGstr2b = ref<unknown | null>(null);
 const range = computed(() => {
   const [y, m] = period.value.split("-").map(Number);
   const from = `${y}-${String(m).padStart(2, "0")}-01`;
-  const to = new Date(y, m, 0).toISOString().slice(0, 10); // last day of month
+  const to = toISODateLocal(new Date(y, m, 0)); // last day of month (local calendar)
   return { from_date: from, to_date: to };
 });
 

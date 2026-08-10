@@ -19,7 +19,7 @@ from app.core.exceptions import NotFoundError
 from app.models.base import DOCSTATUS_SUBMITTED
 from app.models.manufacturing import WorkOrder
 from app.models.selling import SalesOrder, SalesOrderItem
-from app.models.stock import DeliveryNote, DeliveryNoteItem, Item, MaterialRequest, MaterialRequestItem
+from app.models.stock import DeliveryNote, DeliveryNoteItem, Item
 from app.services.bom_explosion import find_item_bom
 from app.services.lead_time import estimate_lead_time, reverse_schedule
 from app.services.manufacturing_common import item_available_qty

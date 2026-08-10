@@ -67,12 +67,28 @@ function partyName(row: OrderListItem): string {
   return row.customer_name ?? row.supplier_name ?? "—";
 }
 
-onMounted(() => {
+// Deep link support: /sales-orders?status=Overdue. Applied reactively because the
+// sidebar's bare list link only drops the query without remounting the view, and
+// must clear the filter that link set.
+function applyStatusFromRoute(): void {
   const queryStatus = route.query.status;
-  if (typeof queryStatus === "string" && (cfg.value.statuses as readonly string[]).includes(queryStatus)) {
-    statusFilter.value = queryStatus;
-    filters.value = { status: queryStatus };
-  }
+  const next =
+    typeof queryStatus === "string" &&
+    (cfg.value.statuses as readonly string[]).includes(queryStatus)
+      ? queryStatus
+      : "";
+  statusFilter.value = next;
+  filters.value = next ? { status: next } : {};
+  page.value = 1;
+}
+
+watch(() => route.query.status, () => {
+  applyStatusFromRoute();
+  void fetchList();
+});
+
+onMounted(() => {
+  applyStatusFromRoute();
   void fetchList();
 });
 
