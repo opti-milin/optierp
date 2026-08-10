@@ -75,6 +75,12 @@ async def _get_or_create_category(db, actor, company_id, name, **fields) -> uuid
         )
     )
     if existing is not None:
+        # Backfill IT Act block so Tax Depreciation → Sync from assets works
+        block = fields.get("tax_block_code")
+        if block and existing.tax_block_code != block:
+            existing.tax_block_code = block
+            await db.flush()
+            print(f"  · patched category {name} tax_block_code={block}")
         return existing.id
     payload = {"category_name": name, **fields}
     obj = await registry_service.create_document(db, get_descriptor("asset-category"), payload, actor)
@@ -149,36 +155,42 @@ async def main() -> None:
             "depreciation_expense_account_id": str(dep),
             "accumulated_depreciation_account_id": str(accum),
         }
-        # --- categories ---
+        # --- categories (tax_block_code drives Tax Depreciation → Sync from assets) ---
         plant = await _get_or_create_category(
             db, actor, company.id, "Plant & Machinery", depreciation_method="Straight Line",
             total_number_of_depreciations=60, frequency_of_depreciation_months=1,
-            salvage_value_percent=5, fixed_asset_account_id=str(pm), **dep_accounts,
+            salvage_value_percent=5, fixed_asset_account_id=str(pm),
+            tax_block_code="PLANT_15", **dep_accounts,
         )
         computers = await _get_or_create_category(
             db, actor, company.id, "Computers & IT", depreciation_method="Written Down Value",
             total_number_of_depreciations=36, frequency_of_depreciation_months=1,
-            salvage_value_percent=5, fixed_asset_account_id=str(electronic), **dep_accounts,
+            salvage_value_percent=5, fixed_asset_account_id=str(electronic),
+            tax_block_code="PLANT_40", **dep_accounts,
         )
         furn = await _get_or_create_category(
             db, actor, company.id, "Furniture & Fixtures", depreciation_method="Straight Line",
             total_number_of_depreciations=120, frequency_of_depreciation_months=1,
-            salvage_value_percent=0, fixed_asset_account_id=str(furniture), **dep_accounts,
+            salvage_value_percent=0, fixed_asset_account_id=str(furniture),
+            tax_block_code="FURNITURE_10", **dep_accounts,
         )
         vehicles = await _get_or_create_category(
             db, actor, company.id, "Vehicles", depreciation_method="Written Down Value",
             total_number_of_depreciations=96, frequency_of_depreciation_months=1,
-            salvage_value_percent=10, fixed_asset_account_id=str(capital), **dep_accounts,
+            salvage_value_percent=10, fixed_asset_account_id=str(capital),
+            tax_block_code="PLANT_30", **dep_accounts,
         )
         office_eq = await _get_or_create_category(
             db, actor, company.id, "Office Equipment", depreciation_method="Straight Line",
             total_number_of_depreciations=60, frequency_of_depreciation_months=1,
-            salvage_value_percent=0, fixed_asset_account_id=str(office), **dep_accounts,
+            salvage_value_percent=0, fixed_asset_account_id=str(office),
+            tax_block_code="PLANT_15", **dep_accounts,
         )
         building_cat = await _get_or_create_category(
             db, actor, company.id, "Buildings", depreciation_method="Straight Line",
             total_number_of_depreciations=360, frequency_of_depreciation_months=1,
-            salvage_value_percent=5, fixed_asset_account_id=str(buildings), **dep_accounts,
+            salvage_value_percent=5, fixed_asset_account_id=str(buildings),
+            tax_block_code="BUILDING_10", **dep_accounts,
         )
         land = await _get_or_create_category(
             db, actor, company.id, "Land & Freehold", is_non_depreciable=True,
