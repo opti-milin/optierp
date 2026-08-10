@@ -44,9 +44,12 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 ## 2. Current Transition State
 
 - **Branch:** `develop`
-- **Latest migration head:** `0084_tax_adjustment_engine` (after `0083_cm_cost_structure` / `0082` / `0081` / `0080` / `0079`).
+- **Latest migration head:** `0092_drop_legacy_itr` (after `0091_tax_filings` / `0090` / …).
 - **Exact spot:** **Manufacturing Phases 0–9 complete** (incl. live delivery-date chain + outbound transit days). True finite-capacity APS remains out of scope.
-- Income Tax (entity ITR) Phases 0–6 lean + **rule-engine refactor** + **Tax Adjustment Engine** (`0084`: provision catalogue, AY rule packs, evaluators, tax dep blocks) — [docs/plans/tax_adjustment_engine.plan.md](docs/plans/tax_adjustment_engine.plan.md).
+- **ITR enterprise rearchitecture** — [docs/plans/itr_enterprise_rearchitecture.plan.md](docs/plans/itr_enterprise_rearchitecture.plan.md) is the **master spec**. Architecture: [docs/TAXATION_ARCHITECTURE.md](docs/TAXATION_ARCHITECTURE.md).
+  - **Phases 1–8 done** (`0085`–`0091`): statutory catalogue, registrations, kernel, computations/runs, challans/credits/GL, corporate depth, interest/calendar, ITR-6 filings.
+  - **Phase 9 done**: Tax Workspace (`/tax/workspace`) with Heads/Adjustments/Depreciation/Set-off/MAT/Credits/Challans/Result/Runs·Audit/Form tabs; legacy `IncomeTaxView` removed.
+  - **Phase 10 done** (`0092`): legacy engines/routers/descriptors/tables deleted; docs rewritten as `TAXATION_ARCHITECTURE.md`.
 - **Contribution Margin** — GL actuals report (`0079`) + **pre-sales CM Planning** + **Cost Driver Framework** (`0083`) — [docs/plans/cm_cost_driver_framework.plan.md](docs/plans/cm_cost_driver_framework.plan.md).
 
 ---
@@ -65,7 +68,7 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 - [x] Manufacturing Phase 8: Planning Dashboard + SO/Quotation fulfillment check.
 - [x] Manufacturing Phase 9: Live delivery-date chain (supply-aware CTP from open PO/MR/WO; SO stage timeline; suggest-only delivery date) — [docs/MANUFACTURING_GAP_AND_PLAN.md](docs/MANUFACTURING_GAP_AND_PLAN.md).
 - [ ] CRM: Lead, Opportunity, Campaign, Contact/Address; Lead→Opportunity→Quotation hand-off (hook); pipeline report. *(Masters via descriptors.)*
-- [ ] HR & Payroll: Employee, Leave (append-only Leave Ledger), Attendance, Salary Structure/Slip, Payroll Entry. **Source is `frappe/hrms`, not erpnext (`hr` moved out of `develop`).** Income Tax now exposes `IndividualHeads` + `seed-from-payroll` bridge hooks; wire Salary Slips / Payroll Entry into `backend/app/services/payroll_income_tax_bridge.py`.
+- [ ] HR & Payroll: Employee, Leave (append-only Leave Ledger), Attendance, Salary Structure/Slip, Payroll Entry. **Source is `frappe/hrms`, not erpnext (`hr` moved out of `develop`).** Wire Salary Slips into taxation facts adapters when Individual-track depth lands.
 - [ ] Projects: Project, Task (dependency/topological-sort validation), Timesheet, Gantt endpoint.
 
 **Phase 5 — Supporting modules + SaaS layer**
@@ -79,7 +82,7 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 - [ ] Customer order-tracking dashboard (read-only customer role + timeline over the doc-status chain).
 - [ ] One-page reconciliation (sales · purchase · bank) with auto-match service.
 - [ ] MCA (India company-law) compliance calendar + form pre-fill.
-- [x] **Income Tax (entity ITR)** — Phases 0–6 lean + data-driven rule engine (Tax Policy, slabs, surcharge+marginal relief, cess, 87A rebate, special rates; FlatRate / SlabBased / RuleBased). Remaining: full portal schedules, real DSC/HTTPS adapter — [docs/ITR_GAP_AND_PLAN.md](docs/ITR_GAP_AND_PLAN.md).
+- [x] **Income Tax (entity ITR)** — enterprise rearchitecture Phases 1–10 complete. See [docs/TAXATION_ARCHITECTURE.md](docs/TAXATION_ARCHITECTURE.md). Follow-ons: Individual-track depth, live DSC/HTTPS e-file adapter.
 - [ ] POS + loyalty (till + points ledger hooked into pricing engine).
 
 **Technical debt / cross-cutting**

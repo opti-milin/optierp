@@ -648,14 +648,9 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         # --- parity-feature masters + party defaults ----------------------------
         extras = await seed_extra_masters(db, actor, company)
-        from app.services.income_tax_masters import ensure_income_tax_masters  # noqa: PLC0415
-
-        itr_counts = await ensure_income_tax_masters(
-            db, company_id=company.id, user_id=uuid.UUID(str(actor.id))
-        )
         print(
-            f"Income Tax masters: +{itr_counts['rate_tables']} rates, "
-            f"+{itr_counts['adjustment_categories']} adjustment categories"
+            "Income Tax statutory packs: load via scripts/load_statutory.py "
+            "or migration (not seeded here)."
         )
         # default payment terms on a couple of parties; group/territory on a customer
         customers[0].payment_terms_template_id = extras["ptt_net30"]
@@ -826,8 +821,11 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
         for n in range(14):
             supplier = rng.choice(suppliers)
             posting = _date_in_fy(fy.year_start_date)
-            # ~40% of invoices get a TDS category
-            tds_category = rng.choice(tds_categories_list) if rng.random() < 0.4 else None
+            # Every other bill gets TDS so Form 26Q always has deductee rows
+            # (RNG alone has left demos empty before).
+            tds_category = (
+                tds_categories_list[n % len(tds_categories_list)] if tds_categories_list and n % 2 == 0 else None
+            )
             invoice = await pi_service.create_purchase_invoice(
                 db,
                 PurchaseInvoiceCreate(
@@ -846,6 +844,47 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
             if n % 7 != 6:
                 invoice = await pi_service.submit_purchase_invoice(db, invoice.id, actor)
             purchase_invoices.append(invoice)
+
+        # Guaranteed rows for GST Returns (prior month) + TDS Returns (current quarter).
+        # UI defaults to those windows; RNG-scattered FY dates alone often miss them.
+        q_start = date(TODAY.year, (TODAY.month - 1) // 3 * 3 + 1, 1)
+        prev_month_last = TODAY.replace(day=1) - timedelta(days=1)
+        prev_month_mid = prev_month_last.replace(day=min(15, prev_month_last.day))
+        gst_customer = next((c for c in customers if c.tax_category_id), customers[0])
+        tds_cat = tds_categories_list[0] if tds_categories_list else None
+        for i, posting in enumerate((prev_month_mid, TODAY, max(q_start, TODAY - timedelta(days=10)))):
+            gstr_si = await si_service.create_sales_invoice(
+                db,
+                SalesInvoiceCreate(
+                    customer_id=gst_customer.id,
+                    posting_date=posting,
+                    due_date=posting + timedelta(days=15),
+                    items=sales_items(2),
+                    remarks=f"GST returns demo SI #{i + 1}",
+                ),
+                actor,
+            )
+            await si_service.submit_sales_invoice(db, gstr_si.id, actor)
+        if tds_cat is not None:
+            for i, posting in enumerate(
+                (max(q_start, TODAY - timedelta(days=20)), max(q_start, TODAY - timedelta(days=5)))
+            ):
+                tds_pi = await pi_service.create_purchase_invoice(
+                    db,
+                    PurchaseInvoiceCreate(
+                        supplier_id=suppliers[0].id,
+                        posting_date=posting,
+                        due_date=posting + timedelta(days=30),
+                        bill_no=f"VEND-TDS-{2100 + i}",
+                        bill_date=posting,
+                        items=purchase_items(2),
+                        tax_withholding_category_id=tds_cat,
+                        remarks=f"TDS returns demo PI #{i + 1}",
+                    ),
+                    actor,
+                )
+                await pi_service.submit_purchase_invoice(db, tds_pi.id, actor)
+                purchase_invoices.append(tds_pi)
 
         submitted_pis = [i for i in purchase_invoices if i.docstatus == 1]
         for idx, invoice in enumerate(submitted_pis[: int(len(submitted_pis) * 0.55)]):

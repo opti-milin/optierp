@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Job Card list — shop-floor tracking created from Work Order operations on submit.
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import { formatQty } from "@/utils/format";
@@ -33,6 +33,9 @@ async function fetchList(): Promise<void> {
   }
 }
 
+// A Work Order links here with ?work_order_id=, and the sidebar's bare /job-cards
+// link only drops that query — neither remounts the view, so refetch on change.
+watch(() => route.query.work_order_id, () => void fetchList());
 onMounted(fetchList);
 </script>
 

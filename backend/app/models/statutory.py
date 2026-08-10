@@ -210,7 +210,7 @@ class CessRule(StatutoryTimestampMixin, Base):
     remarks: Mapped[str | None] = mapped_column(String(255))
 
 
-class RebateRule(StatutoryTimestampMixin, Base):
+class StatutoryRebateRule(StatutoryTimestampMixin, Base):
     __tablename__ = "rebate_rule"
     __table_args__ = {"schema": SCHEMA}
 

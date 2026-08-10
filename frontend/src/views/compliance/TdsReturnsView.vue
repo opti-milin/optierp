@@ -4,18 +4,17 @@
 // that withheld tax. See India Compliance Phase 6.2.
 import { onMounted, ref } from "vue";
 import { api } from "@/api/client";
-import { formatCurrency, formatDate, formatNumber } from "@/utils/format";
+import { formatCurrency, formatDate, formatNumber, toISODateLocal } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type { Form16A, Tds26qReport, Tds26qRow } from "@/types/compliance";
 
-// default to the current quarter
+// default to the current calendar quarter (local dates — avoid UTC day-shift via toISOString)
 function quarterRange(): { from: string; to: string } {
   const now = new Date();
   const q = Math.floor(now.getMonth() / 3);
   const from = new Date(now.getFullYear(), q * 3, 1);
   const to = new Date(now.getFullYear(), q * 3 + 3, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: iso(from), to: iso(to) };
+  return { from: toISODateLocal(from), to: toISODateLocal(to) };
 }
 const qr = quarterRange();
 const fromDate = ref(qr.from);

@@ -37,12 +37,19 @@ const TABS = [
   { key: "bom-stock", label: "BOM Stock (Can I build?)" },
   { key: "explorer", label: "BOM Explorer" },
 ];
-const tab = ref<string>((route.query.tab as string) || "production");
+const DEFAULT_TAB = "production";
+function tabFromQuery(t: unknown): string {
+  return typeof t === "string" && TABS.some((entry) => entry.key === t) ? t : DEFAULT_TAB;
+}
+const tab = ref<string>(tabFromQuery(route.query.tab));
 
 // Planning tools moved to /manufacturing-planning
-if (route.query.tab === "planning") {
+function redirectedToPlanning(t: unknown): boolean {
+  if (t !== "planning") return false;
   void router.replace({ path: "/manufacturing-planning" });
+  return true;
 }
+redirectedToPlanning(route.query.tab);
 
 const error = ref<ErrorEnvelope | null>(null);
 const items = ref<ItemOpt[]>([]);
@@ -80,23 +87,31 @@ const whatIfLeadDays = ref<number>(0);
 const forecastLookback = ref(6);
 const forecastHorizon = ref(3);
 
-function switchTab(key: string): void {
-  tab.value = key;
-  void router.replace({ query: { ...route.query, tab: key } });
+function loadForTab(key: string): void {
   if (key === "shortage") void loadShortage();
   if (key === "wo-summary") void loadWoSummary();
   if (key === "analytics") void loadAnalytics();
-  if (key === "planning") void loadCapacityBoard();
 }
-watch(() => route.query.tab, (t) => {
-  if (t) {
-    tab.value = t as string;
-    if (t === "shortage") void loadShortage();
-    if (t === "wo-summary") void loadWoSummary();
-    if (t === "analytics") void loadAnalytics();
-    if (t === "planning") void loadCapacityBoard();
+
+// The URL is the source of truth for the tab: the buttons push the query and the
+// watcher below applies it. The sidebar links to the bare /manufacturing-reports
+// path as well as to ?tab= deep links, and the route is not remounted between
+// them, so an absent tab has to fall back to the default rather than be ignored.
+function switchTab(key: string): void {
+  if (key !== tabFromQuery(route.query.tab)) {
+    void router.replace({ query: { ...route.query, tab: key } });
   }
-});
+}
+watch(
+  () => route.query.tab,
+  (t) => {
+    if (redirectedToPlanning(t)) return;
+    const next = tabFromQuery(t);
+    if (next === tab.value) return;
+    tab.value = next;
+    loadForTab(next);
+  },
+);
 
 async function loadShortage(): Promise<void> {
   error.value = null;
@@ -346,10 +361,7 @@ onMounted(async () => {
   items.value = it.data.items;
   boms.value = bm.data.items;
   await loadRegister();
-  if (tab.value === "shortage") await loadShortage();
-  if (tab.value === "wo-summary") await loadWoSummary();
-  if (tab.value === "analytics") await loadAnalytics();
-  if (tab.value === "planning") await loadCapacityBoard();
+  loadForTab(tab.value);
 });
 </script>
 

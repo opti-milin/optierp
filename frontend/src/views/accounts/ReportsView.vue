@@ -47,7 +47,8 @@ type Tab =
   | "share-balance"
   | "share-ledger";
 const route = useRoute();
-const tab = ref<Tab>("trial-balance");
+const DEFAULT_TAB: Tab = "trial-balance";
+const tab = ref<Tab>(DEFAULT_TAB);
 
 const today = new Date().toISOString().slice(0, 10);
 const yearStart = `${new Date().getFullYear()}-01-01`;
@@ -232,11 +233,16 @@ watch(bankAccountId, () => {
 watch(glAccountId, () => {
   if (tab.value === "general-ledger") void run();
 });
-// honor nav clicks to ?tab=... even when this view is already mounted
+// Honour nav clicks to ?tab=... even when this view is already mounted. The
+// sidebar offers the bare /reports link alongside the ?tab= deep links and the
+// route is not remounted between them, so an absent tab must fall back to the
+// default rather than leave the previous report on screen.
 watch(
   () => route.query.tab,
   (t) => {
-    if (t && tabs.some((x) => x.key === t)) switchTab(t as Tab);
+    const next: Tab =
+      typeof t === "string" && tabs.some((x) => x.key === t) ? (t as Tab) : DEFAULT_TAB;
+    if (next !== tab.value) switchTab(next);
   },
 );
 watch(fiscalYearId, () => {

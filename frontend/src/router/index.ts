@@ -3,6 +3,27 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 
+/**
+ * Old standalone Income Tax record screens → the workspace section that replaced them.
+ * Kept as redirects so existing bookmarks and links keep working.
+ */
+const TAX_SECTION_REDIRECTS: RouteRecordRaw[] = (
+  [
+    ["computations", "overview"],
+    ["challans", "challans"],
+    ["credits", "credits"],
+    ["depreciation", "depreciation"],
+    ["losses", "losses"],
+    ["mat-credits", "mat"],
+    ["calendar", "interest"],
+    ["filings", "filing"],
+  ] as const
+).map(([path, section]) => ({
+  path: `tax/${path}`,
+  name: `tax-${path}`,
+  redirect: () => ({ name: "tax-workspace", query: { section } }),
+}));
+
 const routes: RouteRecordRaw[] = [
   {
     path: "/login",
@@ -66,19 +87,35 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/compliance/IncomeTaxSettingsView.vue"),
       },
       {
-        path: "income-tax",
-        name: "income-tax",
-        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+        path: "tax",
+        name: "income-tax-home",
+        component: () => import("@/views/compliance/IncomeTaxHomeView.vue"),
       },
       {
+        path: "tax/workspace/:id?",
+        name: "tax-workspace",
+        component: () => import("@/views/compliance/TaxWorkspaceView.vue"),
+      },
+      {
+        path: "tax/catalogue",
+        name: "tax-catalogue",
+        component: () => import("@/views/compliance/StatutoryCatalogueView.vue"),
+      },
+      // The standalone record screens are now sections of the workspace. Their old
+      // paths still resolve so that no bookmark breaks: without a computation in the
+      // URL they land on the year list, which opens the right section from there.
+      ...TAX_SECTION_REDIRECTS,
+      {
         path: "income-tax/new",
-        name: "income-tax-new",
-        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+        redirect: { name: "tax-workspace" },
       },
       {
         path: "income-tax/:id",
-        name: "income-tax-detail",
-        component: () => import("@/views/compliance/IncomeTaxView.vue"),
+        redirect: (to) => ({ name: "tax-workspace", params: { id: String(to.params.id) } }),
+      },
+      {
+        path: "income-tax",
+        redirect: { name: "income-tax-home" },
       },
       // Module 02 — Accounts
       {

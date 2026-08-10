@@ -6,7 +6,8 @@ Usage (Compose Postgres)::
       --database-url "postgresql+asyncpg://erp_owner:milin@postgres:5432/erp"
 
 Also refreshes cost-driver trees on ``CM-PLAN-2026-00001`` / ``00002`` when present
-(``--refresh-rules``, default on).
+(``--refresh-rules``, default on), and ensures each plan has a distinct pack of
+what-if scenarios (price / qty / freight / material / labor / discount / combos).
 """
 
 from __future__ import annotations
@@ -328,6 +329,97 @@ def _drivers_payload(tree: list[dict[str, Any]]) -> list[CmCostDriverIn]:
     return [CmCostDriverIn(**d.to_dict()) for d in flatten_template_drivers(tree)]
 
 
+# Distinct what-if packs so compare UI has variety on both demo plans.
+# Baseline is always present; names below are alts only.
+_DEMO_SCENARIOS_PLAN_01: list[tuple[str, CmScenarioOverrides]] = [
+    ("Price -5%", CmScenarioOverrides(selling_rate=Decimal("1710"))),
+    ("Price +8% premium", CmScenarioOverrides(selling_rate=Decimal("1944"))),
+    ("Qty 50 volume", CmScenarioOverrides(qty=Decimal("50"))),
+    ("Freight ₹70", CmScenarioOverrides(freight_amount=Decimal("70"))),
+    ("Material +10%", CmScenarioOverrides(material_cost_factor=Decimal("1.10"))),
+    ("Labor +15%", CmScenarioOverrides(labor_cost_factor=Decimal("1.15"))),
+    ("Discount 5%", CmScenarioOverrides(additional_discount_percentage=Decimal("5"))),
+    (
+        "Win bid: -3% @ qty 40",
+        CmScenarioOverrides(selling_rate=Decimal("1746"), qty=Decimal("40")),
+    ),
+]
+
+_DEMO_SCENARIOS_PLAN_02: list[tuple[str, CmScenarioOverrides]] = [
+    ("Aggressive -8%", CmScenarioOverrides(selling_rate=Decimal("1656"))),
+    ("Bulk qty 100", CmScenarioOverrides(qty=Decimal("100"))),
+    ("Freight ₹120", CmScenarioOverrides(freight_amount=Decimal("120"))),
+    ("Material +15%", CmScenarioOverrides(material_cost_factor=Decimal("1.15"))),
+    ("Channel discount 10%", CmScenarioOverrides(additional_discount_percentage=Decimal("10"))),
+    ("Labor -5% efficiency", CmScenarioOverrides(labor_cost_factor=Decimal("0.95"))),
+    (
+        "Premium small lot",
+        CmScenarioOverrides(selling_rate=Decimal("2100"), qty=Decimal("12")),
+    ),
+    (
+        "Cost shock + freight",
+        CmScenarioOverrides(
+            material_cost_factor=Decimal("1.20"),
+            labor_cost_factor=Decimal("1.10"),
+            freight_amount=Decimal("150"),
+        ),
+    ),
+]
+
+
+async def ensure_demo_scenarios(
+    db: AsyncSession,
+    actor: CurrentUser,
+    plan_name: str,
+    wanted: list[tuple[str, CmScenarioOverrides]],
+    *,
+    prune_extras: bool = True,
+) -> None:
+    """Idempotently add missing named scenarios on a draft plan.
+
+    When ``prune_extras`` is true, deletes non-baseline scenarios whose names are
+    not in the wanted pack (clears leftover test what-ifs).
+    """
+    plan_row = await db.scalar(
+        select(CmPlan).where(CmPlan.company_id == actor.company_id, CmPlan.name == plan_name)
+    )
+    if plan_row is None:
+        print(f"CM planning seed: {plan_name} not found — skip scenarios.")
+        return
+    if plan_row.docstatus != 0:
+        print(f"CM planning seed: {plan_name} is not draft — skip scenarios.")
+        return
+    plan = await cm_plan.get_plan(db, plan_row.id, actor.company_id)  # type: ignore[arg-type]
+    keep = {name for name, _ in wanted}
+    if prune_extras:
+        for s in list(plan.scenarios):
+            if s.is_baseline or s.name in keep:
+                continue
+            plan = await cm_plan.delete_scenario(db, plan.id, s.id, actor)
+            print(f"CM planning seed: {plan_name} — removed leftover '{s.name}'.")
+
+    plan = await cm_plan.get_plan(db, plan.id, actor.company_id)  # type: ignore[arg-type]
+    names = {s.name for s in plan.scenarios}
+    added = 0
+    for name, overrides in wanted:
+        if name in names:
+            continue
+        plan = await cm_plan.create_scenario(
+            db,
+            plan.id,
+            CmPlanScenarioCreate(name=name, overrides=overrides),
+            actor,
+        )
+        names.add(name)
+        added += 1
+        print(f"CM planning seed: {plan_name} — added scenario '{name}'.")
+    plan = await cm_plan.get_plan(db, plan.id, actor.company_id)  # type: ignore[arg-type]
+    print(
+        f"CM planning seed: {plan_name} — {len(plan.scenarios)} scenarios "
+        f"(baseline + {len(wanted)} what-ifs; added {added})."
+    )
+
+
 async def apply_demo_cost_rules(
     db: AsyncSession,
     actor: CurrentUser,
@@ -446,59 +538,46 @@ async def seed_cm_planning(
     )
     if existing_plan is not None:
         plan = await cm_plan.get_plan(db, existing_plan.id, company_id)
-        if len(plan.scenarios) < 3:
-            names = {s.name for s in plan.scenarios}
-            wanted = [
-                ("Price -5%", CmScenarioOverrides(selling_rate=Decimal("1710"))),
-                ("Freight 70", CmScenarioOverrides(freight_amount=Decimal("70"))),
-                ("Material +10%", CmScenarioOverrides(material_cost_factor=Decimal("1.10"))),
-            ]
-            for name, overrides in wanted:
-                if name in names:
-                    continue
-                plan = await cm_plan.create_scenario(
-                    db,
-                    plan.id,
-                    CmPlanScenarioCreate(name=name, overrides=overrides),
-                    actor,
-                )
-                print(f"CM planning seed: added scenario '{name}'.")
-        else:
-            print(f"CM planning seed: plan {plan.name} already has {len(plan.scenarios)} scenarios.")
+        print(f"CM planning seed: reusing plan {plan.name}.")
     else:
         plan = await cm_plan.seed_from_quotation(db, qtn.id, actor)
         print(f"CM planning seed: seeded plan {plan.name}.")
-        for name, overrides in [
-            ("Price -5%", CmScenarioOverrides(selling_rate=Decimal("1710"))),
-            ("Freight 70", CmScenarioOverrides(freight_amount=Decimal("70"))),
-            ("Material +10%", CmScenarioOverrides(material_cost_factor=Decimal("1.10"))),
-        ]:
-            plan = await cm_plan.create_scenario(
-                db,
-                plan.id,
-                CmPlanScenarioCreate(name=name, overrides=overrides),
-                actor,
+
+    # Refresh cost trees + scenario packs on both named demo plans when present.
+    named = (
+        await db.scalars(
+            select(CmPlan)
+            .where(
+                CmPlan.company_id == company_id,
+                CmPlan.name.in_(("CM-PLAN-2026-00001", "CM-PLAN-2026-00002")),
             )
-            print(f"CM planning seed: added scenario '{name}'.")
+            .order_by(CmPlan.name)
+        )
+    ).all()
+    plan_by_name = {p.name: p for p in named}
 
     if refresh_rules:
-        named = (
-            await db.scalars(
-                select(CmPlan)
-                .where(
-                    CmPlan.company_id == company_id,
-                    CmPlan.name.in_(("CM-PLAN-2026-00001", "CM-PLAN-2026-00002")),
-                )
-                .order_by(CmPlan.name)
-            )
-        ).all()
-        if len(named) >= 1:
-            await apply_demo_cost_rules(db, actor, named[0].name, _DEMO_RULES_PLAN_01)
-        if len(named) >= 2:
-            await apply_demo_cost_rules(db, actor, named[1].name, _DEMO_RULES_PLAN_02)
-        elif plan is not None and plan.name not in {n.name for n in named}:
+        if "CM-PLAN-2026-00001" in plan_by_name:
+            await apply_demo_cost_rules(db, actor, "CM-PLAN-2026-00001", _DEMO_RULES_PLAN_01)
+        if "CM-PLAN-2026-00002" in plan_by_name:
+            await apply_demo_cost_rules(db, actor, "CM-PLAN-2026-00002", _DEMO_RULES_PLAN_02)
+        elif plan.name not in plan_by_name:
             await apply_demo_cost_rules(db, actor, plan.name, _DEMO_RULES_PLAN_01)
 
+    # Scenario variety on both plans (or the quotation-linked plan as fallback).
+    if "CM-PLAN-2026-00001" in plan_by_name:
+        await ensure_demo_scenarios(
+            db, actor, "CM-PLAN-2026-00001", _DEMO_SCENARIOS_PLAN_01
+        )
+    elif plan.name not in ("CM-PLAN-2026-00002",):
+        await ensure_demo_scenarios(db, actor, plan.name, _DEMO_SCENARIOS_PLAN_01)
+
+    if "CM-PLAN-2026-00002" in plan_by_name:
+        await ensure_demo_scenarios(
+            db, actor, "CM-PLAN-2026-00002", _DEMO_SCENARIOS_PLAN_02
+        )
+
+    plan = await cm_plan.get_plan(db, plan.id, company_id)
     print(
         f"CM planning seed: ready — Selling → CM Plans → {plan.name} "
         f"({len(plan.scenarios)} scenarios)."

@@ -643,6 +643,19 @@ async function prefill(): Promise<void> {
   }
 }
 
+// "Get Items From" pushes this same /new path with only a source id added to the
+// query, so the prefill has to re-run on a query change rather than on mount only.
+watch(
+  () => [
+    route.query.quotation_id,
+    route.query.supplier_quotation_id,
+    route.query.material_request_id,
+  ],
+  () => {
+    if (!props.id) void prefill();
+  },
+);
+
 onMounted(async () => {
   await Promise.all([
     cfg.value.buying ? accounts.fetchSuppliers() : accounts.fetchCustomers(),

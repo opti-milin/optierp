@@ -7,15 +7,16 @@ files as the original design brief.
 
 | Plan | Date | Status | Living doc |
 |------|------|--------|------------|
-| [ITR Enterprise Rearchitecture](itr_enterprise_rearchitecture.plan.md) | 2026-07-31 | **Master spec** — Phase 1 in progress (`0085`); clean-break statutory catalogue → kernel → docs → GL → ITR-6 | [ITR_GAP_AND_PLAN.md](../ITR_GAP_AND_PLAN.md) (superseded by this plan; rewrite → `TAXATION_ARCHITECTURE.md` in Phase 10) |
-| [Tax Adjustment Engine](tax_adjustment_engine.plan.md) | 2026-07-31 | Phase A done (`0084`); B–D stubs/adapters landed; superseded by enterprise rearchitecture | [ITR_GAP_AND_PLAN.md](../ITR_GAP_AND_PLAN.md) §5.2 |
+| [Income Tax CA Workspace](income_tax_ca_workspace.plan.md) | 2026-08-04 | **Complete** — unified workspace, BFF + preview compute, minimal data entry, terminology sweep | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
+| [ITR Enterprise Rearchitecture](itr_enterprise_rearchitecture.plan.md) | 2026-07-31 | **Complete** — Phases 1–10 (`0085`–`0092` + kernel + Tax Workspace); UX superseded by the CA Workspace plan above | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
+| [Tax Adjustment Engine](tax_adjustment_engine.plan.md) | 2026-07-31 | Superseded / decommissioned in Phase 10 | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
 | [CM Cost Driver Framework](cm_cost_driver_framework.plan.md) | 2026-07-31 | Phases 0–4 in progress (`0083`) | [contribution-margin.md](../accounting/contribution-margin.md) |
 | [CM Planning Engine](cm_planning_engine.plan.md) | 2026-07-30 | Phases 0–4 lean (`0081`–`0082`); superseded economics core by Cost Driver Framework | [contribution-margin.md](../accounting/contribution-margin.md) |
 | [Manufacturing Gap Roadmap](manufacturing_gap_roadmap.plan.md) | 2026-07-20 | Phases 0–8 done; Phase 9 in progress | [MANUFACTURING_GAP_AND_PLAN.md](../MANUFACTURING_GAP_AND_PLAN.md) |
 | [Mfg Planning Dashboard](mfg_planning_dashboard.plan.md) | 2026-07-22 | ✅ Done (Phase 8) | [MANUFACTURING_GAP_AND_PLAN.md](../MANUFACTURING_GAP_AND_PLAN.md) § Phase 8 |
-| [ITR Gap And Plan](itr_gap_and_plan.plan.md) | 2026-07-19 | ✅ Phases 0–6 lean | [ITR_GAP_AND_PLAN.md](../ITR_GAP_AND_PLAN.md) |
-| [Taxation Module ITR](taxation_module_itr.plan.md) | 2026-07-29 | ✅ Done (Individual + Taxation workspace) | [ITR_GAP_AND_PLAN.md](../ITR_GAP_AND_PLAN.md) |
-| [Income Tax Engine Refactor](income_tax_engine_refactor.plan.md) | 2026-07-29 | ✅ Done (`0077`) | [ITR_GAP_AND_PLAN.md](../ITR_GAP_AND_PLAN.md) §5.1 |
+| [ITR Gap And Plan](itr_gap_and_plan.plan.md) | 2026-07-19 | ✅ Phases 0–6 lean (historical) | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
+| [Taxation Module ITR](taxation_module_itr.plan.md) | 2026-07-29 | ✅ Done (historical) | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
+| [Income Tax Engine Refactor](income_tax_engine_refactor.plan.md) | 2026-07-29 | ✅ Done (`0077`, historical) | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
 | [Integration Architecture](integration_architecture.plan.md) | 2026-07-24 | Vision — not started | *(no gap doc yet; SaaS / sync spine)* |
 | [Contribution Margin (GL report)](contribution_margin_engine.plan.md) | 2026-07-30 | ✅ Phases 0–2 done (`0079`) — actuals report; planning is sibling plan above | [contribution-margin.md](../accounting/contribution-margin.md) |
 
