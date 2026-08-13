@@ -1,0 +1,17 @@
+{
+  "id": "saas",
+  "label": "SaaS / Software",
+  "description": "Hosting and payment fees variable; product engineering fixed; GTM segment; G&A corporate.",
+  "rules": [
+    { "match": { "account_category": "Revenue from Operations" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Income Account" }, "cm_class": "revenue" },
+    { "match": { "name_contains": ["Subscription", "License", "MRR", "ARR"] }, "cm_class": "revenue" },
+    { "match": { "name_contains": ["Hosting", "Cloud", "AWS", "Azure", "Bandwidth", "Payment Gateway", "Transaction Fee"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Support", "Customer Success", "CSM"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Engineering", "Product", "R&D", "SaaS Infrastructure"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Sales", "Marketing", "Growth", "Advertising"] }, "cm_class": "segment_bu_fixed" },
+    { "match": { "account_category": "Finance Costs" }, "cm_class": "corporate_overhead" },
+    { "match": { "name_contains": ["Admin", "Legal", "HR", "Office", "Rent"] }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Operating Expenses" }, "cm_class": "corporate_overhead" }
+  ]
+}

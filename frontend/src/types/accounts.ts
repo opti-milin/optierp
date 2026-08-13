@@ -399,6 +399,42 @@ export interface GrossProfitReport {
   margin_pct: string;
 }
 
+export interface ContributionMarginSection {
+  cm_class: string | null;
+  label: string;
+  rows: StatementRow[];
+  total: string;
+  pct_of_revenue: string | null;
+}
+
+export interface ContributionMarginReport {
+  from_date: string;
+  to_date: string;
+  cost_center_id: string | null;
+  sections: ContributionMarginSection[];
+  revenue: string;
+  variable_cost: string;
+  product_channel_fixed: string;
+  segment_bu_fixed: string;
+  corporate_overhead: string;
+  cm1: string;
+  cm2: string;
+  cm3: string;
+  operating_profit: string;
+  cm1_pct: string | null;
+  cm2_pct: string | null;
+  cm3_pct: string | null;
+  unclassified_total: string;
+  warnings: string[];
+}
+
+export interface CmTemplateInfo {
+  id: string;
+  label: string;
+  description: string | null;
+  rule_count: number;
+}
+
 export interface BudgetVarianceRow {
   account_id: string;
   account_name: string;

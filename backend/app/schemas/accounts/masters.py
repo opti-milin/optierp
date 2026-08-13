@@ -99,6 +99,7 @@ class AccountCreate(BaseModel):
     parent_account_id: uuid.UUID
     account_number: str | None = None
     account_type: str | None = None
+    cm_class: str | None = None
     is_group: bool = False
     account_currency: str | None = None
 
@@ -110,6 +111,7 @@ class AccountResponse(DocumentMeta):
     root_type: str
     report_type: str
     account_type: str | None
+    cm_class: str | None = None
     is_group: bool
     account_currency: str | None
     freeze_account: bool
@@ -126,6 +128,7 @@ class AccountUpdate(BaseModel):
     account_name: str | None = Field(default=None, min_length=1, max_length=140)
     account_number: str | None = None
     account_type: str | None = None
+    cm_class: str | None = None
     account_currency: str | None = None
     freeze_account: bool | None = None
     disabled: bool | None = None

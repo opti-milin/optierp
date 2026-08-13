@@ -58,6 +58,13 @@ export function formatNumber(value: string | number | null | undefined, decimals
   });
 }
 
+/** Round a money-like value to 2 decimal places (string for API payloads / inputs). */
+export function roundMoney(value: string | number | null | undefined): string {
+  const amount = Number(value ?? 0);
+  if (Number.isNaN(amount)) return "0.00";
+  return amount.toFixed(2);
+}
+
 export function formatQty(value: string | number | null | undefined): string {
   const qty = Number(value ?? 0);
   if (Number.isNaN(qty)) return String(value ?? "");
@@ -69,4 +76,12 @@ export function formatDate(value: string | null | undefined): string {
   const [year, month, day] = value.slice(0, 10).split("-");
   if (!year || !month || !day) return value;
   return `${day}-${month}-${year}`;
+}
+
+/** Local calendar YYYY-MM-DD — never use Date#toISOString() for this (UTC shifts the day in IST). */
+export function toISODateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

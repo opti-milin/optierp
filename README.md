@@ -14,20 +14,42 @@ per `docs/erpnext_migration_prompt.md`.
 | 1 | **01 — Core / Setup** (Company + COA seeding, Users, RBAC, Currencies, UOM, Naming Series, Workflows, Audit, Auth) | ✅ done |
 | 2 | **02 — Accounts** (GL + double-entry trigger, Journal/Payment Entries, Sales/Purchase Invoices, Tax Categories/Templates, Budgets, Payment & Bank Reconciliation, Period Closing, 7 financial reports, invoice PDFs) | ✅ done |
 | 3 | **03–05 — Stock, Buying, Selling** (Items/Warehouses/Price Lists, append-only Stock Ledger + Bin with moving-average valuation, Stock Entries, Material Requests, RFQs + Supplier Quotations, Purchase Orders → Receipts → Invoices, Quotations → Sales Orders → Delivery Notes → Invoices, perpetual-inventory GL, credit-limit warnings, stock balance/ledger reports) | ✅ done |
-| 4 | 06–09 — CRM, Manufacturing, HR*, Projects | ⏳ next |
-| 5 | 10–12 + SaaS layer — Assets, Quality, Support, onboarding/billing/feature flags | pending |
+| 4 | **06 — Manufacturing** (BOM → Work Order → Job Card, Production Plan, Subcontracting, QI gate, CTP/pegging soft USP) | ✅ done |
+| 4 | 07–09 — CRM, HR*, Projects | ⏳ next |
+| 5 | Assets (core landed), Quality/Support polish + SaaS layer | partial |
+| USP | **Income Tax / Taxation** (entity ITR worksheet, rule engine, Form 16 handoff) | ✅ lean done |
 
 \* Note: the `hr` module no longer exists in erpnext `develop` (moved to the separate
 `frappe/hrms` app) — Module 08 will be migrated from HRMS sources.
 
 ## Quick start (Docker)
 
-```bash
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2).
+First build downloads base images and can take several minutes.
+
+```powershell
+# From the repo root (PowerShell or bash)
 docker compose up --build
-# Frontend  http://localhost:8080
-# API docs  http://localhost:8000/docs
-# Login: admin@example.com / ChangeMe!123  (override via ADMIN_EMAIL / ADMIN_PASSWORD)
 ```
+
+Wait until the backend is healthy (compose prints `Application startup complete` / healthcheck passes), then open:
+
+| Surface | URL |
+|---|---|
+| App | http://localhost:8080 |
+| API docs | http://localhost:8000/docs |
+| Mailhog (dev email) | http://localhost:8025 |
+
+Login: `admin@example.com` / `ChangeMe!123`  
+(override with env vars `ADMIN_EMAIL` / `ADMIN_PASSWORD` before `up`).
+
+Compose runs migrations + an **idempotent** bootstrap seed (masters + admin) on backend start.
+It does **not** wipe the database. For a full demo dataset (invoices, stock, manufacturing kit), see **Demo data** below.
+
+**Common issues**
+- Port `5432` already in use (Windows PostgreSQL): stop the host service, or change the host mapping in `docker-compose.yml`.
+- Frontend shows API errors for a few seconds: wait for backend health — frontend now waits on the API healthcheck.
+- Stale DB after a bad migration: `docker compose down -v` then `docker compose up --build` (destructive — deletes the `pgdata` volume).
 
 ## Local development
 
@@ -61,6 +83,17 @@ draft/unpaid/overdue/partly-paid/paid/cancelled states, payments (allocated,
 on-account for the Reconciliation page, bank-cleared and not), journal entries,
 budgets, plus a prior fiscal year so reports show opening balances and deep
 AR/AP aging buckets.
+
+Against the Docker Compose Postgres (password `milin` from `infra/init-db.sql`):
+
+```powershell
+docker compose exec backend python -m scripts.seed_demo `
+  --database-url "postgresql+asyncpg://erp_owner:milin@postgres:5432/erp" `
+  --admin-email admin@example.com --admin-password "ChangeMe!123"
+```
+
+Or from a local venv (match `.env` passwords to the Postgres you actually started —
+Compose uses `milin`; `.env.example` uses `erp_owner_dev_pw`):
 
 ```powershell
 cd backend

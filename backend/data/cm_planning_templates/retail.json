@@ -1,0 +1,19 @@
+{
+  "id": "retail",
+  "label": "Retail",
+  "description": "Merchandise cost + freight + packaging; store-level fixed allocations.",
+  "drivers": {
+    "material": { "prefer": "valuation" },
+    "labor": { "prefer": "off" },
+    "freight": { "prefer": "shipping_rule" },
+    "commission": { "prefer": "sales_partner" },
+    "packaging": { "prefer": "cost_rate" }
+  },
+  "allocations": {
+    "product_channel_fixed_pct_of_revenue": 6,
+    "segment_bu_fixed_pct_of_revenue": 3,
+    "corporate_overhead_pct_of_revenue": 4
+  },
+  "target_cm1_pct": 35,
+  "min_cm1_pct": 18
+}

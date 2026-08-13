@@ -146,16 +146,26 @@ function partyName(row: PaymentEntryListItem): string {
   return partyNames.value.get(row.party_id) ?? "—";
 }
 
-onMounted(async () => {
-  await Promise.all([fetchList(), store.fetchAccounts(), store.fetchCustomers(), store.fetchSuppliers()]);
-  // deep link from an invoice's "Pay" button: ?type=Receive&party_id=...
+// Deep link from an invoice's "Pay" button: ?type=Receive&party_id=...
+// Applied reactively because the sidebar's bare /payment-entries link only drops
+// the query without remounting the view, and must close the prefilled form.
+function applyPrefillFromRoute(): void {
   const queryType = route.query.type;
   const queryParty = route.query.party_id;
-  if (queryType === "Receive" || queryType === "Pay") {
-    paymentType.value = queryType;
-    showForm.value = true;
-    if (typeof queryParty === "string") partyId.value = queryParty;
+  if (queryType !== "Receive" && queryType !== "Pay") {
+    showForm.value = false;
+    return;
   }
+  paymentType.value = queryType;
+  showForm.value = true;
+  if (typeof queryParty === "string") partyId.value = queryParty;
+}
+
+watch(() => [route.query.type, route.query.party_id], applyPrefillFromRoute);
+
+onMounted(async () => {
+  await Promise.all([fetchList(), store.fetchAccounts(), store.fetchCustomers(), store.fetchSuppliers()]);
+  applyPrefillFromRoute();
 });
 </script>
 

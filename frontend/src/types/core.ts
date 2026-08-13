@@ -39,6 +39,8 @@ export interface Company extends DocumentMeta {
   country_code: string | null;
   default_currency: string;
   tax_id: string | null;
+  pan: string | null;
+  tan: string | null;
   domain: string | null;
   is_group: boolean;
   parent_company_id: string | null;
@@ -106,6 +108,7 @@ export interface AccountNode {
   root_type: string;
   report_type: string;
   account_type: string | null;
+  cm_class?: string | null;
   is_group: boolean;
   account_currency: string | null;
   freeze_account?: boolean;

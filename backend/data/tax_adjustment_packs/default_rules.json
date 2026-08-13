@@ -1,0 +1,641 @@
+{
+  "version": 1,
+  "description": "Default Tax Adjustment Rule definitions. Seeded per AY × entity × regime. Statutory numbers live only here.",
+  "assessment_years": ["2024-25", "2025-26", "2026-27"],
+  "entity_regimes": [
+    {"entity_type": "Company", "filing_regime": "Normal"},
+    {"entity_type": "Company", "filing_regime": "New"},
+    {"entity_type": "Firm", "filing_regime": "Normal"},
+    {"entity_type": "Firm", "filing_regime": "New"},
+    {"entity_type": "LLP", "filing_regime": "Normal"},
+    {"entity_type": "LLP", "filing_regime": "New"},
+    {"entity_type": "Proprietor", "filing_regime": "Normal"},
+    {"entity_type": "Proprietor", "filing_regime": "New"},
+    {"entity_type": "Individual", "filing_regime": "Normal"},
+    {"entity_type": "Individual", "filing_regime": "New"}
+  ],
+  "rules": [
+    {
+      "rule_code": "37-personal",
+      "section_code": "37-personal",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 10,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "37-penalty",
+      "section_code": "37-penalty",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 11,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "37-CSR",
+      "section_code": "37-CSR",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": false},
+      "source_type": "GLAccount",
+      "source_config": {"hint": "Map CSR expense accounts"},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 12,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "36(1)(va)",
+      "section_code": "36(1)(va)",
+      "evaluation_method": "PaymentTiming",
+      "parameters": {
+        "due_date_rule": "statutory_pf_esi_due_date",
+        "reversal_mode": "next_year_deduct",
+        "needs_input_message": "Enter employee contribution not deposited by due date"
+      },
+      "source_type": "PaymentLedger",
+      "source_config": {"liability_kinds": ["PF_employee", "ESI_employee"]},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 20,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "40(a)(i)",
+      "section_code": "40(a)(i)",
+      "evaluation_method": "PaymentTiming",
+      "parameters": {
+        "disallowance_percent": "100",
+        "due_date_rule": "return_due_date",
+        "needs_input_message": "Enter NR payments where TDS u/s 195 not deducted/paid"
+      },
+      "source_type": "TaxWithholding",
+      "source_config": {"resident_status": "non_resident"},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 30,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "40(a)(ia)",
+      "section_code": "40(a)(ia)",
+      "evaluation_method": "PercentOfBase",
+      "parameters": {
+        "rate_percent": "30",
+        "base_key": "tds_gap_resident_expense",
+        "needs_input_message": "Enter resident expense base where TDS not deducted/paid (30% disallowance)"
+      },
+      "source_type": "TaxWithholding",
+      "source_config": {"resident_status": "resident"},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 31,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "40(a)(ii)",
+      "section_code": "40(a)(ii)",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": false},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 32,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "40(a)(iib)",
+      "section_code": "40(a)(iib)",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 33,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "40A(2)",
+      "section_code": "40A(2)",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 40,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "40A(3)",
+      "section_code": "40A(3)",
+      "evaluation_method": "ThresholdDisallow",
+      "parameters": {
+        "threshold_amount": "10000",
+        "transporter_threshold_amount": "35000",
+        "aggregate_grain": "day_per_person",
+        "exception_codes": ["6DD"],
+        "needs_input_message": "Enter cash payments exceeding threshold (Rule 6DD exceptions apply)"
+      },
+      "source_type": "PaymentLedger",
+      "source_config": {"modes": ["Cash"]},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 41,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "40A(7)",
+      "section_code": "40A(7)",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 42,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "40(b)",
+      "section_code": "40(b)",
+      "evaluation_method": "Manual",
+      "parameters": {"entity_types": ["Firm", "LLP"]},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 43,
+      "entity_types": ["Firm", "LLP"],
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "43B",
+      "section_code": "43B",
+      "evaluation_method": "PaymentTiming",
+      "parameters": {
+        "due_date_rule": "return_due_date",
+        "reversal_mode": "next_year_deduct",
+        "needs_input_message": "Enter statutory dues unpaid by return due date"
+      },
+      "source_type": "PaymentLedger",
+      "source_config": {
+        "liability_kinds": ["tax", "duty", "cess", "PF_employer", "ESI_employer", "bonus", "interest_bank"]
+      },
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 50,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "43B-rev",
+      "section_code": "43B-rev",
+      "evaluation_method": "PriorYearReversal",
+      "parameters": {
+        "match_section": "43B",
+        "match_keys": ["liability_kind"]
+      },
+      "source_type": "PriorYearReversal",
+      "source_config": {},
+      "depends_on": ["43B"],
+      "allow_manual_override": true,
+      "sequence": 51,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "Dep-add",
+      "section_code": "Dep-add",
+      "evaluation_method": "DiffTwoSources",
+      "parameters": {
+        "source_a": "books_depreciation",
+        "source_b": "tax_depreciation",
+        "sign_rule": "positive_a_minus_b_as_add",
+        "needs_input_message": "Enter books depreciation and IT Act depreciation (tax block)"
+      },
+      "source_type": "AssetTaxBlock",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 60,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "Dep-ded",
+      "section_code": "Dep-ded",
+      "evaluation_method": "DiffTwoSources",
+      "parameters": {
+        "source_a": "tax_depreciation",
+        "source_b": "books_depreciation",
+        "sign_rule": "positive_a_minus_b_as_deduct",
+        "needs_input_message": "Enter books depreciation and IT Act depreciation (tax block)"
+      },
+      "source_type": "AssetTaxBlock",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 61,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "Prov-exp",
+      "section_code": "Prov-exp",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 70,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "14A",
+      "section_code": "14A",
+      "evaluation_method": "Manual",
+      "parameters": {"rule_8d_hint": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 71,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "35",
+      "section_code": "35",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 72,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "Exempt-inc",
+      "section_code": "Exempt-inc",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 73,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "68",
+      "section_code": "68",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 80,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "69",
+      "section_code": "69",
+      "evaluation_method": "Manual",
+      "parameters": {"required_evidence": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 81,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "94B",
+      "section_code": "94B",
+      "evaluation_method": "Manual",
+      "parameters": {"ebitda_cap_percent": "30"},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 82,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-I",
+      "section_code": "ICDS-I",
+      "evaluation_method": "Manual",
+      "parameters": {"disclosure_only_default": true},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 100,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-II",
+      "section_code": "ICDS-II",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 101,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-III",
+      "section_code": "ICDS-III",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 102,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-IV",
+      "section_code": "ICDS-IV",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 103,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-V",
+      "section_code": "ICDS-V",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 104,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-VI",
+      "section_code": "ICDS-VI",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 105,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-VII",
+      "section_code": "ICDS-VII",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 106,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-VIII",
+      "section_code": "ICDS-VIII",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 107,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-IX",
+      "section_code": "ICDS-IX",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 108,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "ICDS-X",
+      "section_code": "ICDS-X",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 109,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "80C",
+      "section_code": "80C",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "100",
+        "absolute_cap": "150000",
+        "cap_base_key": "schedule_amount",
+        "needs_input_message": "Enter 80C investments (cap from rule parameters)"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 200,
+      "regime_scope": "Normal",
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "80CCD",
+      "section_code": "80CCD",
+      "evaluation_method": "Manual",
+      "parameters": {},
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 201,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "80D",
+      "section_code": "80D",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "100",
+        "absolute_cap": "25000",
+        "senior_absolute_cap": "50000",
+        "cap_base_key": "schedule_amount",
+        "needs_input_message": "Enter health insurance premiums"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 202,
+      "regime_scope": "Normal",
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "80G",
+      "section_code": "80G",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "50",
+        "qualifying_limit_pct_of": "10",
+        "cap_base_key": "adjusted_gross_total_income",
+        "needs_input_message": "Enter donation amount (50%/100% and qualifying limit applied from rule)"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 210,
+      "regime_scope": "Normal",
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "80JJAA",
+      "section_code": "80JJAA",
+      "evaluation_method": "PercentOfBase",
+      "parameters": {
+        "rate_percent": "30",
+        "base_key": "additional_employee_cost",
+        "needs_input_message": "Enter additional employee cost eligible u/s 80JJAA"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 211,
+      "include_in_seed_lines": true
+    },
+    {
+      "rule_code": "80TTA",
+      "section_code": "80TTA",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "100",
+        "absolute_cap": "10000",
+        "cap_base_key": "schedule_amount"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 220,
+      "regime_scope": "Normal",
+      "modes": ["IndividualHeads"],
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "80TTB",
+      "section_code": "80TTB",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "100",
+        "absolute_cap": "50000",
+        "cap_base_key": "schedule_amount"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 221,
+      "regime_scope": "Normal",
+      "modes": ["IndividualHeads"],
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "StdDed",
+      "section_code": "StdDed",
+      "evaluation_method": "ScheduleCap",
+      "parameters": {
+        "deduction_rate": "100",
+        "absolute_cap": "75000",
+        "cap_base_key": "salary_income",
+        "legacy_field": "standard_deduction"
+      },
+      "source_type": "UserSchedule",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 230,
+      "modes": ["IndividualHeads"],
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "SetOff-72",
+      "section_code": "SetOff-72",
+      "evaluation_method": "Manual",
+      "parameters": {"informational": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 300,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "SetOff-74",
+      "section_code": "SetOff-74",
+      "evaluation_method": "Manual",
+      "parameters": {"informational": true},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 301,
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "115JB",
+      "section_code": "115JB",
+      "evaluation_method": "Manual",
+      "parameters": {"informational": true, "mat_rate_percent": "15"},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 400,
+      "entity_types": ["Company"],
+      "regime_scope": "Normal",
+      "include_in_seed_lines": false
+    },
+    {
+      "rule_code": "115JC",
+      "section_code": "115JC",
+      "evaluation_method": "Manual",
+      "parameters": {"informational": true, "amt_rate_percent": "18.5"},
+      "source_type": "Manual",
+      "source_config": {},
+      "depends_on": [],
+      "allow_manual_override": true,
+      "sequence": 401,
+      "regime_scope": "Normal",
+      "include_in_seed_lines": false
+    }
+  ]
+}

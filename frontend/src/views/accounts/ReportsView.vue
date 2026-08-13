@@ -16,6 +16,7 @@ import type {
   GeneralLedgerReport,
   CollectionSummaryRow,
   GrossProfitReport,
+  ContributionMarginReport,
   PartyLedgerSummaryRow,
   PartyOutstandingSummaryRow,
   RegisterReport,
@@ -41,11 +42,13 @@ type Tab =
   | "ap-summary"
   | "collection"
   | "gross-profit"
+  | "contribution-margin"
   | "budget-variance"
   | "share-balance"
   | "share-ledger";
 const route = useRoute();
-const tab = ref<Tab>("trial-balance");
+const DEFAULT_TAB: Tab = "trial-balance";
+const tab = ref<Tab>(DEFAULT_TAB);
 
 const today = new Date().toISOString().slice(0, 10);
 const yearStart = `${new Date().getFullYear()}-01-01`;
@@ -92,6 +95,11 @@ const aging = ref<AgingRow[]>([]);
 const register = ref<RegisterReport | null>(null);
 const ledger = ref<PartyLedgerSummaryRow[]>([]);
 const grossProfit = ref<GrossProfitReport | null>(null);
+const contributionMargin = ref<ContributionMarginReport | null>(null);
+const cmCostCenterId = ref("");
+const cmTemplates = ref<Array<{ id: string; label: string; description: string | null }>>([]);
+const cmTemplateId = ref("manufacturing");
+const cmApplying = ref(false);
 const budgetVariance = ref<BudgetVarianceRow[]>([]);
 const arSummary = ref<PartyOutstandingSummaryRow[]>([]);
 const apSummary = ref<PartyOutstandingSummaryRow[]>([]);
@@ -163,6 +171,16 @@ async function run(): Promise<void> {
           params: { from_date: fromDate.value, to_date: toDate.value },
         })
       ).data;
+    } else if (tab.value === "contribution-margin") {
+      contributionMargin.value = (
+        await api.get<ContributionMarginReport>("/reports/contribution-margin", {
+          params: {
+            from_date: fromDate.value,
+            to_date: toDate.value,
+            ...(cmCostCenterId.value ? { cost_center_id: cmCostCenterId.value } : {}),
+          },
+        })
+      ).data;
     } else if (tab.value === "budget-variance") {
       budgetVariance.value = (
         await api.get<BudgetVarianceRow[]>("/reports/budget-variance", {
@@ -215,11 +233,16 @@ watch(bankAccountId, () => {
 watch(glAccountId, () => {
   if (tab.value === "general-ledger") void run();
 });
-// honor nav clicks to ?tab=... even when this view is already mounted
+// Honour nav clicks to ?tab=... even when this view is already mounted. The
+// sidebar offers the bare /reports link alongside the ?tab= deep links and the
+// route is not remounted between them, so an absent tab must fall back to the
+// default rather than leave the previous report on screen.
 watch(
   () => route.query.tab,
   (t) => {
-    if (t && tabs.some((x) => x.key === t)) switchTab(t as Tab);
+    const next: Tab =
+      typeof t === "string" && tabs.some((x) => x.key === t) ? (t as Tab) : DEFAULT_TAB;
+    if (next !== tab.value) switchTab(next);
   },
 );
 watch(fiscalYearId, () => {
@@ -243,6 +266,12 @@ onMounted(async () => {
     fiscalYears.value = [];
   }
   await store.fetchAccounts();
+  await store.fetchCostCenters();
+  try {
+    cmTemplates.value = (await api.get("/contribution-margin/templates")).data;
+  } catch {
+    cmTemplates.value = [];
+  }
   if (bankAccounts.value.length === 1) bankAccountId.value = bankAccounts.value[0].id;
   void run();
 });
@@ -251,6 +280,7 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: "general-ledger", label: "General Ledger" },
   { key: "trial-balance", label: "Trial Balance" },
   { key: "profit-loss", label: "Profit & Loss" },
+  { key: "contribution-margin", label: "Contribution Margin" },
   { key: "balance-sheet", label: "Balance Sheet" },
   { key: "receivable", label: "Receivable" },
   { key: "payable", label: "Payable" },
@@ -267,6 +297,23 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: "share-balance", label: "Share Balance" },
   { key: "share-ledger", label: "Share Ledger" },
 ];
+
+async function applyCmTemplate(): Promise<void> {
+  if (!cmTemplateId.value) return;
+  cmApplying.value = true;
+  error.value = null;
+  try {
+    await api.post("/contribution-margin/apply-template", {
+      template_id: cmTemplateId.value,
+      overwrite: false,
+    });
+    if (tab.value === "contribution-margin") await run();
+  } catch (e) {
+    error.value = e as ErrorEnvelope;
+  } finally {
+    cmApplying.value = false;
+  }
+}
 </script>
 
 <template>
@@ -306,9 +353,18 @@ const tabs: Array<{ key: Tab; label: string }> = [
           </select>
         </div>
       </template>
-      <template v-else-if="['profit-loss', 'sales-register', 'purchase-register', 'customer-ledger', 'supplier-ledger', 'gross-profit', 'collection', 'share-ledger'].includes(tab)">
+      <template v-else-if="['profit-loss', 'contribution-margin', 'sales-register', 'purchase-register', 'customer-ledger', 'supplier-ledger', 'gross-profit', 'collection', 'share-ledger'].includes(tab)">
         <div><label class="form-label">From</label><input v-model="fromDate" type="date" class="form-input" /></div>
         <div><label class="form-label">To</label><input v-model="toDate" type="date" class="form-input" /></div>
+        <template v-if="tab === 'contribution-margin'">
+          <div>
+            <label class="form-label">Cost Center</label>
+            <select v-model="cmCostCenterId" class="form-input w-56">
+              <option value="">All (company)</option>
+              <option v-for="opt in store.costCenterOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+        </template>
       </template>
       <template v-else-if="tab === 'bank-recon'">
         <div>
@@ -413,6 +469,72 @@ const tabs: Array<{ key: Tab; label: string }> = [
         <span class="text-sm text-gray-500">Net Profit:</span>
         <span class="ml-2 text-lg font-semibold text-gray-900">{{ formatNumber(pl.net_profit) }}</span>
       </div>
+    </div>
+
+    <!-- Contribution Margin -->
+    <div v-else-if="tab === 'contribution-margin'" class="space-y-4">
+      <div class="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div>
+          <label class="form-label">Industry template</label>
+          <select v-model="cmTemplateId" class="form-input w-56">
+            <option v-for="t in cmTemplates" :key="t.id" :value="t.id">{{ t.label }}</option>
+          </select>
+        </div>
+        <button type="button" class="btn-secondary" :disabled="cmApplying || !cmTemplateId" @click="applyCmTemplate">
+          {{ cmApplying ? "Applying…" : "Apply template" }}
+        </button>
+        <p class="text-xs text-gray-500">
+          Tags P&amp;L leaf accounts with CM classes. Does not overwrite existing tags.
+          Refine under <router-link class="text-primary underline" to="/chart-of-accounts">Chart of Accounts</router-link>.
+        </p>
+      </div>
+      <div v-if="contributionMargin?.warnings?.length" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+        <p v-for="(w, i) in contributionMargin.warnings" :key="i">{{ w }}</p>
+      </div>
+      <div v-if="contributionMargin" class="grid gap-4 lg:grid-cols-3">
+        <div class="space-y-3 lg:col-span-2">
+          <div
+            v-for="section in contributionMargin.sections"
+            :key="section.cm_class ?? 'unclassified'"
+            class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+          >
+            <div class="mb-2 flex items-baseline justify-between">
+              <h2 class="text-sm font-semibold text-gray-900">{{ section.label }}</h2>
+              <span class="text-sm font-medium tabular-nums">
+                {{ formatNumber(section.total) }}
+                <span v-if="section.pct_of_revenue != null" class="ml-2 text-xs text-gray-500">
+                  {{ section.pct_of_revenue }}% of rev
+                </span>
+              </span>
+            </div>
+            <div
+              v-for="row in section.rows"
+              :key="row.account_id ?? row.account_name"
+              class="flex justify-between py-0.5 text-sm text-gray-700"
+              :style="{ paddingLeft: `${row.indent * 12}px` }"
+            >
+              <span>{{ row.account_name }}</span>
+              <span class="tabular-nums">{{ formatNumber(row.amount) }}</span>
+            </div>
+            <p v-if="!section.rows.length" class="text-xs text-gray-400">No activity in this class.</p>
+          </div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm h-fit">
+          <h2 class="mb-3 text-sm font-semibold text-gray-900">Waterfall</h2>
+          <dl class="space-y-2 text-sm">
+            <div class="flex justify-between"><dt class="text-gray-500">Revenue</dt><dd class="font-medium tabular-nums">{{ formatNumber(contributionMargin.revenue) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-gray-500">− Variable</dt><dd class="tabular-nums">{{ formatNumber(contributionMargin.variable_cost) }}</dd></div>
+            <div class="flex justify-between border-t border-gray-100 pt-2"><dt class="font-semibold">CM1</dt><dd class="font-semibold tabular-nums">{{ formatNumber(contributionMargin.cm1) }} <span v-if="contributionMargin.cm1_pct" class="text-xs text-gray-500">({{ contributionMargin.cm1_pct }}%)</span></dd></div>
+            <div class="flex justify-between"><dt class="text-gray-500">− Product / Channel fixed</dt><dd class="tabular-nums">{{ formatNumber(contributionMargin.product_channel_fixed) }}</dd></div>
+            <div class="flex justify-between border-t border-gray-100 pt-2"><dt class="font-semibold">CM2</dt><dd class="font-semibold tabular-nums">{{ formatNumber(contributionMargin.cm2) }} <span v-if="contributionMargin.cm2_pct" class="text-xs text-gray-500">({{ contributionMargin.cm2_pct }}%)</span></dd></div>
+            <div class="flex justify-between"><dt class="text-gray-500">− Segment / BU fixed</dt><dd class="tabular-nums">{{ formatNumber(contributionMargin.segment_bu_fixed) }}</dd></div>
+            <div class="flex justify-between border-t border-gray-100 pt-2"><dt class="font-semibold">CM3</dt><dd class="font-semibold tabular-nums">{{ formatNumber(contributionMargin.cm3) }} <span v-if="contributionMargin.cm3_pct" class="text-xs text-gray-500">({{ contributionMargin.cm3_pct }}%)</span></dd></div>
+            <div class="flex justify-between"><dt class="text-gray-500">− Corporate overhead</dt><dd class="tabular-nums">{{ formatNumber(contributionMargin.corporate_overhead) }}</dd></div>
+            <div class="flex justify-between border-t border-gray-200 pt-2"><dt class="font-semibold text-gray-900">Operating profit</dt><dd class="font-semibold tabular-nums text-gray-900">{{ formatNumber(contributionMargin.operating_profit) }}</dd></div>
+          </dl>
+        </div>
+      </div>
+      <p v-else-if="!loading" class="text-sm text-gray-400">Select a period and run the report.</p>
     </div>
 
     <!-- Balance Sheet -->

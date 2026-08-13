@@ -242,6 +242,69 @@ class BudgetVarianceRow(BaseModel):
     variance_pct: Decimal
 
 
+class ContributionMarginSection(BaseModel):
+    cm_class: str | None  # None for unclassified bucket
+    label: str
+    rows: list[FinancialStatementRow]
+    total: Decimal
+    pct_of_revenue: Decimal | None = None
+
+
+class ContributionMarginReport(BaseModel):
+    from_date: date
+    to_date: date
+    cost_center_id: uuid.UUID | None = None
+    sections: list[ContributionMarginSection]
+    revenue: Decimal
+    variable_cost: Decimal
+    product_channel_fixed: Decimal
+    segment_bu_fixed: Decimal
+    corporate_overhead: Decimal
+    cm1: Decimal
+    cm2: Decimal
+    cm3: Decimal
+    operating_profit: Decimal
+    cm1_pct: Decimal | None = None
+    cm2_pct: Decimal | None = None
+    cm3_pct: Decimal | None = None
+    unclassified_total: Decimal
+    warnings: list[str] = []
+
+
+class CmTemplateInfo(BaseModel):
+    id: str
+    label: str
+    description: str | None = None
+    rule_count: int
+
+
+class CmApplyTemplateRequest(BaseModel):
+    template_id: str
+    overwrite: bool = False
+
+
+class CmApplyTemplateResult(BaseModel):
+    template_id: str
+    matched: int
+    updated: int
+    skipped: int
+
+
+class CmUnclassifiedAccount(BaseModel):
+    account_id: uuid.UUID
+    account_name: str
+    root_type: str
+    account_type: str | None
+    account_category: str | None = None
+    path: str
+
+
+class CmSettings(BaseModel):
+    unclassified_policy: str = "bucket"  # bucket | exclude | error
+    show_zero_rows: bool = False
+    applied_template: str | None = None
+
+
 # --- Budget ----------------------------------------------------------------------------------
 
 

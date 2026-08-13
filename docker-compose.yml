@@ -43,6 +43,8 @@ services:
       SMTP_PORT: "1025"
       SMTP_TLS: "false"
       SMTP_FROM: "no-reply@optireach.local"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@example.com}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-ChangeMe!123}"
     ports:
       - "8000:8000"
     depends_on:
@@ -52,17 +54,34 @@ services:
         condition: service_started
       mailhog:
         condition: service_started
+    # Idempotent bootstrap only (masters + admin). Full demo data is optional —
+    # see README "Demo data". Do NOT use seed_demo --reset-schema here: it drops
+    # schema public on every container start.
     command: >
       sh -c "alembic upgrade head &&
-             python -m scripts.seed --admin-email $${ADMIN_EMAIL:-admin@example.com} --admin-password $${ADMIN_PASSWORD:-ChangeMe!123} &&
+             python -m scripts.load_statutory &&
+             python -m scripts.seed --admin-email \"$$ADMIN_EMAIL\" --admin-password \"$$ADMIN_PASSWORD\" &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 90s
 
   frontend:
     build: ./frontend
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:

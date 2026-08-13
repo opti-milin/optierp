@@ -137,3 +137,93 @@ export interface RFQDetail extends DocumentMeta {
     quote_status: string;
   }>;
 }
+
+/** Capable-to-promise + BOM cost estimate from check-fulfillment endpoints. */
+export interface OrderFulfillmentShortfall {
+  item_id: string;
+  item_code: string | null;
+  item_name: string | null;
+  shortfall_qty: string;
+  estimated_buy_cost: string;
+}
+
+export interface OrderFulfillmentLine {
+  item_id: string;
+  item_code: string | null;
+  item_name: string | null;
+  qty: string;
+  delivery_date: string | null;
+  warehouse_id: string | null;
+  bom_id: string | null;
+  bom_name: string | null;
+  on_time: boolean | null;
+  earliest_promise_date: string | null;
+  bom_cost_per_unit: string;
+  estimated_cost: string;
+  selling_amount: string;
+  estimated_margin: string;
+  estimated_margin_pct: string | null;
+  shortfalls: OrderFulfillmentShortfall[];
+  notes: string[];
+  skipped: boolean;
+}
+
+export interface OrderFulfillment {
+  mode: string;
+  can_fulfill_on_time: boolean | null;
+  earliest_promise_date: string | null;
+  estimated_cost: string;
+  estimated_selling_amount: string;
+  estimated_margin: string;
+  estimated_margin_pct: string | null;
+  lines: OrderFulfillmentLine[];
+  warnings: string[];
+  hard_block_reasons: string[];
+  planning_dashboard_path: string;
+}
+
+/** Phase 9 — live SO delivery timeline (MR → PO → WO → DN). */
+export interface DeliveryStage {
+  stage: string;
+  status: string;
+  source_type: string | null;
+  source_id: string | null;
+  source_name: string | null;
+  qty: string | null;
+  planned_date: string | null;
+  actual_date: string | null;
+  notes: string | null;
+}
+
+export interface DeliveryLineEstimate {
+  sales_order_item_id: string;
+  item_id: string;
+  item_code: string | null;
+  item_name: string | null;
+  qty: string;
+  pending_qty: string;
+  promised_date: string | null;
+  earliest_promise_date: string | null;
+  suggested_delivery_date: string | null;
+  manufacturing_start_date: string | null;
+  materials_ready_by: string | null;
+  on_time: boolean | null;
+  slack_days: number | null;
+  health: string;
+  stages: DeliveryStage[];
+  notes: string[];
+}
+
+export interface SalesOrderDeliveryEstimate {
+  sales_order_id: string;
+  sales_order_name: string | null;
+  as_of: string;
+  promised_date: string | null;
+  earliest_promise_date: string | null;
+  suggested_delivery_date: string | null;
+  on_time: boolean | null;
+  slack_days: number | null;
+  health: string;
+  lines: DeliveryLineEstimate[];
+  notes: string[];
+}

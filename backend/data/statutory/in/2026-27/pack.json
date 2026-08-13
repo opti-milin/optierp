@@ -1,0 +1,869 @@
+{
+  "ay": {
+    "code": "2026-27",
+    "ay_start": "2026-04-01",
+    "ay_end": "2027-03-31",
+    "fy_start": "2025-04-01",
+    "fy_end": "2026-03-31",
+    "prev_ay_code": "2025-26"
+  },
+  "finance_act_version": {
+    "version": "FA2025",
+    "enacted_on": "2025-03-29",
+    "source_ref": "Finance Act 2025",
+    "is_current": true
+  },
+  "regimes": [
+    {
+      "code": "Normal",
+      "title": "Normal / Old provisions",
+      "assessee_class_code": "Company",
+      "is_default": true,
+      "election_irrevocable": false
+    },
+    {
+      "code": "115BAA",
+      "title": "s.115BAA (22%)",
+      "assessee_class_code": "Company",
+      "is_default": false,
+      "election_irrevocable": true,
+      "election_form": "10-IC"
+    },
+    {
+      "code": "115BAB",
+      "title": "s.115BAB (15% new manufacturing)",
+      "assessee_class_code": "Company",
+      "is_default": false,
+      "election_irrevocable": true,
+      "election_form": "10-ID"
+    },
+    {
+      "code": "115BA",
+      "title": "s.115BA (25%)",
+      "assessee_class_code": "Company",
+      "is_default": false,
+      "election_irrevocable": true
+    },
+    {
+      "code": "Normal",
+      "title": "Normal / Old regime",
+      "assessee_class_code": "Firm",
+      "is_default": true
+    },
+    {
+      "code": "Normal",
+      "title": "Normal / Old regime",
+      "assessee_class_code": "LLP",
+      "is_default": true
+    },
+    {
+      "code": "Old",
+      "title": "Old regime",
+      "assessee_class_code": "Individual",
+      "is_default": false
+    },
+    {
+      "code": "115BAC",
+      "title": "New regime s.115BAC",
+      "assessee_class_code": "Individual",
+      "is_default": true,
+      "election_form": "10-IEA"
+    },
+    {
+      "code": "Old",
+      "title": "Old regime",
+      "assessee_class_code": "HUF",
+      "is_default": false
+    },
+    {
+      "code": "115BAC",
+      "title": "New regime s.115BAC",
+      "assessee_class_code": "HUF",
+      "is_default": true,
+      "election_form": "10-IEA"
+    }
+  ],
+  "rate_schedules": [
+    {
+      "code": "CO_NORMAL_25",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "schedule_kind": "Flat",
+      "condition_expr": "turnover_fy_minus_1 <= 4000000000",
+      "remarks": "Domestic company turnover \u2264 \u20b9400 Cr in preceding FY",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "25",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_NORMAL_30",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "schedule_kind": "Flat",
+      "condition_expr": "turnover_fy_minus_1 > 4000000000",
+      "remarks": "Domestic company turnover > \u20b9400 Cr",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_115BAA",
+      "assessee_class_code": "Company",
+      "regime_code": "115BAA",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "22",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_115BAB",
+      "assessee_class_code": "Company",
+      "regime_code": "115BAB",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "15",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_115BA",
+      "assessee_class_code": "Company",
+      "regime_code": "115BA",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "25",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "FIRM_NORMAL",
+      "assessee_class_code": "Firm",
+      "regime_code": "Normal",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "LLP_NORMAL",
+      "assessee_class_code": "LLP",
+      "regime_code": "Normal",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "IND_OLD_GENERAL",
+      "assessee_class_code": "Individual",
+      "regime_code": "Old",
+      "age_category": "General",
+      "schedule_kind": "Slab",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "250000",
+          "rate_percent": "0",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "250000",
+          "upper": "500000",
+          "rate_percent": "5",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 3,
+          "lower": "500000",
+          "upper": "1000000",
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 4,
+          "lower": "1000000",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "IND_OLD_SENIOR",
+      "assessee_class_code": "Individual",
+      "regime_code": "Old",
+      "age_category": "Senior",
+      "schedule_kind": "Slab",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "300000",
+          "rate_percent": "0",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "300000",
+          "upper": "500000",
+          "rate_percent": "5",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 3,
+          "lower": "500000",
+          "upper": "1000000",
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 4,
+          "lower": "1000000",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "IND_OLD_SUPER_SENIOR",
+      "assessee_class_code": "Individual",
+      "regime_code": "Old",
+      "age_category": "SuperSenior",
+      "schedule_kind": "Slab",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "500000",
+          "rate_percent": "0",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "500000",
+          "upper": "1000000",
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 3,
+          "lower": "1000000",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "IND_115BAC",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "age_category": "General",
+      "schedule_kind": "Slab",
+      "remarks": "Finance Act 2025 new regime slabs",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "400000",
+          "rate_percent": "0",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "400000",
+          "upper": "800000",
+          "rate_percent": "5",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 3,
+          "lower": "800000",
+          "upper": "1200000",
+          "rate_percent": "10",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 4,
+          "lower": "1200000",
+          "upper": "1600000",
+          "rate_percent": "15",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 5,
+          "lower": "1600000",
+          "upper": "2000000",
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 6,
+          "lower": "2000000",
+          "upper": "2400000",
+          "rate_percent": "25",
+          "fixed_amount": "0"
+        },
+        {
+          "seq": 7,
+          "lower": "2400000",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "SPEC_LTCG_112A",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "income_character_code": "LTCG_112A",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "12.5",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "SPEC_STCG_111A",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "income_character_code": "STCG_111A",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "SPEC_LOTTERY",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "income_character_code": "LOTTERY_115BB",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "SPEC_VDA",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "income_character_code": "VDA_115BBH",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "30",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_SPEC_LTCG_112A",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "income_character_code": "LTCG_112A",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "12.5",
+          "fixed_amount": "0"
+        }
+      ]
+    },
+    {
+      "code": "CO_SPEC_STCG_111A",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "income_character_code": "STCG_111A",
+      "schedule_kind": "Flat",
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "20",
+          "fixed_amount": "0"
+        }
+      ]
+    }
+  ],
+  "surcharge_schedules": [
+    {
+      "code": "CO_NORMAL_SUR",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "marginal_relief_method": "RerunAtThreshold",
+      "capped_characters": [
+        "LTCG_112A",
+        "STCG_111A"
+      ],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "10000000",
+          "rate_percent": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "10000000",
+          "upper": "100000000",
+          "rate_percent": "7"
+        },
+        {
+          "seq": 3,
+          "lower": "100000000",
+          "upper": null,
+          "rate_percent": "12"
+        }
+      ]
+    },
+    {
+      "code": "CO_115BAA_SUR",
+      "assessee_class_code": "Company",
+      "regime_code": "115BAA",
+      "marginal_relief_method": "None",
+      "capped_characters": [],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "10"
+        }
+      ]
+    },
+    {
+      "code": "CO_115BAB_SUR",
+      "assessee_class_code": "Company",
+      "regime_code": "115BAB",
+      "marginal_relief_method": "None",
+      "capped_characters": [],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": null,
+          "rate_percent": "10"
+        }
+      ]
+    },
+    {
+      "code": "FIRM_SUR",
+      "assessee_class_code": "Firm",
+      "regime_code": "Normal",
+      "marginal_relief_method": "RerunAtThreshold",
+      "capped_characters": [],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "10000000",
+          "rate_percent": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "10000000",
+          "upper": null,
+          "rate_percent": "12"
+        }
+      ]
+    },
+    {
+      "code": "LLP_SUR",
+      "assessee_class_code": "LLP",
+      "regime_code": "Normal",
+      "marginal_relief_method": "RerunAtThreshold",
+      "capped_characters": [],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "10000000",
+          "rate_percent": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "10000000",
+          "upper": null,
+          "rate_percent": "12"
+        }
+      ]
+    },
+    {
+      "code": "IND_SUR",
+      "assessee_class_code": "Individual",
+      "regime_code": null,
+      "marginal_relief_method": "RerunAtThreshold",
+      "capped_characters": [
+        "LTCG_112A",
+        "STCG_111A"
+      ],
+      "bands": [
+        {
+          "seq": 1,
+          "lower": "0",
+          "upper": "5000000",
+          "rate_percent": "0"
+        },
+        {
+          "seq": 2,
+          "lower": "5000000",
+          "upper": "10000000",
+          "rate_percent": "10"
+        },
+        {
+          "seq": 3,
+          "lower": "10000000",
+          "upper": "20000000",
+          "rate_percent": "15"
+        },
+        {
+          "seq": 4,
+          "lower": "20000000",
+          "upper": "50000000",
+          "rate_percent": "25"
+        },
+        {
+          "seq": 5,
+          "lower": "50000000",
+          "upper": null,
+          "rate_percent": "25"
+        }
+      ]
+    }
+  ],
+  "cess_rules": [
+    {
+      "code": "HEC",
+      "rate_percent": "4",
+      "base": "TaxPlusSurcharge",
+      "remarks": "Health and Education Cess"
+    }
+  ],
+  "rebate_rules": [
+    {
+      "code": "87A_OLD",
+      "section_code": "87A",
+      "assessee_class_code": "Individual",
+      "regime_code": "Old",
+      "max_taxable_income": "500000",
+      "max_rebate_amount": "12500",
+      "marginal_relief_enabled": false,
+      "excluded_characters": [
+        "LTCG_112A",
+        "STCG_111A",
+        "LOTTERY_115BB",
+        "VDA_115BBH"
+      ]
+    },
+    {
+      "code": "87A_115BAC",
+      "section_code": "87A",
+      "assessee_class_code": "Individual",
+      "regime_code": "115BAC",
+      "max_taxable_income": "1200000",
+      "max_rebate_amount": "60000",
+      "marginal_relief_enabled": true,
+      "excluded_characters": [
+        "LTCG_112A",
+        "STCG_111A",
+        "LOTTERY_115BB",
+        "VDA_115BBH"
+      ]
+    }
+  ],
+  "deduction_sections": [
+    {
+      "section_code": "80C",
+      "title": "Life insurance, PPF, ELSS etc.",
+      "cap_amount": "150000",
+      "regime_allowed": [
+        "Old"
+      ]
+    },
+    {
+      "section_code": "80CCD(1B)",
+      "title": "NPS additional",
+      "cap_amount": "50000",
+      "regime_allowed": [
+        "Old",
+        "115BAC"
+      ]
+    },
+    {
+      "section_code": "80D",
+      "title": "Health insurance",
+      "cap_amount": "25000",
+      "age_dependent_caps": {
+        "Senior": "50000"
+      },
+      "regime_allowed": [
+        "Old"
+      ]
+    },
+    {
+      "section_code": "80G",
+      "title": "Donations",
+      "qualifying_limit_percent": "10",
+      "regime_allowed": [
+        "Old",
+        "115BAC"
+      ]
+    },
+    {
+      "section_code": "80TTA",
+      "title": "Savings interest",
+      "cap_amount": "10000",
+      "regime_allowed": [
+        "Old"
+      ]
+    }
+  ],
+  "due_date_rules": [
+    {
+      "code": "ADV_Q1",
+      "rule_kind": "AdvanceTax",
+      "seq": 1,
+      "due_month": 6,
+      "due_day": 15,
+      "percent_of_tax": "15",
+      "label": "15 June"
+    },
+    {
+      "code": "ADV_Q2",
+      "rule_kind": "AdvanceTax",
+      "seq": 2,
+      "due_month": 9,
+      "due_day": 15,
+      "percent_of_tax": "45",
+      "label": "15 September"
+    },
+    {
+      "code": "ADV_Q3",
+      "rule_kind": "AdvanceTax",
+      "seq": 3,
+      "due_month": 12,
+      "due_day": 15,
+      "percent_of_tax": "75",
+      "label": "15 December"
+    },
+    {
+      "code": "ADV_Q4",
+      "rule_kind": "AdvanceTax",
+      "seq": 4,
+      "due_month": 3,
+      "due_day": 15,
+      "percent_of_tax": "100",
+      "label": "15 March"
+    },
+    {
+      "code": "ITR_CO_AUDIT",
+      "rule_kind": "ItrDue",
+      "assessee_class_code": "Company",
+      "seq": 1,
+      "due_month": 10,
+      "due_day": 31,
+      "label": "Company (audit)",
+      "params": {
+        "audit": true
+      }
+    },
+    {
+      "code": "ITR_CO_NOAUDIT",
+      "rule_kind": "ItrDue",
+      "assessee_class_code": "Company",
+      "seq": 2,
+      "due_month": 7,
+      "due_day": 31,
+      "label": "Company (non-audit)",
+      "params": {
+        "audit": false
+      }
+    }
+  ],
+  "interest_rules": [
+    {
+      "code": "234A",
+      "section_code": "234A",
+      "rate_percent_per_month": "1",
+      "remarks": "Default in furnishing return"
+    },
+    {
+      "code": "234B",
+      "section_code": "234B",
+      "rate_percent_per_month": "1",
+      "remarks": "Default in payment of advance tax"
+    },
+    {
+      "code": "234C",
+      "section_code": "234C",
+      "rate_percent_per_month": "1",
+      "remarks": "Deferral of advance tax instalments"
+    },
+    {
+      "code": "244A",
+      "section_code": "244A",
+      "rate_percent_per_month": "0.5",
+      "remarks": "Interest on refund"
+    }
+  ],
+  "rule_packs": [
+    {
+      "code": "CO_NORMAL_ADJ",
+      "assessee_class_code": "Company",
+      "regime_code": "Normal",
+      "title": "Company Normal \u2014 PGBP adjustments",
+      "rules": [
+        {
+          "rule_code": "37-personal",
+          "provision_section_code": "37-personal",
+          "evaluation_method": "Manual",
+          "seq": 10
+        },
+        {
+          "rule_code": "40A3",
+          "provision_section_code": "40A(3)",
+          "evaluation_method": "ThresholdDisallow",
+          "params": {
+            "threshold": 10000
+          },
+          "seq": 20
+        },
+        {
+          "rule_code": "43B",
+          "provision_section_code": "43B",
+          "evaluation_method": "PaymentTiming",
+          "seq": 30
+        },
+        {
+          "rule_code": "40aia",
+          "provision_section_code": "40(a)(ia)",
+          "evaluation_method": "PercentOfBase",
+          "params": {
+            "percent": 30
+          },
+          "seq": 40
+        }
+      ]
+    },
+    {
+      "code": "CO_115BAA_ADJ",
+      "assessee_class_code": "Company",
+      "regime_code": "115BAA",
+      "title": "Company 115BAA \u2014 restricted adjustments",
+      "rules": [
+        {
+          "rule_code": "37-personal",
+          "provision_section_code": "37-personal",
+          "evaluation_method": "Manual",
+          "seq": 10
+        },
+        {
+          "rule_code": "40A3",
+          "provision_section_code": "40A(3)",
+          "evaluation_method": "ThresholdDisallow",
+          "params": {
+            "threshold": 10000
+          },
+          "seq": 20
+        }
+      ]
+    }
+  ],
+  "itr_forms": [
+    {
+      "form_code": "ITR-6",
+      "schema_version": "1.0",
+      "title": "ITR-6 (Companies other than those claiming exemption under s.11)",
+      "assessee_class_codes": [
+        "Company"
+      ],
+      "field_maps": [
+        {"canonical_field": "pan", "cbdt_json_path": "Form_ITR6.PartA_GEN.PAN"},
+        {"canonical_field": "cin", "cbdt_json_path": "Form_ITR6.PartA_GEN.CIN"},
+        {"canonical_field": "assessment_year", "cbdt_json_path": "Form_ITR6.PartA_GEN.AssessmentYear"},
+        {"canonical_field": "filing_type", "cbdt_json_path": "Form_ITR6.PartA_GEN.ReturnFileSec"},
+        {"canonical_field": "regime_code", "cbdt_json_path": "Form_ITR6.PartA_GEN.FilingStatus.OptOut115BAC"},
+        {"canonical_field": "total_income", "cbdt_json_path": "Form_ITR6.PartB_TI.TotalIncome", "transform": "rupees"},
+        {"canonical_field": "tax_normal", "cbdt_json_path": "Form_ITR6.PartB_TTI.TaxPayableOnTI", "transform": "rupees"},
+        {"canonical_field": "surcharge", "cbdt_json_path": "Form_ITR6.PartB_TTI.SurchargeOnTI", "transform": "rupees"},
+        {"canonical_field": "cess", "cbdt_json_path": "Form_ITR6.PartB_TTI.EducationCess", "transform": "rupees"},
+        {"canonical_field": "rebate", "cbdt_json_path": "Form_ITR6.PartB_TTI.Rebate87A", "transform": "rupees"},
+        {"canonical_field": "tax_payable", "cbdt_json_path": "Form_ITR6.PartB_TTI.GrossTaxLiability", "transform": "rupees"},
+        {"canonical_field": "credits_total", "cbdt_json_path": "Form_ITR6.PartB_TTI.TotalTaxesPaid", "transform": "rupees"},
+        {"canonical_field": "interest_234a", "cbdt_json_path": "Form_ITR6.PartB_TTI.InterestPay.IntrstPayUs234A", "transform": "rupees"},
+        {"canonical_field": "interest_234b", "cbdt_json_path": "Form_ITR6.PartB_TTI.InterestPay.IntrstPayUs234B", "transform": "rupees"},
+        {"canonical_field": "interest_234c", "cbdt_json_path": "Form_ITR6.PartB_TTI.InterestPay.IntrstPayUs234C", "transform": "rupees"},
+        {"canonical_field": "net_tax_payable", "cbdt_json_path": "Form_ITR6.PartB_TTI.NetTaxLiability", "transform": "rupees"},
+        {"canonical_field": "tax_mat", "cbdt_json_path": "Form_ITR6.ScheduleMAT.TaxPayableUnderMAT", "transform": "rupees"}
+      ]
+    }
+  ]
+}

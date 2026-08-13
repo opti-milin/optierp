@@ -16,6 +16,8 @@ class CompanyCreate(BaseModel):
     default_currency: str = Field(min_length=3, max_length=3)
     country_code: str | None = Field(default=None, min_length=2, max_length=2)
     tax_id: str | None = None
+    pan: str | None = Field(default=None, max_length=10)
+    tan: str | None = Field(default=None, max_length=10)
     domain: str | None = None
     date_of_establishment: date | None = None
     parent_company_id: uuid.UUID | None = None
@@ -39,6 +41,8 @@ class CompanyCreate(BaseModel):
 class CompanyUpdate(BaseModel):
     company_name: str | None = Field(default=None, min_length=1, max_length=140)
     tax_id: str | None = None
+    pan: str | None = Field(default=None, max_length=10)
+    tan: str | None = Field(default=None, max_length=10)
     domain: str | None = None
     date_of_establishment: date | None = None
     default_receivable_account_id: uuid.UUID | None = None
@@ -60,6 +64,8 @@ class CompanyResponse(DocumentMeta):
     country_code: str | None
     default_currency: str
     tax_id: str | None
+    pan: str | None = None
+    tan: str | None = None
     domain: str | None
     is_group: bool
     parent_company_id: uuid.UUID | None
@@ -323,6 +329,7 @@ class AccountListItem(ORMModel):
     root_type: str
     report_type: str
     account_type: str | None
+    cm_class: str | None = None
     is_group: bool
     account_currency: str | None
     freeze_account: bool

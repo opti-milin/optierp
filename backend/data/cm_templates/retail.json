@@ -1,0 +1,18 @@
+{
+  "id": "retail",
+  "label": "Retail",
+  "description": "Merchandise COGS variable; store rent/utilities product-channel fixed; regional managers segment; HQ corporate.",
+  "rules": [
+    { "match": { "account_category": "Revenue from Operations" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Income Account" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Cost of Goods Sold" }, "cm_class": "variable_cost" },
+    { "match": { "account_category": "Cost of Goods Sold" }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Commission", "Packaging", "Card Fee", "Payment Gateway"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Store Rent", "Shop Rent", "Outlet", "Store Utilities"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Depreciation"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Regional", "District", "Area Manager"] }, "cm_class": "segment_bu_fixed" },
+    { "match": { "account_category": "Finance Costs" }, "cm_class": "corporate_overhead" },
+    { "match": { "name_contains": ["Head Office", "HQ", "Admin", "Corporate"] }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Operating Expenses" }, "cm_class": "corporate_overhead" }
+  ]
+}

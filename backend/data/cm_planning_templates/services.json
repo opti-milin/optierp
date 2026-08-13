@@ -1,0 +1,19 @@
+{
+  "id": "services",
+  "label": "Professional Services",
+  "description": "Delivery labour as variable; practice and corporate fixed.",
+  "drivers": {
+    "material": { "prefer": "off" },
+    "labor": { "prefer": "bom_operating" },
+    "freight": { "prefer": "off" },
+    "commission": { "prefer": "sales_partner" },
+    "packaging": { "prefer": "off" }
+  },
+  "allocations": {
+    "product_channel_fixed_pct_of_revenue": 8,
+    "segment_bu_fixed_pct_of_revenue": 5,
+    "corporate_overhead_pct_of_revenue": 6
+  },
+  "target_cm1_pct": 40,
+  "min_cm1_pct": 20
+}

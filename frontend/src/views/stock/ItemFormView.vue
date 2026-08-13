@@ -62,8 +62,12 @@ const form = reactive({
   is_fixed_asset: false,
   asset_category_id: "",
   disabled: false,
+  default_bom_id: "",
+  include_item_in_manufacturing: true,
+  inspection_required: false,
 });
 
+const bomOptions = ref<Array<{ id: string; name: string; production_item_id: string }>>([]);
 const assetCategories = ref<Array<{ id: string; category_name: string }>>([]);
 
 const incomeAccounts = computed(() =>
@@ -192,8 +196,23 @@ async function loadItem(): Promise<void> {
       is_fixed_asset: data.is_fixed_asset ?? false,
       asset_category_id: data.asset_category_id ?? "",
       disabled: data.disabled,
+      default_bom_id: data.default_bom_id ?? "",
+      include_item_in_manufacturing: data.include_item_in_manufacturing ?? true,
+      inspection_required: data.inspection_required ?? false,
     });
     lastPurchaseRate.value = data.last_purchase_rate;
+    // BOMs for this item (default BOM picker)
+    try {
+      const boms = (
+        await api.get<{ items: Array<{ id: string; name: string; production_item_id: string; docstatus: number; is_active: boolean }> }>(
+          "/boms",
+          { params: { production_item_id: itemId.value, page_size: 50 } },
+        )
+      ).data.items;
+      bomOptions.value = boms.filter((b) => b.docstatus === 1 && b.is_active);
+    } catch {
+      bomOptions.value = [];
+    }
     balance.value = (
       await api.get<StockBalanceRow[]>("/reports/stock-balance", {
         params: { item_id: itemId.value },
@@ -237,6 +256,9 @@ async function save(): Promise<void> {
         is_fixed_asset: form.is_fixed_asset,
         asset_category_id: form.is_fixed_asset ? form.asset_category_id || null : null,
         disabled: form.disabled,
+        default_bom_id: form.default_bom_id || null,
+        include_item_in_manufacturing: form.include_item_in_manufacturing,
+        inspection_required: form.inspection_required,
       });
       await loadItem();
     } else {
@@ -271,6 +293,8 @@ async function save(): Promise<void> {
         gst_treatment: form.gst_treatment,
         is_fixed_asset: form.is_fixed_asset,
         asset_category_id: form.is_fixed_asset ? form.asset_category_id || null : null,
+        include_item_in_manufacturing: form.include_item_in_manufacturing,
+        inspection_required: form.inspection_required,
       });
       router.push(`/items/${data.id}`);
     }
@@ -473,6 +497,33 @@ onMounted(async () => {
         Reorder Level &amp; Qty drive the Reorder report. The live valuation rate is maintained per
         warehouse by the stock ledger (see the summary below).
       </p>
+    </section>
+
+    <!-- Manufacturing -->
+    <section v-if="form.is_stock_item" class="mb-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <h2 class="mb-3 text-sm font-semibold text-gray-900">Manufacturing</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Default BOM</label>
+          <select v-model="form.default_bom_id" class="form-input" :disabled="!isEdit">
+            <option value="">—</option>
+            <option v-for="b in bomOptions" :key="b.id" :value="b.id">{{ b.name }}</option>
+          </select>
+          <p class="mt-1 text-xs text-gray-400">
+            Set automatically when you submit a default BOM for this item; you can override here.
+          </p>
+        </div>
+        <div class="flex flex-col justify-end gap-2 pb-2">
+          <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input v-model="form.include_item_in_manufacturing" type="checkbox" class="rounded border-gray-300" />
+            Include in manufacturing / production planning
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input v-model="form.inspection_required" type="checkbox" class="rounded border-gray-300" />
+            Inspection required before manufacture / subcontract receipt
+          </label>
+        </div>
+      </div>
     </section>
 
     <!-- Selling / Purchasing -->

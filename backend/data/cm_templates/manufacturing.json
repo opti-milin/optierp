@@ -1,0 +1,19 @@
+{
+  "id": "manufacturing",
+  "label": "Manufacturing",
+  "description": "COGS and shop-floor costs as variable; plant depreciation as product fixed; HQ as corporate.",
+  "rules": [
+    { "match": { "account_category": "Revenue from Operations" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Income Account" }, "cm_class": "revenue" },
+    { "match": { "account_type": "Cost of Goods Sold" }, "cm_class": "variable_cost" },
+    { "match": { "account_category": "Cost of Goods Sold" }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Freight", "Power", "Fuel", "Consumable", "Raw Material"] }, "cm_class": "variable_cost" },
+    { "match": { "name_contains": ["Depreciation"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Factory", "Plant", "Production"] }, "cm_class": "product_channel_fixed" },
+    { "match": { "name_contains": ["Sales", "Marketing", "Distribution"] }, "cm_class": "segment_bu_fixed" },
+    { "match": { "account_category": "Finance Costs" }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Tax Expense" }, "cm_class": "corporate_overhead" },
+    { "match": { "name_contains": ["Rent", "Admin", "Office", "Legal", "Audit"] }, "cm_class": "corporate_overhead" },
+    { "match": { "account_category": "Operating Expenses" }, "cm_class": "corporate_overhead" }
+  ]
+}

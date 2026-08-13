@@ -3,6 +3,7 @@
 
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
 import SendEmailButton from "@/components/shared/SendEmailButton.vue";
@@ -12,7 +13,7 @@ import { formatDate, formatQty } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
 import type { MaterialRequestDetail } from "@/types/stock";
 
-const MR_TYPES = ["Purchase", "Material Transfer", "Material Issue"] as const;
+const MR_TYPES = ["Purchase", "Material Transfer", "Material Issue", "Manufacture"] as const;
 type MrRow = { item_id: string; qty: number; warehouse_id: string; schedule_date: string };
 
 const route = useRoute();
@@ -175,10 +176,7 @@ onMounted(async () => {
           <div class="col-span-3">Warehouse</div><div class="col-span-3">Required By</div>
         </div>
         <div v-for="(row, i) in rows" :key="i" class="mb-2 grid grid-cols-12 gap-2">
-          <select v-model="row.item_id" class="form-input col-span-4">
-            <option value="" disabled>Item…</option>
-            <option v-for="opt in store.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <ItemSelect v-model="row.item_id" class="col-span-4" :options="store.itemOptions" placeholder="Select item…" />
           <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-2 text-right" />
           <select v-model="row.warehouse_id" class="form-input col-span-3">
             <option value="">Warehouse…</option>

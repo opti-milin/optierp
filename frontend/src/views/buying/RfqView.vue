@@ -4,6 +4,7 @@
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import DataTable, { type Column } from "@/components/shared/DataTable.vue";
+import ItemSelect from "@/components/shared/ItemSelect.vue";
 import PaginationFooter from "@/components/shared/PaginationFooter.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import PrintButton from "@/components/shared/PrintButton.vue";
@@ -200,10 +201,7 @@ onMounted(async () => {
         </div>
       </div>
       <div v-for="(row, i) in rfqRows" :key="i" class="mb-2 grid grid-cols-12 gap-2">
-        <select v-model="row.item_id" class="form-input col-span-8">
-          <option value="" disabled>Item…</option>
-          <option v-for="opt in stock.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </select>
+        <ItemSelect v-model="row.item_id" class="col-span-8" :options="stock.itemOptions" placeholder="Select item…" />
         <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-4" />
       </div>
       <button type="button" class="btn-secondary" @click="rfqRows.push({ item_id: '', qty: 1 })">Add Row</button>
@@ -246,10 +244,7 @@ onMounted(async () => {
         </div>
       </div>
       <div v-for="(row, i) in sqRows" :key="i" class="mb-2 grid grid-cols-12 gap-2">
-        <select v-model="row.item_id" class="form-input col-span-6">
-          <option value="" disabled>Item…</option>
-          <option v-for="opt in stock.itemOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </select>
+        <ItemSelect v-model="row.item_id" class="col-span-6" :options="stock.itemOptions" placeholder="Select item…" />
         <input v-model.number="row.qty" type="number" min="0" step="any" placeholder="Qty" class="form-input col-span-3" />
         <input v-model.number="row.rate" type="number" min="0" step="any" placeholder="Quoted rate" class="form-input col-span-3" />
       </div>

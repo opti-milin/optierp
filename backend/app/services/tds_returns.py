@@ -139,7 +139,7 @@ async def tds_26q(db: AsyncSession, company: Company, *, from_date: date, to_dat
     return Tds26qReport(
         deductor_name=company.company_name,
         deductor_gstin=company.tax_id,
-        deductor_tan=None,
+        deductor_tan=company.tan,
         from_date=from_date,
         to_date=to_date,
         rows=rows,
@@ -164,7 +164,7 @@ async def form_16a(
     return Form16A(
         deductor_name=company.company_name,
         deductor_gstin=company.tax_id,
-        deductor_tan=None,
+        deductor_tan=company.tan,
         deductee_name=supplier.supplier_name,
         deductee_pan=pan_from_gstin(supplier.tax_id),
         deductee_gstin=supplier.tax_id,

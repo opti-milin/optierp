@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "description": "Income Tax Act provision catalogue for the tax adjustment engine. Rates/thresholds live on AY rule packs, not here.",
+  "provisions": [
+    {
+      "section_code": "37-personal",
+      "title": "Personal / capital / non-business expenditure",
+      "act_reference": "s.37(1)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "37-personal"
+    },
+    {
+      "section_code": "37-penalty",
+      "title": "Penalty / fine for infringement of law",
+      "act_reference": "s.37(1) Expl.",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "37-CSR",
+      "title": "CSR expenditure disallowance",
+      "act_reference": "s.37(1) Expl. 2",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "36(1)(va)",
+      "title": "Employee contributions not deposited by due date",
+      "act_reference": "s.36(1)(va)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "40(a)(i)",
+      "title": "TDS not deducted / paid on payments to non-residents",
+      "act_reference": "s.40(a)(i)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "40(a)(i)"
+    },
+    {
+      "section_code": "40(a)(ia)",
+      "title": "TDS not deducted / paid (residents) — 30% disallowance",
+      "act_reference": "s.40(a)(ia)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "40(a)(ia)"
+    },
+    {
+      "section_code": "40(a)(ii)",
+      "title": "Income-tax (including interest) paid / payable",
+      "act_reference": "s.40(a)(ii)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "Int-tax"
+    },
+    {
+      "section_code": "40(a)(iib)",
+      "title": "Royalty / licence fee / similar cess levied by State Government",
+      "act_reference": "s.40(a)(iib)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "40A(2)",
+      "title": "Related-party payments excessive / unreasonable",
+      "act_reference": "s.40A(2)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "40A(3)",
+      "title": "Cash payments exceeding prescribed limit",
+      "act_reference": "s.40A(3) / Rule 6DD",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "40A(3)"
+    },
+    {
+      "section_code": "40A(7)",
+      "title": "Provision for gratuity (unless approved fund / paid)",
+      "act_reference": "s.40A(7)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "40(b)",
+      "title": "Partner interest / remuneration beyond limits",
+      "act_reference": "s.40(b)",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "43B",
+      "title": "Statutory dues unpaid by due date",
+      "act_reference": "s.43B",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "43B"
+    },
+    {
+      "section_code": "43B-rev",
+      "title": "Prior-year 43B disallowance allowed on payment",
+      "act_reference": "s.43B (reversal)",
+      "stage": "PGBP",
+      "default_effect": "Deduct",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "Dep-add",
+      "title": "Depreciation — books excess over IT Act",
+      "act_reference": "s.32",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "Dep-add"
+    },
+    {
+      "section_code": "Dep-ded",
+      "title": "Depreciation — IT Act excess over books",
+      "act_reference": "s.32",
+      "stage": "PGBP",
+      "default_effect": "Deduct",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "Dep-ded"
+    },
+    {
+      "section_code": "Prov-exp",
+      "title": "Provisions / contingencies disallowed",
+      "act_reference": "s.37 / judicial",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "Prov-exp"
+    },
+    {
+      "section_code": "14A",
+      "title": "Expenditure relating to exempt income",
+      "act_reference": "s.14A / Rule 8D",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "35",
+      "title": "Scientific research expenditure",
+      "act_reference": "s.35",
+      "stage": "PGBP",
+      "default_effect": "Deduct",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "35"
+    },
+    {
+      "section_code": "Exempt-inc",
+      "title": "Income exempt / taxed under other heads (remove from PGBP)",
+      "act_reference": "s.10 / heads of income",
+      "stage": "PGBP",
+      "default_effect": "Deduct",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP",
+      "legacy_category_code": "Exempt-inc"
+    },
+    {
+      "section_code": "68",
+      "title": "Cash credits (unexplained)",
+      "act_reference": "s.68",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "OI"
+    },
+    {
+      "section_code": "69",
+      "title": "Unexplained investments / money / expenditure",
+      "act_reference": "s.69 / 69A / 69B / 69C",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "OI"
+    },
+    {
+      "section_code": "94B",
+      "title": "Interest deduction limitation (thin capitalisation)",
+      "act_reference": "s.94B",
+      "stage": "PGBP",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "BP"
+    },
+    {
+      "section_code": "ICDS-I",
+      "title": "ICDS I — Accounting Policies",
+      "act_reference": "ICDS I",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS",
+      "legacy_category_code": "ICDS"
+    },
+    {
+      "section_code": "ICDS-II",
+      "title": "ICDS II — Valuation of Inventories",
+      "act_reference": "ICDS II",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-III",
+      "title": "ICDS III — Construction Contracts",
+      "act_reference": "ICDS III",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-IV",
+      "title": "ICDS IV — Revenue Recognition",
+      "act_reference": "ICDS IV",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-V",
+      "title": "ICDS V — Tangible Fixed Assets",
+      "act_reference": "ICDS V",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-VI",
+      "title": "ICDS VI — Effects of Changes in Foreign Exchange Rates",
+      "act_reference": "ICDS VI",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-VII",
+      "title": "ICDS VII — Government Grants",
+      "act_reference": "ICDS VII",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-VIII",
+      "title": "ICDS VIII — Securities",
+      "act_reference": "ICDS VIII",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-IX",
+      "title": "ICDS IX — Borrowing Costs",
+      "act_reference": "ICDS IX",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "ICDS-X",
+      "title": "ICDS X — Provisions, Contingent Liabilities and Contingent Assets",
+      "act_reference": "ICDS X",
+      "stage": "ICDS",
+      "default_effect": "Add",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "ICDS"
+    },
+    {
+      "section_code": "80C",
+      "title": "Deduction — life insurance, PF, ELSS, etc.",
+      "act_reference": "s.80C",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "Both",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "80CCD",
+      "title": "Deduction — NPS contribution",
+      "act_reference": "s.80CCD",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "80D",
+      "title": "Deduction — health insurance premium",
+      "act_reference": "s.80D",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "Both",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "80G",
+      "title": "Deduction — donations",
+      "act_reference": "s.80G",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "Both",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "VIA",
+      "legacy_category_code": "80G"
+    },
+    {
+      "section_code": "80JJAA",
+      "title": "Deduction — employment generation",
+      "act_reference": "s.80JJAA",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "VIA",
+      "legacy_category_code": "80JJAA"
+    },
+    {
+      "section_code": "80TTA",
+      "title": "Deduction — interest on savings account",
+      "act_reference": "s.80TTA",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "IndividualHeads",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "80TTB",
+      "title": "Deduction — interest for senior citizens",
+      "act_reference": "s.80TTB",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "IndividualHeads",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "StdDed",
+      "title": "Standard deduction (salaried)",
+      "act_reference": "s.16(ia)",
+      "stage": "ChapterVIA",
+      "default_effect": "Deduct",
+      "applies_to_modes": "IndividualHeads",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "VIA"
+    },
+    {
+      "section_code": "SetOff-72",
+      "title": "Business loss set-off / carry forward",
+      "act_reference": "s.72",
+      "stage": "SetOff",
+      "default_effect": "Informational",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "CFL"
+    },
+    {
+      "section_code": "SetOff-74",
+      "title": "Capital loss set-off / carry forward",
+      "act_reference": "s.74",
+      "stage": "SetOff",
+      "default_effect": "Informational",
+      "applies_to_modes": "Both",
+      "regime_scope": "Both",
+      "itr_schedule_hint": "CFL"
+    },
+    {
+      "section_code": "115JB",
+      "title": "Minimum Alternate Tax (book profit)",
+      "act_reference": "s.115JB",
+      "stage": "MAT",
+      "default_effect": "Informational",
+      "applies_to_modes": "EntityBooks",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "MAT"
+    },
+    {
+      "section_code": "115JC",
+      "title": "Alternate Minimum Tax",
+      "act_reference": "s.115JC",
+      "stage": "MAT",
+      "default_effect": "Informational",
+      "applies_to_modes": "Both",
+      "regime_scope": "Normal",
+      "itr_schedule_hint": "AMT"
+    }
+  ]
+}

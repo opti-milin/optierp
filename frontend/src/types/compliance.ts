@@ -1,4 +1,4 @@
-// India compliance — GST returns (GSTR-1 / GSTR-3B). Money fields are serialised
+﻿// India compliance â€” GST returns (GSTR-1 / GSTR-3B). Money fields are serialised
 // as strings (Decimal). Mirrors backend app/schemas/compliance.py.
 
 export interface Gstr1Invoice {
@@ -241,7 +241,7 @@ export interface Gstr2bReconReport {
   rows: Gstr2bReconRow[];
 }
 
-// TDS returns — Form 26Q + Form 16A (Phase 6.2)
+// TDS returns â€” Form 26Q + Form 16A (Phase 6.2)
 export interface Tds26qDoc {
   voucher: string;
   date: string;
@@ -294,3 +294,5 @@ export interface Form16A {
   total_base: string;
   total_tds: string;
 }
+
+// Income Tax types removed in Phase 10 — see types/taxation.ts

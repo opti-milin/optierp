@@ -10,7 +10,19 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.models.base import Base
-from app.models import accounts, buying, core, selling, stock  # noqa: F401 — register models on Base.metadata
+from app.models import (  # noqa: F401
+    accounts,
+    assets,
+    buying,
+    compliance,
+    core,
+    manufacturing,
+    quality,
+    selling,
+    statutory,
+    stock,
+    tax_config,
+)
 
 config = context.config
 
