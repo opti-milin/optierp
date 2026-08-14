@@ -47,6 +47,11 @@ def _parse_args() -> argparse.Namespace:
         default="2026-27",
         help="Assessment year for FY 2025-26 (default 2026-27)",
     )
+    p.add_argument(
+        "--company-name",
+        default=os.environ.get("DEMO_COMPANY"),
+        help="Company to seed into. Defaults to the first company.",
+    )
     return p.parse_args()
 
 
@@ -1037,7 +1042,13 @@ async def seed_run(db: AsyncSession, actor: CurrentUser, computation_id: uuid.UU
 
 async def main() -> None:
     async with async_session_factory() as db:
-        company = await db.scalar(select(Company).order_by(Company.creation.asc()))
+        company = None
+        if ARGS.company_name:  # name the tenant when the demo seeds more than one
+            company = await db.scalar(
+                select(Company).where(Company.company_name == ARGS.company_name)
+            )
+        if company is None:
+            company = await db.scalar(select(Company).order_by(Company.creation.asc()))
         if company is None:
             raise SystemExit("No company found — run scripts.seed_demo first")
         await set_company_context(db, company.id)

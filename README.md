@@ -40,11 +40,22 @@ Wait until the backend is healthy (compose prints `Application startup complete`
 | API docs | http://localhost:8000/docs |
 | Mailhog (dev email) | http://localhost:8025 |
 
-Login: `admin@example.com` / `ChangeMe!123`  
-(override with env vars `ADMIN_EMAIL` / `ADMIN_PASSWORD` before `up`).
+Logins — each lands in its **own company**, so the demo shows real tenant isolation:
 
-Compose runs migrations + an **idempotent** bootstrap seed (masters + admin) on backend start.
-It does **not** wipe the database. For a full demo dataset (invoices, stock, manufacturing kit), see **Demo data** below.
+| Account | Email | Password | Company |
+|---|---|---|---|
+| Showcase demo | `demo@optireach.in` | `Demo@12345` | OptiReach Demo Pvt Ltd |
+| Administrator | `admin@example.com` | `ChangeMe!123` | Mango Appliances Demo |
+
+(override with env vars `DEMO_EMAIL` / `DEMO_PASSWORD` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` before `up`.)
+
+On backend start Compose runs migrations and then **auto-seeds the full showcase
+dataset** into both companies — every module comes up populated, on any machine,
+with no extra commands. It never wipes anything: each step is idempotent and is
+skipped once it has succeeded, so restarts cost a few seconds (the first seed
+takes ~2 minutes, since it posts real documents through the service layer).
+
+Set `SEED_DEMO=false` before `up` for a bare install (masters + admin only).
 
 **Common issues**
 - Port `5432` already in use (Windows PostgreSQL): stop the host service, or change the host mapping in `docker-compose.yml`.
@@ -76,13 +87,49 @@ npm run dev          # http://localhost:5173, proxies /api to :8000
 
 **Demo data**
 
-`scripts/seed_demo.py` seeds a full demo dataset through the service layer, so GL
-postings, naming series and statuses are real: company + COA, users, GST tax
-categories/templates, customers/suppliers, sales & purchase invoices across
-draft/unpaid/overdue/partly-paid/paid/cancelled states, payments (allocated,
-on-account for the Reconciliation page, bank-cleared and not), journal entries,
-budgets, plus a prior fiscal year so reports show opening balances and deep
-AR/AP aging buckets.
+`scripts/seed_showcase.py` is the entry point — one idempotent command that
+builds the whole showcase and the `demo@optireach.in` login. Compose runs it
+automatically on backend start (see **Quick start**), so you only run it by hand
+when seeding a database outside Compose:
+
+```powershell
+docker compose exec backend python -m scripts.seed_showcase
+```
+
+It seeds **two tenants** — `Mango Appliances Demo` (the admin's) and
+`OptiReach Demo Pvt Ltd` (the demo user's) — each with its own parties, stock,
+documents and tax year, and different figures in each. Pass `--single-tenant`
+for one shared company instead.
+
+It orchestrates the per-module seeders in dependency order and records each
+completed step in `system_settings` (per tenant, as `step@ABBR`), so re-runs
+skip finished work:
+
+| Step | Seeds |
+|---|---|
+| `bootstrap` | Masters, roles, permissions, admin user |
+| `statutory` | Finance-Act statutory packs |
+| `core_demo` | Company + COA, parties, invoices, payments, stock, orders |
+| `manufacturing` | BOMs, work orders, CTP/reverse-schedule kit |
+| `assets` | Asset categories, assets, depreciation, maintenance |
+| `cm_planning` | Contribution-margin plans, cost drivers, what-if scenarios |
+| `compliance` | GST + TDS return source documents |
+| `income_tax` | MSME year-end: computation, challans, credits |
+| `extras` | RFQs, quality, job cards, subcontracting, service credits, reorder levels, share capital, subscriptions, payment requests |
+| `demo_user` | The showcase login, with every module role |
+
+Useful flags: `--list` (show steps), `--only extras` (run specific steps),
+`--force` (re-run everything), `--strict` (exit non-zero on failure — for CI).
+A step that fails is reported and left unstamped so the next run retries it; the
+script still exits 0 so a demo-data problem never stops the API from starting.
+
+`scripts/seed_demo.py` (the `core_demo` step) can also be run on its own. It
+seeds through the service layer, so GL postings, naming series and statuses are
+real: company + COA, users, GST tax categories/templates, customers/suppliers,
+sales & purchase invoices across draft/unpaid/overdue/partly-paid/paid/cancelled
+states, payments (allocated, on-account for the Reconciliation page, bank-cleared
+and not), journal entries, budgets, plus a prior fiscal year so reports show
+opening balances and deep AR/AP aging buckets.
 
 Against the Docker Compose Postgres (password `milin` from `infra/init-db.sql`):
 

@@ -75,7 +75,14 @@ async def _leaf(company_id: uuid.UUID, names: list[str], *, root_type: str | Non
 
 async def main() -> None:
     async with async_session_factory() as db:
-        company = await db.scalar(select(Company).order_by(Company.creation.asc()))
+        # DEMO_COMPANY names the tenant to seed when more than one exists;
+        # without it, fall back to the first company as before.
+        wanted = os.environ.get("DEMO_COMPANY")
+        company = None
+        if wanted:
+            company = await db.scalar(select(Company).where(Company.company_name == wanted))
+        if company is None:
+            company = await db.scalar(select(Company).order_by(Company.creation.asc()))
         if company is None:
             raise RuntimeError("No company found — run seed_demo first")
 

@@ -33,6 +33,11 @@ def _parse_args() -> argparse.Namespace:
         "--database-url",
         default=os.environ.get("DATABASE_URL", "postgresql+asyncpg://erp_owner:milin@localhost:5432/erp"),
     )
+    parser.add_argument(
+        "--company-name",
+        default=os.environ.get("DEMO_COMPANY"),
+        help="Company to seed into. Defaults to the first company.",
+    )
     return parser.parse_args()
 
 
@@ -124,11 +129,26 @@ async def _create_asset(
     return asset
 
 
+async def _target_company(db: AsyncSession) -> Company | None:
+    """The company named by --company-name, else the first one (legacy behaviour).
+
+    Multi-tenant demos seed more than one company, so "the first company" is no
+    longer good enough to say which one this run is for.
+    """
+    if ARGS.company_name:
+        company = await db.scalar(
+            select(Company).where(Company.company_name == ARGS.company_name)
+        )
+        if company is not None:
+            return company
+    return await db.scalar(select(Company).order_by(Company.creation.asc()))
+
+
 async def main() -> None:
     today = date.today()
     fy_start = _fy_start(today)
     async with async_session_factory() as db:
-        company = await db.scalar(select(Company).limit(1))
+        company = await _target_company(db)
         if company is None:
             raise SystemExit("No company found — seed/create a company first")
         admin_id = await db.scalar(

@@ -45,6 +45,13 @@ services:
       SMTP_FROM: "no-reply@optireach.local"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@example.com}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-ChangeMe!123}"
+      # Showcase demo data. On by default so a clone on a new machine comes up
+      # populated with no extra commands; set SEED_DEMO=false for a bare install
+      # (bootstrap masters + admin only). The seeder is idempotent, so leaving it
+      # on costs a few seconds per start once the data exists.
+      SEED_DEMO: "${SEED_DEMO:-true}"
+      DEMO_EMAIL: "${DEMO_EMAIL:-demo@optireach.in}"
+      DEMO_PASSWORD: "${DEMO_PASSWORD:-Demo@12345}"
     ports:
       - "8000:8000"
     depends_on:
@@ -54,13 +61,18 @@ services:
         condition: service_started
       mailhog:
         condition: service_started
-    # Idempotent bootstrap only (masters + admin). Full demo data is optional —
-    # see README "Demo data". Do NOT use seed_demo --reset-schema here: it drops
-    # schema public on every container start.
+    # SEED_DEMO=true runs the showcase seeder, which already includes the
+    # bootstrap (masters + admin) and statutory packs as its first two steps and
+    # skips whatever is already seeded. Otherwise fall back to bootstrap only.
+    # Never use seed_demo --reset-schema here: it drops schema public on every start.
     command: >
       sh -c "alembic upgrade head &&
-             python -m scripts.load_statutory &&
-             python -m scripts.seed --admin-email \"$$ADMIN_EMAIL\" --admin-password \"$$ADMIN_PASSWORD\" &&
+             if [ \"$$SEED_DEMO\" = \"true\" ]; then
+               python -m scripts.seed_showcase;
+             else
+               python -m scripts.load_statutory &&
+               python -m scripts.seed --admin-email \"$$ADMIN_EMAIL\" --admin-password \"$$ADMIN_PASSWORD\";
+             fi &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test:

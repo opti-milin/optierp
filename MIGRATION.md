@@ -83,14 +83,33 @@ This reproduces the database exactly as it is on the old machine.
 
 ### Option B — Fresh demo data (fallback, reproducible from code)
 
-If you don't need your exact data and just want a working system with demo content:
+If you don't need your exact data and just want a working system with demo content —
+this is also the path for showing the product on a machine that has never run it:
 
 ```bash
 docker compose up --build
 ```
 
-That's it — migrations + the idempotent seed build a fresh demo dataset. Log in with
-`admin@example.com` / `ChangeMe!123`. **This does NOT restore your current data.**
+That's it. Migrations run, then the showcase seeder builds a complete dataset in
+every module (accounting, stock, buying, selling, manufacturing, quality, assets,
+CM planning, GST/TDS, income tax, subscriptions, share capital). No dump file and
+no extra commands — the data is reproduced from code, so any machine that can
+clone the repo gets the same demo.
+
+Two companies are seeded, each with its own data, so you can also show tenant
+isolation. Log in as:
+
+| Account | Email | Password | Company |
+|---|---|---|---|
+| Showcase demo | `demo@optireach.in` | `Demo@12345` | OptiReach Demo Pvt Ltd |
+| Administrator | `admin@example.com` | `ChangeMe!123` | Mango Appliances Demo |
+
+The first run takes a couple of minutes (it posts real documents through the
+service layer); later starts skip everything already seeded and add ~5 seconds.
+Set `SEED_DEMO=false` to bring the stack up bare instead.
+
+**This does NOT restore your current data** — use Option A for that. The two are
+compatible: a restored dump is simply already-seeded, so the seeder no-ops on it.
 
 ---
 
