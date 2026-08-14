@@ -9,11 +9,13 @@ from app.api.v1.compliance import (
     gst_settings as compliance_gst_settings,
     hsn_codes as compliance_hsn_codes,
     returns as compliance_returns,
+    taxation_workspace as compliance_taxation_workspace,
     tds_returns as compliance_tds_returns,
 )
 from app.api.v1.accounts import (
     bank_reconciliation,
     budgets,
+    contribution_margin as accounts_cm,
     journal_entries,
     masters as accounts_masters,
     payment_entries,
@@ -41,12 +43,29 @@ from app.api.v1.core import (
 )
 from app.api.v1.manufacturing import (
     boms as manufacturing_boms,
+    job_cards as manufacturing_job_cards,
+    production_plans as manufacturing_production_plans,
+    quality_inspections as manufacturing_quality,
     reports as manufacturing_reports,
+    subcontract_jobs as manufacturing_subcontract,
     work_orders as manufacturing_work_orders,
     workspace as manufacturing_workspace,
 )
 from app.api.v1 import registry as metadata_engine
-from app.api.v1.selling import quotations, sales_orders, workspace as selling_workspace
+from app.api.v1.selling import cm_plans, quotations, sales_orders, workspace as selling_workspace
+from app.api.v1.tax import (
+    calendar as tax_calendar,
+    catalogue as tax_catalogue,
+    challans as tax_challans,
+    computations as tax_computations,
+    credits as tax_credits,
+    depreciation as tax_depreciation,
+    filings as tax_filings,
+    losses as tax_losses,
+    mat_credits as tax_mat_credits,
+    registrations as tax_registrations,
+    workspace as tax_workspace,
+)
 from app.api.v1.stock import (
     delivery_notes,
     masters as stock_masters,
@@ -86,6 +105,7 @@ api_v1_router.include_router(payment_reconciliation.router)
 api_v1_router.include_router(payment_requests.router)
 api_v1_router.include_router(subscriptions.router)
 api_v1_router.include_router(share_transfers.router)
+api_v1_router.include_router(accounts_cm.router)
 api_v1_router.include_router(bank_reconciliation.router)
 api_v1_router.include_router(budgets.router)
 api_v1_router.include_router(accounts_reports.router)
@@ -112,6 +132,7 @@ api_v1_router.include_router(buying_workspace.router)
 # Module 05 — Selling
 api_v1_router.include_router(quotations.router)
 api_v1_router.include_router(sales_orders.router)
+api_v1_router.include_router(cm_plans.router)
 api_v1_router.include_router(selling_workspace.router)
 
 # Module — Assets (fixed-asset register + depreciation)
@@ -121,6 +142,10 @@ api_v1_router.include_router(assets_reports.router)
 # Module — Manufacturing (BOM → Work Order → Manufacture)
 api_v1_router.include_router(manufacturing_boms.router)
 api_v1_router.include_router(manufacturing_work_orders.router)
+api_v1_router.include_router(manufacturing_job_cards.router)
+api_v1_router.include_router(manufacturing_production_plans.router)
+api_v1_router.include_router(manufacturing_subcontract.router)
+api_v1_router.include_router(manufacturing_quality.router)
 api_v1_router.include_router(manufacturing_reports.router)
 api_v1_router.include_router(manufacturing_workspace.router)
 
@@ -130,6 +155,22 @@ api_v1_router.include_router(compliance_hsn_codes.router)
 api_v1_router.include_router(compliance_returns.router)
 api_v1_router.include_router(compliance_e_documents.router)
 api_v1_router.include_router(compliance_tds_returns.router)
+api_v1_router.include_router(compliance_taxation_workspace.router)
+
+# Module — Income Tax (assessment-year computation workspace + supporting registers).
+# `registrations` last: its prefix is the bare "/tax", so the more specific
+# sub-prefixes above must match first.
+api_v1_router.include_router(tax_workspace.router)
+api_v1_router.include_router(tax_computations.router)
+api_v1_router.include_router(tax_challans.router)
+api_v1_router.include_router(tax_credits.router)
+api_v1_router.include_router(tax_depreciation.router)
+api_v1_router.include_router(tax_losses.router)
+api_v1_router.include_router(tax_mat_credits.router)
+api_v1_router.include_router(tax_calendar.router)
+api_v1_router.include_router(tax_filings.router)
+api_v1_router.include_router(tax_catalogue.router)
+api_v1_router.include_router(tax_registrations.router)
 
 # Metadata engine ("the machine") — generic CRUD/list/form for every registered
 # DocType (app.registry). Adding a master needs no new router here.

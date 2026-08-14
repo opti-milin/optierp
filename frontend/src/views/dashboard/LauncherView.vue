@@ -3,23 +3,26 @@
 // opens that module's workspace. Rendered as the home ("/"); the AppShell hides
 // its sidebar on this route so the launcher is full-page.
 
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { brand } from "@/brand";
 import { useAuthStore } from "@/stores/auth";
+import { useModuleFlagsStore } from "@/stores/moduleFlags";
 
 interface Tile {
   label: string;
   to: string;
   icon: string;
+  flag?: "manufacturing" | "taxation";
 }
 
-const tiles: Tile[] = [
+const ALL_TILES: Tile[] = [
   { label: "Sales", to: "/selling", icon: "🧭" },
   { label: "Purchase", to: "/buying", icon: "🛍" },
   { label: "Inventory", to: "/stock", icon: "📦" },
+  { label: "Manufacturing", to: "/manufacturing", icon: "🏭", flag: "manufacturing" },
   { label: "Accounting", to: "/accounting", icon: "📊" },
-  // TEMPORARILY HIDDEN (2026-07-05, per owner) — restore by uncommenting:
-  // { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
+  { label: "Taxation", to: "/taxation", icon: "🧾", flag: "taxation" },
   { label: "Assets", to: "/assets", icon: "🏗" },
   { label: "Setup", to: "/companies", icon: "⚙" },
   { label: "Reports", to: "/reports", icon: "📈" },
@@ -27,6 +30,15 @@ const tiles: Tile[] = [
 
 const router = useRouter();
 const auth = useAuthStore();
+const flags = useModuleFlagsStore();
+
+const tiles = computed(() =>
+  ALL_TILES.filter((t) => !t.flag || flags.flags[t.flag] !== false),
+);
+
+onMounted(() => {
+  void flags.load();
+});
 
 function open(tile: Tile): void {
   void router.push(tile.to);

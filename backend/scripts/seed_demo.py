@@ -1478,7 +1478,7 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
         ),
         actor,
     )
-    qtn2 = await qtn_service.submit_quotation(db, qtn2.id, actor)
+    qtn2, _ = await qtn_service.submit_quotation(db, qtn2.id, actor)  # (doc, warnings)
 
     so1 = await so_service.create_sales_order(
         db,

@@ -3,6 +3,27 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 
+/**
+ * Old standalone Income Tax record screens → the workspace section that replaced them.
+ * Kept as redirects so existing bookmarks and links keep working.
+ */
+const TAX_SECTION_REDIRECTS: RouteRecordRaw[] = (
+  [
+    ["computations", "overview"],
+    ["challans", "challans"],
+    ["credits", "credits"],
+    ["depreciation", "depreciation"],
+    ["losses", "losses"],
+    ["mat-credits", "mat"],
+    ["calendar", "interest"],
+    ["filings", "filing"],
+  ] as const
+).map(([path, section]) => ({
+  path: `tax/${path}`,
+  name: `tax-${path}`,
+  redirect: () => ({ name: "tax-workspace", query: { section } }),
+}));
+
 const routes: RouteRecordRaw[] = [
   {
     path: "/login",
@@ -59,6 +80,42 @@ const routes: RouteRecordRaw[] = [
         path: "tds-returns",
         name: "tds-returns",
         component: () => import("@/views/compliance/TdsReturnsView.vue"),
+      },
+      {
+        path: "income-tax-settings",
+        name: "income-tax-settings",
+        component: () => import("@/views/compliance/IncomeTaxSettingsView.vue"),
+      },
+      {
+        path: "tax",
+        name: "income-tax-home",
+        component: () => import("@/views/compliance/IncomeTaxHomeView.vue"),
+      },
+      {
+        path: "tax/workspace/:id?",
+        name: "tax-workspace",
+        component: () => import("@/views/compliance/TaxWorkspaceView.vue"),
+      },
+      {
+        path: "tax/catalogue",
+        name: "tax-catalogue",
+        component: () => import("@/views/compliance/StatutoryCatalogueView.vue"),
+      },
+      // The standalone record screens are now sections of the workspace. Their old
+      // paths still resolve so that no bookmark breaks: without a computation in the
+      // URL they land on the year list, which opens the right section from there.
+      ...TAX_SECTION_REDIRECTS,
+      {
+        path: "income-tax/new",
+        redirect: { name: "tax-workspace" },
+      },
+      {
+        path: "income-tax/:id",
+        redirect: (to) => ({ name: "tax-workspace", params: { id: String(to.params.id) } }),
+      },
+      {
+        path: "income-tax",
+        redirect: { name: "income-tax-home" },
       },
       // Module 02 — Accounts
       {
@@ -337,6 +394,21 @@ const routes: RouteRecordRaw[] = [
         props: (route) => ({ kind: "quotation", id: route.params.id as string }),
       },
       {
+        path: "cm-plans",
+        name: "cm-plans",
+        component: () => import("@/views/selling/ContributionMarginPlanListView.vue"),
+      },
+      {
+        path: "cm-plans/:id",
+        name: "cm-plan-detail",
+        component: () => import("@/views/selling/ContributionMarginPlanView.vue"),
+      },
+      {
+        path: "cm-planning-settings",
+        name: "cm-planning-settings",
+        component: () => import("@/views/selling/CmPlanningSettingsView.vue"),
+      },
+      {
         path: "sales-orders",
         name: "sales-orders",
         component: () => import("@/views/trade/OrderListView.vue"),
@@ -417,6 +489,17 @@ const routes: RouteRecordRaw[] = [
         props: { moduleKey: "accounting" },
       },
       {
+        path: "taxation",
+        name: "taxation-workspace",
+        component: () => import("@/views/ModuleWorkspace.vue"),
+        props: { moduleKey: "taxation" },
+      },
+      {
+        path: "taxation-settings",
+        name: "taxation-settings",
+        component: () => import("@/views/compliance/TaxationSettingsView.vue"),
+      },
+      {
         path: "manufacturing",
         name: "manufacturing-workspace",
         component: () => import("@/views/ModuleWorkspace.vue"),
@@ -427,7 +510,16 @@ const routes: RouteRecordRaw[] = [
       { path: "bom/:id", name: "bom-detail", component: () => import("@/views/manufacturing/BomDetailView.vue"), props: true },
       { path: "work-orders", name: "work-orders", component: () => import("@/views/manufacturing/WorkOrderView.vue") },
       { path: "work-orders/:id", name: "work-order-detail", component: () => import("@/views/manufacturing/WorkOrderDetailView.vue"), props: true },
+      { path: "job-cards", name: "job-cards", component: () => import("@/views/manufacturing/JobCardView.vue") },
+      { path: "job-cards/:id", name: "job-card-detail", component: () => import("@/views/manufacturing/JobCardDetailView.vue"), props: true },
+      { path: "production-plans", name: "production-plans", component: () => import("@/views/manufacturing/ProductionPlanView.vue") },
+      { path: "production-plans/:id", name: "production-plan-detail", component: () => import("@/views/manufacturing/ProductionPlanDetailView.vue"), props: true },
+      { path: "subcontract-jobs", name: "subcontract-jobs", component: () => import("@/views/manufacturing/SubcontractJobView.vue") },
+      { path: "subcontract-jobs/:id", name: "subcontract-job-detail", component: () => import("@/views/manufacturing/SubcontractJobDetailView.vue"), props: true },
+      { path: "quality-inspections", name: "quality-inspections", component: () => import("@/views/manufacturing/QualityInspectionView.vue") },
+      { path: "quality-inspections/:id", name: "quality-inspection-detail", component: () => import("@/views/manufacturing/QualityInspectionDetailView.vue"), props: true },
       { path: "manufacturing-reports", name: "manufacturing-reports", component: () => import("@/views/manufacturing/ManufacturingReportsView.vue") },
+      { path: "manufacturing-planning", name: "manufacturing-planning", component: () => import("@/views/manufacturing/ManufacturingPlanningView.vue") },
       { path: "manufacturing-settings", name: "manufacturing-settings", component: () => import("@/views/manufacturing/ManufacturingSettingsView.vue") },
       // Module 06+ routes register here per module
     ],

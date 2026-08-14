@@ -11,6 +11,7 @@ from app.core.security import CurrentUser, get_tenant_db
 from app.schemas.common import ListResponse
 from app.schemas.manufacturing import (
     MaterialAvailabilityResponse,
+    WorkOrderConsumeIn,
     WorkOrderCreate,
     WorkOrderFinishIn,
     WorkOrderFinishResult,
@@ -86,7 +87,10 @@ async def submit_work_order(
     current_user: Annotated[CurrentUser, Depends(require_permission("Work Order", "submit"))],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> WorkOrderResponse:
-    return WorkOrderResponse.model_validate(await service.submit_work_order(db, work_order_id, current_user))
+    wo, warnings = await service.submit_work_order(db, work_order_id, current_user)
+    response = WorkOrderResponse.model_validate(wo)
+    response.warnings = warnings
+    return response
 
 
 @router.post("/{work_order_id}/cancel", response_model=WorkOrderResponse, summary="Cancel a Work Order")
@@ -155,6 +159,26 @@ async def transfer_for_manufacture(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> WorkOrderFinishResult:
     wo, entry = await service.transfer_for_manufacture(db, work_order_id, payload, current_user)
+    return WorkOrderFinishResult(
+        work_order_id=wo.id, stock_entry_id=entry.id, stock_entry_no=entry.name,
+        produced_qty=wo.produced_qty, status=wo.status,
+    )
+
+
+@router.post(
+    "/{work_order_id}/consume",
+    response_model=WorkOrderFinishResult,
+    summary="Consume materials mid-process",
+    description="Posts a Material Consumption for Manufacture Stock Entry — consume raws "
+    "without finishing. Finish later only consumes the remaining pending qty.",
+)
+async def consume_for_manufacture(
+    work_order_id: uuid.UUID,
+    payload: WorkOrderConsumeIn,
+    current_user: Annotated[CurrentUser, Depends(require_permission("Work Order", "write"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> WorkOrderFinishResult:
+    wo, entry = await service.consume_for_manufacture(db, work_order_id, payload, current_user)
     return WorkOrderFinishResult(
         work_order_id=wo.id, stock_entry_id=entry.id, stock_entry_no=entry.name,
         produced_qty=wo.produced_qty, status=wo.status,

@@ -34,6 +34,9 @@ async def ctx():
         await conn.execute(text("DROP SCHEMA public CASCADE"))
         await conn.execute(text("CREATE SCHEMA public"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS ltree"))
+        # The statutory catalogue lives in its own schema (migration 0085) and
+        # create_all only creates tables, never the schema that holds them.
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS statutory"))
         await conn.run_sync(Base.metadata.create_all)
         # the GL triggers live in migration 0002; create_all doesn't know them
         await conn.execute(text(

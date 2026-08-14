@@ -16,16 +16,26 @@ ZERO = Decimal("0")
 MFG_NAMING_SERIES = {
     "BOM": "MFG-BOM-.YYYY.-",
     "Work Order": "MFG-WO-.YYYY.-",
+    "Job Card": "MFG-JC-.YYYY.-",
+    "Production Plan": "MFG-PP-.YYYY.-",
+    "Subcontract Job": "MFG-SCJ-.YYYY.-",
 }
 
-# Per-company Manufacturing defaults — a lean 4-field slice of ERPNext's Manufacturing
-# Settings, stored as one SystemSetting JSON value (no settings doctype / no migration).
+# Per-company Manufacturing defaults — lean slice of ERPNext's Manufacturing Settings,
+# stored as one SystemSetting JSON value (no settings doctype / no migration).
 MFG_SETTINGS_KEY = "manufacturing_settings"
+FULFILLMENT_MODES = frozenset({"off", "warn", "block"})
+
 MFG_SETTINGS_DEFAULTS: dict = {
     "default_source_warehouse_id": None,  # where raws are consumed from
     "default_wip_warehouse_id": None,  # optional WIP staging warehouse
     "default_fg_warehouse_id": None,  # where finished goods land
     "over_production_percentage": "0",  # allow finishing up to qty × (1 + pct/100)
+    "capacity_planning_enabled": False,  # soft workstation overload warnings on WO submit
+    # SO/Quotation fulfillability gate: off | warn (default) | block
+    "order_fulfillment_mode": "warn",
+    # Calendar days FG warehouse → customer when no Shipping Rule transit_days
+    "outbound_delivery_days": 0,
 }
 
 
@@ -49,6 +59,14 @@ def _sanitize_mfg_settings(raw: dict) -> dict:
     except ArithmeticError:
         pct = ZERO
     value["over_production_percentage"] = str(min(max(pct, ZERO), Decimal("100")))
+    value["capacity_planning_enabled"] = bool(raw.get("capacity_planning_enabled", False))
+    mode = str(raw.get("order_fulfillment_mode") or "warn").strip().lower()
+    value["order_fulfillment_mode"] = mode if mode in FULFILLMENT_MODES else "warn"
+    try:
+        outbound = int(raw.get("outbound_delivery_days") or 0)
+    except (TypeError, ValueError):
+        outbound = 0
+    value["outbound_delivery_days"] = max(0, min(outbound, 365))
     return value
 
 
@@ -152,11 +170,23 @@ async def resolve_valuation_rate(db: AsyncSession, item: Item) -> Decimal:
 
 
 async def item_available_qty(
-    db: AsyncSession, item_id: uuid.UUID, warehouse_id: uuid.UUID | None
+    db: AsyncSession,
+    item_id: uuid.UUID,
+    warehouse_id: uuid.UUID | None,
+    *,
+    deduct_reserved: bool = False,
 ) -> Decimal:
     """On-hand quantity for an item — at a specific warehouse, or company-wide (sum of all
-    Bins with positive stock) when no warehouse is given."""
-    stmt = select(func.coalesce(func.sum(Bin.actual_qty), ZERO)).where(Bin.item_id == item_id)
+    Bins with positive stock) when no warehouse is given.
+
+    When ``deduct_reserved`` is True (order fulfillment checks), free qty is
+    ``actual_qty − reserved_qty`` so soft SO reservations reduce available stock.
+    """
+    if deduct_reserved:
+        qty_expr = func.coalesce(func.sum(Bin.actual_qty - Bin.reserved_qty), ZERO)
+    else:
+        qty_expr = func.coalesce(func.sum(Bin.actual_qty), ZERO)
+    stmt = select(qty_expr).where(Bin.item_id == item_id)
     if warehouse_id is not None:
         stmt = stmt.where(Bin.warehouse_id == warehouse_id)
     return Decimal((await db.execute(stmt)).scalar_one())

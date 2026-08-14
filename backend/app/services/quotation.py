@@ -304,7 +304,10 @@ async def submit_quotation(
                 qty=row.qty,
                 selling_amount=row.amount or Decimal("0"),
                 delivery_date=None,
-                warehouse_id=row.warehouse_id,
+                # A quotation doesn't commit to a warehouse — that choice is made on the
+                # Sales Order, whose rows carry warehouse_id (falling back to
+                # set_warehouse_id). QuotationItem has no such column.
+                warehouse_id=None,
             )
             for row in quotation.items
             if row.item_id is not None
@@ -355,7 +358,10 @@ async def check_quotation_fulfillment(
                 qty=row.qty,
                 selling_amount=row.amount or Decimal("0"),
                 delivery_date=None,
-                warehouse_id=row.warehouse_id,
+                # A quotation doesn't commit to a warehouse — that choice is made on the
+                # Sales Order, whose rows carry warehouse_id (falling back to
+                # set_warehouse_id). QuotationItem has no such column.
+                warehouse_id=None,
             )
             for row in quotation.items
             if row.item_id is not None

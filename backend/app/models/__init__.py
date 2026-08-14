@@ -6,6 +6,42 @@ required by the metadata engine (app.registry) and the descriptor-drift test,
 which both rely on all models being registered.
 """
 
-from app.models import accounts, assets, buying, core, manufacturing, selling, stock  # noqa: F401
+from app.models import (  # noqa: F401
+    accounts,
+    assets,
+    buying,
+    cm_planning,
+    compliance,
+    core,
+    manufacturing,
+    selling,
+    statutory,
+    stock,
+    tally,
+    tax_computation,
+    tax_config,
+    tax_corporate,
+    tax_credits,
+    tax_filings,
+    tax_interest,
+)
 
-__all__ = ["accounts", "assets", "buying", "core", "manufacturing", "selling", "stock"]
+__all__ = [
+    "accounts",
+    "assets",
+    "buying",
+    "cm_planning",
+    "compliance",
+    "core",
+    "manufacturing",
+    "selling",
+    "statutory",
+    "stock",
+    "tally",
+    "tax_computation",
+    "tax_config",
+    "tax_corporate",
+    "tax_credits",
+    "tax_filings",
+    "tax_interest",
+]

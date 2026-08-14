@@ -4,7 +4,8 @@
 import { onMounted, ref } from "vue";
 import { api } from "@/api/client";
 import type { ErrorEnvelope } from "@/types/core";
-import type { ManufacturingSettings } from "@/types/manufacturing";
+import type { ManufacturingSettings, OrderFulfillmentMode } from "@/types/manufacturing";
+import { useModuleFlagsStore } from "@/stores/moduleFlags";
 
 interface WarehouseOpt { id: string; warehouse_name: string; is_group?: boolean }
 
@@ -12,13 +13,17 @@ const warehouses = ref<WarehouseOpt[]>([]);
 const error = ref<ErrorEnvelope | null>(null);
 const notice = ref<string | null>(null);
 const saving = ref(false);
-// saving before the stored settings loaded would overwrite them with a blank form
 const loaded = ref(false);
+const flags = useModuleFlagsStore();
 
 const fSource = ref("");
 const fWip = ref("");
 const fFg = ref("");
 const fOverProd = ref<number>(0);
+const fCapacity = ref(false);
+const fFulfillmentMode = ref<OrderFulfillmentMode>("warn");
+const fOutboundDays = ref(0);
+const fModuleEnabled = ref(true);
 
 async function load(): Promise<void> {
   error.value = null;
@@ -27,11 +32,16 @@ async function load(): Promise<void> {
       api.get<WarehouseOpt[]>("/warehouses"),
       api.get<ManufacturingSettings>("/manufacturing/settings"),
     ]);
+    await flags.load();
     warehouses.value = w.data.filter((x) => !x.is_group);
     fSource.value = s.data.default_source_warehouse_id ?? "";
     fWip.value = s.data.default_wip_warehouse_id ?? "";
     fFg.value = s.data.default_fg_warehouse_id ?? "";
     fOverProd.value = Number(s.data.over_production_percentage) || 0;
+    fCapacity.value = !!s.data.capacity_planning_enabled;
+    fFulfillmentMode.value = (s.data.order_fulfillment_mode as OrderFulfillmentMode) || "warn";
+    fOutboundDays.value = Number(s.data.outbound_delivery_days) || 0;
+    fModuleEnabled.value = flags.flags.manufacturing !== false;
     loaded.value = true;
   } catch (e) {
     error.value = e as ErrorEnvelope;
@@ -43,12 +53,20 @@ async function save(): Promise<void> {
   error.value = null;
   notice.value = null;
   try {
-    await api.put("/manufacturing/settings", {
+    const { data } = await api.put<ManufacturingSettings>("/manufacturing/settings", {
       default_source_warehouse_id: fSource.value || null,
       default_wip_warehouse_id: fWip.value || null,
       default_fg_warehouse_id: fFg.value || null,
       over_production_percentage: fOverProd.value || 0,
+      capacity_planning_enabled: fCapacity.value,
+      order_fulfillment_mode: fFulfillmentMode.value,
+      outbound_delivery_days: Number(fOutboundDays.value) || 0,
     });
+    fOutboundDays.value = Number(data.outbound_delivery_days) || 0;
+    fOverProd.value = Number(data.over_production_percentage) || 0;
+    fCapacity.value = !!data.capacity_planning_enabled;
+    fFulfillmentMode.value = (data.order_fulfillment_mode as OrderFulfillmentMode) || "warn";
+    await flags.setManufacturing(fModuleEnabled.value);
     notice.value = "Settings saved.";
   } catch (e) {
     error.value = e as ErrorEnvelope;
@@ -102,6 +120,36 @@ onMounted(load);
           </p>
         </div>
       </div>
+      <label class="mt-4 flex items-center gap-2 text-sm text-gray-700">
+        <input v-model="fCapacity" type="checkbox" />
+        Soft capacity warnings on Work Order submit (workstation overload)
+      </label>
+      <div class="mt-4">
+        <label class="form-label">Sales Order / Quotation fulfillment check</label>
+        <select v-model="fFulfillmentMode" class="form-input">
+          <option value="off">Off — skip check</option>
+          <option value="warn">Warn — soft warnings on submit (default)</option>
+          <option value="block">Block — reject submit when delivery is not feasible</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-500">
+          Uses capable-to-promise + BOM cost estimate before committing to a customer.
+        </p>
+      </div>
+      <div class="mt-4">
+        <label class="form-label">Outbound delivery days (warehouse → customer)</label>
+        <input v-model.number="fOutboundDays" type="number" min="0" max="365" class="form-input" />
+        <p class="mt-1 text-xs text-gray-500">
+          Added after goods are ready to dispatch. A Shipping Rule’s
+          <em>Transit Days</em> overrides this when set to a positive value on CTP.
+        </p>
+      </div>
+      <label class="mt-3 flex items-center gap-2 text-sm text-gray-700">
+        <input v-model="fModuleEnabled" type="checkbox" />
+        Show Manufacturing module in launcher and navigation
+      </label>
+      <p class="mt-1 text-xs text-gray-500">
+        Turns off the Manufacturing tile and global nav link for this company (API still available).
+      </p>
       <div class="mt-4 flex items-center justify-end gap-3">
         <button v-if="!loaded" type="button" class="btn-secondary" @click="load">Retry loading</button>
         <button type="submit" class="btn-primary" :disabled="saving || !loaded">

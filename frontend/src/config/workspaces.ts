@@ -43,6 +43,8 @@ const SELLING: WorkspaceConfig = {
         { label: "Dashboard", to: "/selling", icon: "▦" },
         { label: "Quotation", to: "/quotations", icon: "📝" },
         { label: "Sales Order", to: "/sales-orders", icon: "🛒" },
+        { label: "CM Plans", to: "/cm-plans", icon: "📊" },
+        { label: "CM Settings", to: "/cm-planning-settings", icon: "⚙" },
         { label: "Sales Invoice", to: "/sales-invoices", icon: "🧾" },
         { label: "Delivery Note", to: "/delivery-notes", icon: "🚚" },
       ],
@@ -58,6 +60,7 @@ const SELLING: WorkspaceConfig = {
         { label: "Monthly Distribution", to: "/m/monthly-distribution" },
         { label: "Sales Partner", to: "/m/sales-partner" },
         { label: "Sales Person", to: "/m/sales-person" },
+        { label: "CM Cost Rate", to: "/m/cm-cost-rate" },
         { label: "Territory", to: "/m/territory" },
         { label: "Payment Terms Template", to: "/m/payment-terms-template" },
         { label: "Tax Category", to: "/m/tax-category" },
@@ -81,6 +84,7 @@ const SELLING: WorkspaceConfig = {
         { label: "Customer", to: "/m/customer" },
         { label: "Quotation", to: "/quotations" },
         { label: "Sales Order", to: "/sales-orders" },
+        { label: "CM Plans", to: "/cm-plans" },
         { label: "Sales Invoice", to: "/sales-invoices" },
         { label: "Delivery Note", to: "/delivery-notes" },
         { label: "Blanket Order", to: "/m/blanket-order" },
@@ -245,6 +249,7 @@ const STOCK: WorkspaceConfig = {
         { label: "Stock Ageing", to: "/stock-balance?tab=ageing", icon: "⏳" },
         { label: "Serial Numbers", to: "/serial-nos", icon: "🔢" },
         { label: "Batches", to: "/m/batch", icon: "🏷️" },
+        { label: "Item Alternative", to: "/m/item-alternative", icon: "🔀" },
         { label: "Purchase Receipt", to: "/purchase-receipts", icon: "📦" },
         { label: "Delivery Note", to: "/delivery-notes", icon: "🚚" },
       ],
@@ -360,9 +365,6 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS", to: "/m/tax-withholding-category" },
-        { label: "GST Settings", to: "/gst-settings" },
-        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
-        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
       ],
     },
     {
@@ -439,9 +441,6 @@ const ACCOUNTING: WorkspaceConfig = {
         { label: "Item Tax Template", to: "/m/item-tax-template" },
         { label: "Tax Category", to: "/m/tax-category" },
         { label: "TDS / TCS Category", to: "/m/tax-withholding-category" },
-        { label: "GST Settings", to: "/gst-settings" },
-        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
-        { label: "TDS Returns (26Q / 16A)", to: "/tds-returns" },
       ],
     },
     {
@@ -475,6 +474,8 @@ const ACCOUNTING: WorkspaceConfig = {
       links: [
         { label: "Trial Balance", to: "/reports?tab=trial-balance" },
         { label: "Profit & Loss", to: "/reports?tab=profit-loss" },
+        { label: "Contribution Margin", to: "/reports?tab=contribution-margin" },
+        { label: "CM Planning Settings", to: "/cm-planning-settings" },
         { label: "Balance Sheet", to: "/reports?tab=balance-sheet" },
         { label: "Gross Profit", to: "/reports?tab=gross-profit" },
         { label: "Receivable / Payable", to: "/reports?tab=receivable" },
@@ -556,6 +557,71 @@ const ASSETS: WorkspaceConfig = {
   ],
 };
 
+// Taxation — India GST + TDS returns + Income Tax filing (invoice tax masters stay in Accounting).
+const TAXATION: WorkspaceConfig = {
+  key: "taxation",
+  title: "Taxation",
+  statsEndpoint: "/taxation/workspace",
+  sidebar: [
+    {
+      items: [
+        { label: "Home", to: "/", icon: "⌂" },
+        { label: "Dashboard", to: "/taxation", icon: "▦" },
+      ],
+    },
+    {
+      title: "GST",
+      items: [
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+      ],
+    },
+    {
+      title: "Tax Deducted at Source",
+      items: [{ label: "Tax Deducted at Source Returns (Form 26Q / Form 16A)", to: "/tds-returns" }],
+    },
+    {
+      title: "Income Tax",
+      items: [
+        { label: "Assessment Years", to: "/tax" },
+        { label: "Computation Workspace", to: "/tax/workspace" },
+        { label: "Company Tax Registration", to: "/income-tax-settings" },
+        { label: "Statutory Catalogue", to: "/tax/catalogue" },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [{ label: "Taxation Settings", to: "/taxation-settings" }],
+    },
+  ],
+  cards: [
+    {
+      title: "GST",
+      links: [
+        { label: "GST Settings", to: "/gst-settings" },
+        { label: "GST Returns (GSTR-1/3B)", to: "/gst-returns" },
+      ],
+    },
+    {
+      title: "Tax Deducted at Source",
+      links: [{ label: "Tax Deducted at Source Returns (Form 26Q / Form 16A)", to: "/tds-returns" }],
+    },
+    {
+      title: "Income Tax",
+      links: [
+        { label: "Assessment Years", to: "/tax" },
+        { label: "Computation Workspace", to: "/tax/workspace" },
+        { label: "Company Tax Registration", to: "/income-tax-settings" },
+        { label: "Statutory Catalogue", to: "/tax/catalogue" },
+      ],
+    },
+    {
+      title: "Setup",
+      links: [{ label: "Taxation Settings", to: "/taxation-settings" }],
+    },
+  ],
+};
+
 // Manufacturing module: BOM (recipe) → Work Order (make N) → Manufacture (consume raws,
 // produce the finished good at input cost). `/manufacturing` is the workspace dashboard.
 const MANUFACTURING: WorkspaceConfig = {
@@ -567,17 +633,26 @@ const MANUFACTURING: WorkspaceConfig = {
       items: [
         { label: "Home", to: "/", icon: "⌂" },
         { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
+        { label: "Planning Dashboard", to: "/manufacturing-planning", icon: "📐" },
         { label: "BOM", to: "/bom", icon: "📋" },
         { label: "Work Order", to: "/work-orders", icon: "🛠" },
+        { label: "Job Card", to: "/job-cards", icon: "⏱" },
+        { label: "Production Plan", to: "/production-plans", icon: "📅" },
+        { label: "Subcontract Job", to: "/subcontract-jobs", icon: "🤝" },
+        { label: "Quality Inspection", to: "/quality-inspections", icon: "✅" },
       ],
     },
     {
       title: "Reports",
       items: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
         { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Work Order Summary", to: "/manufacturing-reports?tab=wo-summary" },
+        { label: "Production Analytics", to: "/manufacturing-reports?tab=analytics" },
         { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
         { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
         { label: "BOM Stock (Build?)", to: "/manufacturing-reports?tab=bom-stock" },
+        { label: "BOM Explorer", to: "/manufacturing-reports?tab=explorer" },
         { label: "Stock Ledger", to: "/stock-balance?tab=ledger" },
         { label: "General Ledger", to: "/reports?tab=general-ledger" },
       ],
@@ -586,6 +661,10 @@ const MANUFACTURING: WorkspaceConfig = {
       title: "Setup",
       items: [
         { label: "Items", to: "/items" },
+        { label: "Item Alternative", to: "/m/item-alternative" },
+        { label: "Operation", to: "/m/operation" },
+        { label: "Workstation", to: "/m/workstation" },
+        { label: "Routing", to: "/m/routing" },
         { label: "Warehouses", to: "/warehouses" },
         { label: "Manufacturing Settings", to: "/manufacturing-settings" },
       ],
@@ -593,10 +672,21 @@ const MANUFACTURING: WorkspaceConfig = {
   ],
   cards: [
     {
+      title: "Planning",
+      links: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
+        { label: "Production Plan", to: "/production-plans" },
+      ],
+    },
+    {
       title: "Production",
       links: [
         { label: "Bill of Materials", to: "/bom" },
         { label: "Work Order", to: "/work-orders" },
+        { label: "Job Card", to: "/job-cards" },
+        { label: "Production Plan", to: "/production-plans" },
+        { label: "Subcontract Job", to: "/subcontract-jobs" },
+        { label: "Quality Inspection", to: "/quality-inspections" },
         { label: "Repack (Stock Entry)", to: "/stock-entries/new" },
         { label: "Manufacturing Settings", to: "/manufacturing-settings" },
       ],
@@ -604,10 +694,25 @@ const MANUFACTURING: WorkspaceConfig = {
     {
       title: "Reports",
       links: [
+        { label: "Planning Dashboard", to: "/manufacturing-planning" },
         { label: "Production Register", to: "/manufacturing-reports" },
+        { label: "Work Order Summary", to: "/manufacturing-reports?tab=wo-summary" },
+        { label: "Production Analytics", to: "/manufacturing-reports?tab=analytics" },
         { label: "Material Shortage", to: "/manufacturing-reports?tab=shortage" },
         { label: "BOM Where-Used", to: "/manufacturing-reports?tab=where-used" },
         { label: "BOM Stock (Can I build?)", to: "/manufacturing-reports?tab=bom-stock" },
+        { label: "BOM Explorer", to: "/manufacturing-reports?tab=explorer" },
+      ],
+    },
+    {
+      title: "Setup",
+      links: [
+        { label: "Operation", to: "/m/operation" },
+        { label: "Workstation", to: "/m/workstation" },
+        { label: "Routing", to: "/m/routing" },
+        { label: "Item Alternative", to: "/m/item-alternative" },
+        { label: "Items", to: "/items" },
+        { label: "Warehouses", to: "/warehouses" },
       ],
     },
   ],
@@ -619,5 +724,6 @@ export const WORKSPACES: Record<string, WorkspaceConfig> = {
   stock: STOCK,
   accounting: ACCOUNTING,
   assets: ASSETS,
+  taxation: TAXATION,
   manufacturing: MANUFACTURING,
 };

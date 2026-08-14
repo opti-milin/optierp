@@ -27,7 +27,9 @@ const today = new Date().toISOString().slice(0, 10);
 const fBom = ref("");
 const fQty = ref<number | null>(null);
 const fSource = ref("");
+const fWip = ref("");
 const fFg = ref("");
+const fUseWip = ref(false);
 const fOpAccount = ref("");
 const fPlannedStart = ref(today);
 const saving = ref(false);
@@ -49,6 +51,7 @@ async function fetchOptions(): Promise<void> {
   if (s.data) {
     if (!fSource.value && s.data.default_source_warehouse_id) fSource.value = s.data.default_source_warehouse_id;
     if (!fFg.value && s.data.default_fg_warehouse_id) fFg.value = s.data.default_fg_warehouse_id;
+    if (!fWip.value && s.data.default_wip_warehouse_id) fWip.value = s.data.default_wip_warehouse_id;
   }
 }
 
@@ -68,6 +71,10 @@ async function fetchList(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!fBom.value || !fQty.value || !fFg.value) return;
+  if (fUseWip.value && !fWip.value) {
+    error.value = { detail: "WIP warehouse is required when using the WIP transfer step", code: "ERR_VALIDATION", field: "wip_warehouse_id" };
+    return;
+  }
   saving.value = true;
   error.value = null;
   try {
@@ -76,6 +83,8 @@ async function save(): Promise<void> {
         bom_id: fBom.value,
         qty: fQty.value,
         source_warehouse_id: fSource.value || null,
+        wip_warehouse_id: fUseWip.value ? fWip.value || null : null,
+        skip_transfer: !fUseWip.value,
         fg_warehouse_id: fFg.value,
         operating_cost_account_id: fOpAccount.value || null,
         planned_start_date: fPlannedStart.value || null,
@@ -139,6 +148,19 @@ onMounted(async () => {
             <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
           </select>
         </div>
+        <div class="flex items-end pb-2">
+          <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input v-model="fUseWip" type="checkbox" class="rounded border-gray-300" />
+            Use WIP transfer step
+          </label>
+        </div>
+        <div v-if="fUseWip">
+          <label class="form-label">WIP warehouse*</label>
+          <select v-model="fWip" :required="fUseWip" class="form-input">
+            <option value="" disabled>Select…</option>
+            <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.warehouse_name }}</option>
+          </select>
+        </div>
         <div>
           <label class="form-label">Operating cost account</label>
           <select v-model="fOpAccount" class="form-input">
@@ -156,7 +178,7 @@ onMounted(async () => {
       </p>
       <p v-if="error" class="mt-2 text-sm text-red-600">{{ error.detail }}</p>
       <div class="mt-4 flex justify-end">
-        <button type="submit" class="btn-primary" :disabled="saving || !fBom || !fQty || !fFg">
+        <button type="submit" class="btn-primary" :disabled="saving || !fBom || !fQty || !fFg || (fUseWip && !fWip)">
           {{ saving ? "Saving…" : "Create draft" }}
         </button>
       </div>

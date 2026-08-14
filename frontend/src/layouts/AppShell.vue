@@ -1,13 +1,36 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { brand } from "@/brand";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
+import { useModuleFlagsStore } from "@/stores/moduleFlags";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const flags = useModuleFlagsStore();
+
+const SIDEBAR_COLLAPSED_KEY = "optireach.sidebarCollapsed";
+const sidebarCollapsed = ref(false);
+
+onMounted(() => {
+  try {
+    sidebarCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    sidebarCollapsed.value = false;
+  }
+  void flags.load();
+});
+
+function toggleSidebar(): void {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? "1" : "0");
+  } catch {
+    /* private mode / blocked storage — collapse still works for the session */
+  }
+}
 
 // Global sidebar (shown outside any module — e.g. Setup pages).
 const GLOBAL_NAV: WsNavGroup[] = [
@@ -17,7 +40,9 @@ const GLOBAL_NAV: WsNavGroup[] = [
       { label: "Sales", to: "/selling", icon: "🧭" },
       { label: "Purchases", to: "/buying", icon: "🛍" },
       { label: "Inventory", to: "/stock", icon: "📦" },
+      { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
       { label: "Accounting", to: "/accounting", icon: "📊" },
+      { label: "Taxation", to: "/taxation", icon: "🧾" },
     ],
   },
   {
@@ -30,6 +55,17 @@ const GLOBAL_NAV: WsNavGroup[] = [
     ],
   },
 ];
+
+const filteredGlobalNav = computed<WsNavGroup[]>(() => {
+  return GLOBAL_NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => {
+      if (i.to === "/manufacturing" && !flags.flags.manufacturing) return false;
+      if (i.to === "/taxation" && !flags.flags.taxation) return false;
+      return true;
+    }),
+  }));
+});
 
 const MODULE_KEYS = Object.keys(WORKSPACES);
 const GLOBAL_PREFIXES = ["/companies", "/users", "/roles", "/settings"];
@@ -68,7 +104,16 @@ function updateModule(path: string): void {
   } else if (path === "/" || GLOBAL_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     currentModule.value = null;
   } else if (path.startsWith("/m/")) {
-    currentModule.value = currentModule.value ?? "selling"; // engine masters are Selling-group
+    // Engine masters: prefer the unique owning module (e.g. Tax Policy → Taxation).
+    // Shared masters keep sticky context; cold deep-links fall back to selling.
+    const owners = ownersForPath(path);
+    if (owners.size === 1) {
+      currentModule.value = [...owners][0];
+    } else if (currentModule.value && (owners.size === 0 || owners.has(currentModule.value))) {
+      // keep sticky module
+    } else if (currentModule.value === null) {
+      currentModule.value = owners.size ? [...owners][0] : "selling";
+    }
   } else {
     const owners = ownersForPath(path);
     if (owners.size === 1) {
@@ -83,7 +128,7 @@ watch(() => route.path, updateModule, { immediate: true });
 
 const isHome = computed(() => route.name === "dashboard"); // launcher: full-page, no sidebar
 const sidebarGroups = computed<WsNavGroup[]>(() =>
-  currentModule.value ? WORKSPACES[currentModule.value].sidebar : GLOBAL_NAV,
+  currentModule.value ? WORKSPACES[currentModule.value].sidebar : filteredGlobalNav.value,
 );
 const headerTitle = computed(() =>
   currentModule.value ? WORKSPACES[currentModule.value].title : brand.value.product_name,
@@ -105,18 +150,40 @@ async function logout(): Promise<void> {
 
 <template>
   <div class="flex h-screen overflow-hidden">
-    <aside v-if="!isHome" class="flex w-60 flex-col border-r border-gray-200 bg-white">
-      <div class="flex items-center gap-3 border-b border-gray-200 px-4 py-4">
-        <img :src="brand.logo_url" :alt="brand.product_name" class="h-8 w-8" />
-        <div>
-          <div class="text-sm font-semibold text-gray-900">{{ headerTitle }}</div>
-          <div class="text-xs text-gray-500">{{ headerSubtitle }}</div>
+    <aside
+      v-if="!isHome"
+      class="flex shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 ease-out"
+      :class="sidebarCollapsed ? 'w-16' : 'w-60'"
+      :aria-expanded="!sidebarCollapsed"
+    >
+      <div
+        class="flex items-center border-b border-gray-200 py-3"
+        :class="sidebarCollapsed ? 'flex-col gap-2 px-2' : 'gap-3 px-3'"
+      >
+        <img
+          :src="brand.logo_url"
+          :alt="brand.product_name"
+          class="h-8 w-8 shrink-0"
+        />
+        <div v-if="!sidebarCollapsed" class="min-w-0 flex-1">
+          <div class="truncate text-sm font-semibold text-gray-900">{{ headerTitle }}</div>
+          <div class="truncate text-xs text-gray-500">{{ headerSubtitle }}</div>
         </div>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+          :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          data-testid="sidebar-toggle"
+          @click="toggleSidebar"
+        >
+          <span aria-hidden="true" class="text-base leading-none">{{ sidebarCollapsed ? "»" : "«" }}</span>
+        </button>
       </div>
-      <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-3">
+      <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-2">
         <div v-for="(group, gi) in sidebarGroups" :key="gi" class="mb-2">
           <div
-            v-if="group.title"
+            v-if="group.title && !sidebarCollapsed"
             class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400"
           >
             {{ group.title }}
@@ -125,30 +192,48 @@ async function logout(): Promise<void> {
             v-for="item in group.items"
             :key="item.to"
             :to="item.to"
-            class="flex items-center gap-3 rounded-md px-3 py-1.5 text-sm font-medium"
-            :class="
+            class="flex items-center rounded-md text-sm font-medium"
+            :class="[
+              sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-1.5',
               isActive(item.to)
                 ? 'bg-primary/10 text-primary'
-                : 'text-gray-600 hover:bg-gray-100'
-            "
+                : 'text-gray-600 hover:bg-gray-100',
+            ]"
+            :title="sidebarCollapsed ? item.label : undefined"
           >
-            <span v-if="item.icon" aria-hidden="true">{{ item.icon }}</span>
-            {{ item.label }}
+            <span v-if="item.icon" aria-hidden="true" class="shrink-0">{{ item.icon }}</span>
+            <span v-if="!sidebarCollapsed" class="truncate">{{ item.label }}</span>
           </RouterLink>
         </div>
       </nav>
-      <div class="border-t border-gray-200 p-4">
-        <div class="text-sm font-medium text-gray-900">{{ auth.fullName }}</div>
-        <div class="truncate text-xs text-gray-500">{{ auth.email }}</div>
-        <button class="mt-2 text-xs font-medium text-primary hover:underline" @click="logout">
-          Sign out
+      <div class="border-t border-gray-200" :class="sidebarCollapsed ? 'p-2' : 'p-4'">
+        <template v-if="!sidebarCollapsed">
+          <div class="truncate text-sm font-medium text-gray-900">{{ auth.fullName }}</div>
+          <div class="truncate text-xs text-gray-500">{{ auth.email }}</div>
+          <button class="mt-2 text-xs font-medium text-primary hover:underline" @click="logout">
+            Sign out
+          </button>
+        </template>
+        <button
+          v-else
+          type="button"
+          class="mx-auto block text-xs font-medium text-primary hover:underline"
+          title="Sign out"
+          @click="logout"
+        >
+          Out
         </button>
       </div>
     </aside>
-    <main class="flex-1 overflow-y-auto p-6">
-      <!-- keyed by fullPath: reusing a component instance across e.g.
-           /quotations/:id -> /sales-orders/new would keep stale state -->
-      <RouterView :key="route.fullPath" />
+    <!-- min-w-0: flex children default to min-width:auto and can clip the tax
+         workspace's live-result column (seen in Brave / narrower viewports). -->
+    <main class="min-w-0 flex-1 overflow-y-auto p-6">
+      <!-- Keyed by path, not fullPath: reusing a component instance across e.g.
+           /quotations/:id -> /sales-orders/new would keep stale state, and the path
+           already changes in those cases. Including the query string here would
+           remount the view on every filter, tab or section change, discarding
+           unsaved editor state — so views that drive their own query must watch it. -->
+      <RouterView :key="route.path" />
     </main>
   </div>
 </template>
