@@ -345,6 +345,36 @@ def classify_group(name: str) -> GroupSpec | None:
     return PRIMARY_GROUPS.get(canonical) if canonical else None
 
 
+def resolve_group_spec(
+    name: str | None, group_parents: dict[str, str | None]
+) -> GroupSpec | None:
+    """Classify a group by walking up to its nearest reserved ancestor.
+
+    Nobody files customers directly under "Sundry Debtors" — they create
+    "Debtors - North", "Debtors - Export" and so on underneath it. Those inherit
+    the reserved group's meaning, so a ledger's classification is whatever its
+    nearest *reserved* ancestor says, not its immediate parent.
+
+    ``group_parents`` maps a casefolded group name to its parent's name, built
+    from the GROUP records in the same export.
+    """
+    seen: set[str] = set()
+    current = (name or "").strip()
+    while current:
+        folded = current.casefold()
+        if folded in seen:
+            break  # a cycle in the customer's own group tree
+        seen.add(folded)
+        spec = classify_group(current)
+        if spec is not None:
+            return spec
+        parent = group_parents.get(folded)
+        if not parent:
+            return None
+        current = parent.strip()
+    return None
+
+
 # --------------------------------------------------------------------------------------
 # Tally reserved voucher types -> target DocType
 # --------------------------------------------------------------------------------------

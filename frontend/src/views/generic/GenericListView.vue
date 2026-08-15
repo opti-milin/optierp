@@ -2,13 +2,15 @@
 // Generic list view — renders the list page for ANY registered DocType from
 // its /meta config. No per-doctype code (the metadata engine, "the machine").
 
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import DataTable, { type Column } from "@/components/shared/DataTable.vue";
+import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
 import TreeView from "@/components/shared/TreeView.vue";
 import { useList } from "@/composables/useList";
 import type { DocTypeMeta } from "@/types/registry";
+import { SLUG_TO_TALLY_ENTITY } from "@/types/tally";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +30,10 @@ async function init(): Promise<void> {
   if (!meta.value.is_tree) await reset();
 }
 
+// Masters that a Tally export can fill get an "Import from Tally" button here,
+// so every new engine-backed master inherits the option for free.
+const tallySource = computed(() => SLUG_TO_TALLY_ENTITY[doctype.value]);
+
 onMounted(init);
 watch(() => route.params.doctype, init);
 
@@ -43,12 +49,19 @@ function openRow(row: { id: string }): void {
   <div>
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold text-gray-900">{{ meta?.name ?? "Records" }}</h1>
-      <button
-        class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-        @click="openNew"
-      >
-        + New
-      </button>
+      <div class="flex items-center gap-2">
+        <ImportFromTallyButton
+          v-if="tallySource"
+          :module="tallySource.module"
+          :entity="tallySource.entity"
+        />
+        <button
+          class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          @click="openNew"
+        >
+          + New
+        </button>
+      </div>
     </div>
 
     <p v-if="error" class="mb-3 text-sm text-red-600">{{ error.detail }}</p>

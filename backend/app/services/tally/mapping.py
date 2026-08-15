@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any, Iterable, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
@@ -119,9 +119,16 @@ class Candidate:
 
 
 async def load_candidates(
-    db: AsyncSession, company_id: uuid.UUID, target: str
+    db: AsyncSession, company_id: uuid.UUID, target: str, *, is_group: bool | None = None
 ) -> list[Candidate]:
-    """Existing records of ``target`` in this company, ready for matching."""
+    """Existing records of ``target`` in this company, ready for matching.
+
+    ``is_group`` filters the Chart of Accounts by node kind. That filter is not
+    cosmetic: a Tally *group* must only ever match a group account (a ledger has
+    to be able to nest under it) and a Tally *ledger* must only match a leaf.
+    Without it a fuzzy name match happily points "North Debtors" at a posting
+    account, and every ledger under it ends up filed at the tree root.
+    """
     if target == "UOM":
         rows = (await db.execute(select(UOM))).scalars().all()
         return [Candidate(r.id, r.uom_name, normalise_name(r.uom_name)) for r in rows]
@@ -140,9 +147,10 @@ async def load_candidates(
     if entry is None:
         return []
     model, name_field = entry
-    rows = (
-        (await db.execute(select(model).where(model.company_id == company_id))).scalars().all()
-    )
+    stmt = select(model).where(model.company_id == company_id)
+    if is_group is not None and target == "Account":
+        stmt = stmt.where(model.is_group.is_(is_group))
+    rows = (await db.execute(stmt)).scalars().all()
     candidates = []
     for row in rows:
         extra: dict[str, Any] = {}
@@ -359,7 +367,9 @@ async def auto_map_entity(
     if target is None:
         return result
 
-    candidates = await load_candidates(db, company_id, target)
+    # Tally groups may only match group accounts, ledgers only leaves.
+    is_group = {"group": True, "ledger": False}.get(entity_key)
+    candidates = await load_candidates(db, company_id, target, is_group=is_group)
     by_guid = {
         m.tally_guid: m
         for m in await list_mappings(db, company_id, entity_key=entity_key)
@@ -424,6 +434,27 @@ async def auto_map_entity(
 # --------------------------------------------------------------------------------------
 
 
+@dataclass
+class MappingRef:
+    """A mapping as the importers see it — plain data, not an ORM row.
+
+    Deliberately detached: an import runs many transactions, and a rolled-back
+    row expires every ORM object in the session. Holding values instead of
+    identities means one failed voucher cannot poison the lookups every later
+    row depends on.
+    """
+
+    entity_key: str
+    tally_name: str
+    target_doctype: str
+    target_id: uuid.UUID | None = None
+    target_name: str | None = None
+    match_method: str = "auto"
+    is_locked: bool = False
+    #: primary key of the tally_mappings row, when one is persisted
+    row_id: uuid.UUID | None = None
+
+
 class MappingBook:
     """In-memory name -> record lookup for one import run.
 
@@ -433,7 +464,7 @@ class MappingBook:
 
     def __init__(self, company_id: uuid.UUID) -> None:
         self.company_id = company_id
-        self._by_entity: dict[str, dict[str, TallyMapping]] = {}
+        self._by_entity: dict[str, dict[str, MappingRef]] = {}
         #: names we could not resolve, reported on the session
         self.unresolved: set[tuple[str, str]] = set()
 
@@ -441,54 +472,75 @@ class MappingBook:
     async def load(cls, db: AsyncSession, company_id: uuid.UUID) -> "MappingBook":
         book = cls(company_id)
         for mapping in await list_mappings(db, company_id):
-            book._put(mapping.entity_key, mapping.tally_name, mapping)
+            book._put(
+                MappingRef(
+                    entity_key=mapping.entity_key,
+                    tally_name=mapping.tally_name,
+                    target_doctype=mapping.target_doctype,
+                    target_id=mapping.target_id,
+                    target_name=mapping.target_name,
+                    match_method=mapping.match_method,
+                    is_locked=mapping.is_locked,
+                    row_id=mapping.id,
+                )
+            )
         return book
 
-    def _put(self, entity_key: str, name: str, mapping: TallyMapping) -> None:
-        bucket = self._by_entity.setdefault(entity_key, {})
-        bucket[(name or "").strip().casefold()] = mapping
+    def _put(self, ref: MappingRef) -> None:
+        bucket = self._by_entity.setdefault(ref.entity_key, {})
+        bucket[ref.tally_name.strip().casefold()] = ref
 
-    def get(self, entity_key: str, name: str | None) -> TallyMapping | None:
+    def get(self, entity_key: str, name: str | None) -> MappingRef | None:
         if not name:
             return None
         return self._by_entity.get(entity_key, {}).get(name.strip().casefold())
 
     def resolve(self, entity_key: str, name: str | None) -> uuid.UUID | None:
         """The OptiERP id for a Tally name, or None (recorded as unresolved)."""
-        mapping = self.get(entity_key, name)
-        if mapping is None or mapping.target_id is None:
+        ref = self.get(entity_key, name)
+        if ref is None or ref.target_id is None:
             if name:
                 self.unresolved.add((entity_key, name.strip()))
             return None
-        return mapping.target_id
+        return ref.target_id
 
-    def bind(
+    async def bind(
         self,
-        db_mapping: TallyMapping | None,
+        db: AsyncSession,
         entity_key: str,
         name: str,
         target_id: uuid.UUID,
         target_name: str | None = None,
     ) -> None:
-        """Record that a Tally name now points at a real record."""
-        if db_mapping is not None:
-            db_mapping.target_id = target_id
-            db_mapping.target_name = target_name or name
-            if db_mapping.match_method == "created":
-                db_mapping.confidence = CONFIDENCE_EXACT
-            self._put(entity_key, name, db_mapping)
-            return
-        placeholder = TallyMapping(
-            company_id=self.company_id,
-            entity_key=entity_key,
-            tally_name=name,
-            target_doctype=ENTITY_TARGETS.get(entity_key, "Account"),
-            target_id=target_id,
-            target_name=target_name or name,
-            match_method="created",
-            confidence=CONFIDENCE_EXACT,
-        )
-        self._put(entity_key, name, placeholder)
+        """Record that a Tally name now points at a real record.
+
+        Persisted with a Core UPDATE rather than by mutating an ORM row: the
+        write then belongs to the current row's transaction (so it unwinds with
+        a failed row) without leaving an ORM object whose later expiry would
+        break the in-memory lookup.
+        """
+        ref = self.get(entity_key, name)
+        if ref is None:
+            ref = MappingRef(
+                entity_key=entity_key,
+                tally_name=name,
+                target_doctype=ENTITY_TARGETS.get(entity_key, "Account"),
+                match_method="created",
+            )
+        ref.target_id = target_id
+        ref.target_name = target_name or name
+        self._put(ref)
+
+        if ref.row_id is not None:
+            await db.execute(
+                sa_update(TallyMapping)
+                .where(TallyMapping.id == ref.row_id)
+                .values(
+                    target_id=target_id,
+                    target_name=ref.target_name,
+                    confidence=CONFIDENCE_EXACT,
+                )
+            )
 
     # Convenience accessors used throughout the importers ------------------------------
     def account(self, name: str | None) -> uuid.UUID | None:

@@ -53,6 +53,11 @@ from app.api.v1.manufacturing import (
 )
 from app.api.v1 import registry as metadata_engine
 from app.api.v1.selling import cm_plans, quotations, sales_orders, workspace as selling_workspace
+from app.api.v1.tally import (
+    catalogue as tally_catalogue,
+    imports as tally_imports,
+    mappings as tally_mappings,
+)
 from app.api.v1.tax import (
     calendar as tax_calendar,
     catalogue as tax_catalogue,
@@ -171,6 +176,12 @@ api_v1_router.include_router(tax_calendar.router)
 api_v1_router.include_router(tax_filings.router)
 api_v1_router.include_router(tax_catalogue.router)
 api_v1_router.include_router(tax_registrations.router)
+
+# Module 12 — Data Migration (import from Tally). `catalogue` last: its prefix is
+# the bare "/tally", so the more specific sub-prefixes above must match first.
+api_v1_router.include_router(tally_imports.router)
+api_v1_router.include_router(tally_mappings.router)
+api_v1_router.include_router(tally_catalogue.router)
 
 # Metadata engine ("the machine") — generic CRUD/list/form for every registered
 # DocType (app.registry). Adding a master needs no new router here.

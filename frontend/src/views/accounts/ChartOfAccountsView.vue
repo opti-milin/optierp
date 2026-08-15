@@ -8,6 +8,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { api } from "@/api/client";
 import { useAccountsStore } from "@/stores/accounts";
 import type { AccountNode, ErrorEnvelope } from "@/types/core";
+import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
 
 const store = useAccountsStore();
 // The add/edit form renders above the (scrollable) tree; when the clicked row is
@@ -213,7 +214,10 @@ onMounted(load);
           The tree of ledger accounts. Add a child under any <span class="font-medium">group</span>, or edit an account.
         </p>
       </div>
-      <button class="btn-secondary" :disabled="loading" @click="load">Refresh</button>
+      <div class="flex items-center gap-2">
+        <ImportFromTallyButton module="accounting" entity="ledger" />
+        <button class="btn-secondary" :disabled="loading" @click="load">Refresh</button>
+      </div>
     </div>
 
     <p v-if="error" class="mb-3 text-sm text-red-600">{{ error.detail }}</p>

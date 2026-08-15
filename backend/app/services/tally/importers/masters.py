@@ -37,6 +37,7 @@ from app.services.tally.catalogue import (
     GST_REGISTRATION_TYPES,
     classify_group,
     normalise_unit,
+    resolve_group_spec,
 )
 from app.services.tally.context import ImportContext
 from app.services.tally.parser import as_list, parse_amount, parse_bool, text_of
@@ -121,25 +122,17 @@ async def _resolve_root(context: ImportContext, root_type: str) -> Account:
 
 
 async def _classify_from_ancestry(
-    context: ImportContext, records_by_name: dict[str, TallyStagingRecord], name: str | None
+    context: ImportContext, name: str | None
 ) -> tuple[str, str | None, str | None]:
-    """Walk a Tally group's ancestry until we hit a reserved primary group.
+    """Classify a Tally group name via its nearest reserved ancestor.
 
     Users nest their own groups under Tally's reserved ones ("Debtors - North"
     under "Sundry Debtors"), so the classification of any group is whatever its
     nearest reserved ancestor says. Returns (root_type, account_type, party_type).
     """
-    seen: set[str] = set()
-    current = (name or "").strip()
-    while current and current.casefold() not in seen:
-        seen.add(current.casefold())
-        spec = classify_group(current)
-        if spec is not None:
-            return spec.root_type, spec.account_type, spec.party_type
-        parent_record = records_by_name.get(current.casefold())
-        if parent_record is None:
-            break
-        current = (parent_record.tally_parent or "").strip()
+    spec = resolve_group_spec(name, context.group_parents)
+    if spec is not None:
+        return spec.root_type, spec.account_type, spec.party_type
     # Unknown ancestry: an existing account of that name settles it, else assume
     # an expense (the safest P&L bucket — visible, and never silently a liability).
     existing = await _account_by_name(context, (name or "").strip())
@@ -148,9 +141,59 @@ async def _classify_from_ancestry(
     return "Expense", None, None
 
 
+async def _ensure_group_account(
+    context: ImportContext, name: str | None
+) -> Account | None:
+    """Find — or create — the group account a Tally group name refers to.
+
+    Tally's 28 reserved groups are implicit: a Day Book export, and plenty of
+    "All Masters" exports, name "Sundry Debtors" as a parent without ever
+    shipping a GROUP record for it. Filing those ledgers at the tree root would
+    make the imported Chart of Accounts unrecognisable next to Tally's, so we
+    materialise the reserved group under the right root the first time it is
+    needed. Non-reserved names are left alone — inventing them would be guessing.
+    """
+    cleaned = (name or "").strip()
+    if not cleaned:
+        return None
+
+    resolved = context.book.resolve("group", cleaned)
+    if resolved is not None:
+        account = await context.db.get(Account, resolved)
+        if account is not None and account.is_group:
+            return account
+
+    existing = await _account_by_name(context, cleaned)
+    if existing is not None and existing.is_group:
+        return existing
+
+    spec = classify_group(cleaned)
+    if spec is None:
+        return None  # a name we cannot classify — caller falls back to the root
+
+    root = await _resolve_root(context, spec.root_type)
+    account = Account(
+        id=uuid.uuid4(),
+        company_id=context.company_id,
+        account_name=cleaned,
+        parent_account_id=root.id,
+        root_type=root.root_type,
+        report_type=ROOT_TYPE_REPORT[root.root_type],
+        account_type=spec.account_type,
+        is_group=True,
+        account_currency=context.company.default_currency,
+        path=f"{root.path}.{_slugify(cleaned)}",
+        owner=context.user.id,
+        modified_by=context.user.id,
+    )
+    context.db.add(account)
+    await context.db.flush()
+    await context.book.bind(context.db, "group", cleaned, account.id, cleaned)
+    return account
+
+
 async def import_groups(context: ImportContext, records: list[TallyStagingRecord]) -> None:
     """Tally ledger groups -> Chart of Accounts group nodes."""
-    by_name = {(r.tally_name or "").strip().casefold(): r for r in records}
     for record in _sorted_by_depth(records):
         async with context.row(record):
             name = (record.tally_name or "").strip()
@@ -160,7 +203,7 @@ async def import_groups(context: ImportContext, records: list[TallyStagingRecord
 
             mapping = context.book.get("group", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "group", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "group", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Account", mapping.target_id, mapping.target_name)
                 continue
 
@@ -168,20 +211,13 @@ async def import_groups(context: ImportContext, records: list[TallyStagingRecord
             # instead of creating a duplicate branch.
             existing = await _account_by_name(context, name)
             if existing is not None and existing.is_group:
-                context.book.bind(mapping, "group", name, existing.id, existing.account_name)
+                await context.book.bind(context.db, "group", name, existing.id, existing.account_name)
                 context.reused(record, "Account", existing.id, existing.account_name)
                 continue
 
-            root_type, account_type, _party = await _classify_from_ancestry(
-                context, by_name, name
-            )
-            parent = None
+            root_type, account_type, _party = await _classify_from_ancestry(context, name)
             parent_name = (record.tally_parent or "").strip()
-            if parent_name:
-                parent_id = context.book.resolve("group", parent_name)
-                parent = await context.db.get(Account, parent_id) if parent_id else None
-                if parent is None:
-                    parent = await _account_by_name(context, parent_name)
+            parent = await _ensure_group_account(context, parent_name)
             if parent is None or not parent.is_group:
                 parent = await _resolve_root(context, root_type)
                 if parent_name:
@@ -207,7 +243,7 @@ async def import_groups(context: ImportContext, records: list[TallyStagingRecord
             )
             context.db.add(account)
             await context.db.flush()
-            context.book.bind(mapping, "group", name, account.id, name)
+            await context.book.bind(context.db, "group", name, account.id, name)
             context.created(record, "Account", account.id, name)
 
 
@@ -257,24 +293,21 @@ async def import_ledgers(context: ImportContext, records: list[TallyStagingRecor
             data = _raw(record)
             mapping = context.book.get("ledger", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "ledger", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "ledger", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Account", mapping.target_id, mapping.target_name)
                 continue
 
             existing = await _account_by_name(context, name)
             if existing is not None:
-                context.book.bind(mapping, "ledger", name, existing.id, existing.account_name)
+                await context.book.bind(context.db, "ledger", name, existing.id, existing.account_name)
                 context.reused(record, "Account", existing.id, existing.account_name)
                 continue
 
             parent_name = (record.tally_parent or text_of(data, "PARENT") or "").strip()
             root_type, account_type, _party = await _classify_from_ancestry(
-                context, {}, parent_name or name
+                context, parent_name or name
             )
-            parent_id = context.book.resolve("group", parent_name) if parent_name else None
-            parent = await context.db.get(Account, parent_id) if parent_id else None
-            if parent is None and parent_name:
-                parent = await _account_by_name(context, parent_name)
+            parent = await _ensure_group_account(context, parent_name)
             if parent is None or not parent.is_group:
                 parent = await _resolve_root(context, root_type)
                 if parent_name:
@@ -302,7 +335,7 @@ async def import_ledgers(context: ImportContext, records: list[TallyStagingRecor
             )
             context.db.add(account)
             await context.db.flush()
-            context.book.bind(mapping, "ledger", name, account.id, name)
+            await context.book.bind(context.db, "ledger", name, account.id, name)
             context.created(record, "Account", account.id, name)
 
 
@@ -386,7 +419,7 @@ async def import_parties(
             data = _raw(record)
             mapping = context.book.get(entity_key, name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, entity_key, name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, entity_key, name, mapping.target_id, mapping.target_name)
                 context.reused(record, party_type, mapping.target_id, mapping.target_name)
                 continue
 
@@ -396,7 +429,7 @@ async def import_parties(
             )
             existing = (await context.db.execute(stmt)).scalars().first()
             if existing is not None:
-                context.book.bind(mapping, entity_key, name, existing.id, name)
+                await context.book.bind(context.db, entity_key, name, existing.id, name)
                 context.reused(record, party_type, existing.id, name)
                 continue
 
@@ -437,25 +470,8 @@ async def import_parties(
             await _create_address_and_contact(
                 context, data, party_name=name, party_type=party_type, party_id=party.id
             )
-            context.book.bind(mapping, entity_key, name, party.id, name)
+            await context.book.bind(context.db, entity_key, name, party.id, name)
             context.created(record, party_type, party.id, name)
-
-
-def party_records(
-    records: list[TallyStagingRecord], context: ImportContext, party_type: str
-) -> list[TallyStagingRecord]:
-    """Ledger rows whose group ancestry marks them as this party type."""
-    wanted = []
-    for record in records:
-        spec = classify_group((record.tally_parent or "").strip())
-        if spec is not None and spec.party_type == party_type:
-            wanted.append(record)
-            continue
-        # Nested user group under a reserved one — the mapping book knows.
-        if context.book.get("customer" if party_type == "Customer" else "supplier",
-                            record.tally_name) is not None:
-            wanted.append(record)
-    return wanted
 
 
 # --------------------------------------------------------------------------------------
@@ -474,7 +490,6 @@ async def import_units(context: ImportContext, records: list[TallyStagingRecord]
 
             data = _raw(record)
             uom_name = normalise_unit(symbol) or symbol
-            mapping = context.book.get("unit", symbol)
 
             existing = (
                 await context.db.execute(select(UOM).where(UOM.uom_name == uom_name))
@@ -490,10 +505,10 @@ async def import_units(context: ImportContext, records: list[TallyStagingRecord]
                 )
                 context.db.add(existing)
                 await context.db.flush()
-                context.book.bind(mapping, "unit", symbol, existing.id, uom_name)
+                await context.book.bind(context.db, "unit", symbol, existing.id, uom_name)
                 context.created(record, "UOM", existing.id, uom_name)
             else:
-                context.book.bind(mapping, "unit", symbol, existing.id, uom_name)
+                await context.book.bind(context.db, "unit", symbol, existing.id, uom_name)
                 context.reused(record, "UOM", existing.id, uom_name)
 
             # Compound unit: "Box of 12 Nos" -> conversion Box -> Nos = 12.
@@ -555,7 +570,7 @@ async def import_stock_groups(context: ImportContext, records: list[TallyStaging
 
             mapping = context.book.get("stock_group", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "stock_group", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "stock_group", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Item Group", mapping.target_id, mapping.target_name)
                 continue
 
@@ -564,7 +579,7 @@ async def import_stock_groups(context: ImportContext, records: list[TallyStaging
             )
             existing = (await context.db.execute(stmt)).scalars().first()
             if existing is not None:
-                context.book.bind(mapping, "stock_group", name, existing.id, name)
+                await context.book.bind(context.db, "stock_group", name, existing.id, name)
                 context.reused(record, "Item Group", existing.id, name)
                 continue
 
@@ -586,7 +601,7 @@ async def import_stock_groups(context: ImportContext, records: list[TallyStaging
             )
             context.db.add(group)
             await context.db.flush()
-            context.book.bind(mapping, "stock_group", name, group.id, name)
+            await context.book.bind(context.db, "stock_group", name, group.id, name)
             context.created(record, "Item Group", group.id, name)
 
 
@@ -600,7 +615,7 @@ async def import_godowns(context: ImportContext, records: list[TallyStagingRecor
 
             mapping = context.book.get("godown", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "godown", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "godown", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Warehouse", mapping.target_id, mapping.target_name)
                 continue
 
@@ -609,7 +624,7 @@ async def import_godowns(context: ImportContext, records: list[TallyStagingRecor
             )
             existing = (await context.db.execute(stmt)).scalars().first()
             if existing is not None:
-                context.book.bind(mapping, "godown", name, existing.id, name)
+                await context.book.bind(context.db, "godown", name, existing.id, name)
                 context.reused(record, "Warehouse", existing.id, name)
                 continue
 
@@ -631,7 +646,7 @@ async def import_godowns(context: ImportContext, records: list[TallyStagingRecor
             )
             context.db.add(warehouse)
             await context.db.flush()
-            context.book.bind(mapping, "godown", name, warehouse.id, name)
+            await context.book.bind(context.db, "godown", name, warehouse.id, name)
             context.created(record, "Warehouse", warehouse.id, name)
 
 
@@ -663,7 +678,7 @@ async def import_stock_items(context: ImportContext, records: list[TallyStagingR
             data = _raw(record)
             mapping = context.book.get("stock_item", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "stock_item", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "stock_item", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Item", mapping.target_id, mapping.target_name)
                 continue
 
@@ -673,7 +688,7 @@ async def import_stock_items(context: ImportContext, records: list[TallyStagingR
             )
             existing = (await context.db.execute(stmt)).scalars().first()
             if existing is not None:
-                context.book.bind(mapping, "stock_item", name, existing.id, existing.item_code)
+                await context.book.bind(context.db, "stock_item", name, existing.id, existing.item_code)
                 context.reused(record, "Item", existing.id, existing.item_code)
                 continue
 
@@ -714,7 +729,7 @@ async def import_stock_items(context: ImportContext, records: list[TallyStagingR
                     f"Stock group '{group_name}' was not found; the item is ungrouped.",
                     "item_group",
                 )
-            context.book.bind(mapping, "stock_item", name, item.id, item.item_code)
+            await context.book.bind(context.db, "stock_item", name, item.id, item.item_code)
             context.created(record, "Item", item.id, item.item_code)
 
 
@@ -733,7 +748,7 @@ async def import_cost_centres(context: ImportContext, records: list[TallyStaging
 
             mapping = context.book.get("cost_centre", name)
             if mapping is not None and mapping.target_id is not None:
-                context.book.bind(mapping, "cost_centre", name, mapping.target_id, mapping.target_name)
+                await context.book.bind(context.db, "cost_centre", name, mapping.target_id, mapping.target_name)
                 context.reused(record, "Cost Center", mapping.target_id, mapping.target_name)
                 continue
 
@@ -743,7 +758,7 @@ async def import_cost_centres(context: ImportContext, records: list[TallyStaging
             )
             existing = (await context.db.execute(stmt)).scalars().first()
             if existing is not None:
-                context.book.bind(mapping, "cost_centre", name, existing.id, name)
+                await context.book.bind(context.db, "cost_centre", name, existing.id, name)
                 context.reused(record, "Cost Center", existing.id, name)
                 continue
 
@@ -767,7 +782,7 @@ async def import_cost_centres(context: ImportContext, records: list[TallyStaging
             )
             context.db.add(cost_center)
             await context.db.flush()
-            context.book.bind(mapping, "cost_centre", name, cost_center.id, name)
+            await context.book.bind(context.db, "cost_centre", name, cost_center.id, name)
             context.created(record, "Cost Center", cost_center.id, name)
 
 
@@ -784,7 +799,6 @@ async def import_price_lists(context: ImportContext, records: list[TallyStagingR
                 context.skip(record, "Price level has no name")
                 continue
 
-            mapping = context.book.get("price_list", name)
             stmt = select(PriceList).where(
                 PriceList.company_id == context.company_id, PriceList.price_list_name == name
             )
@@ -804,7 +818,7 @@ async def import_price_lists(context: ImportContext, records: list[TallyStagingR
                 context.created(record, "Price List", price_list.id, name)
             else:
                 context.reused(record, "Price List", price_list.id, name)
-            context.book.bind(mapping, "price_list", name, price_list.id, name)
+            await context.book.bind(context.db, "price_list", name, price_list.id, name)
 
             for row in _price_rows(_raw(record)):
                 item_id = context.book.item(row["item"])

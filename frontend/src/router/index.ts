@@ -521,6 +521,16 @@ const routes: RouteRecordRaw[] = [
       { path: "manufacturing-reports", name: "manufacturing-reports", component: () => import("@/views/manufacturing/ManufacturingReportsView.vue") },
       { path: "manufacturing-planning", name: "manufacturing-planning", component: () => import("@/views/manufacturing/ManufacturingPlanningView.vue") },
       { path: "manufacturing-settings", name: "manufacturing-settings", component: () => import("@/views/manufacturing/ManufacturingSettingsView.vue") },
+      // Module 12 — Data Migration (import from Tally)
+      {
+        path: "data-migration",
+        name: "data-migration-workspace",
+        component: () => import("@/views/ModuleWorkspace.vue"),
+        props: { moduleKey: "migration" },
+      },
+      { path: "tally", name: "tally-imports", component: () => import("@/views/tally/TallyImportView.vue") },
+      { path: "tally/coverage", name: "tally-coverage", component: () => import("@/views/tally/TallyCoverageView.vue") },
+      { path: "tally/imports/:id", name: "tally-import-detail", component: () => import("@/views/tally/TallyImportDetailView.vue"), props: true },
       // Module 06+ routes register here per module
     ],
   },
