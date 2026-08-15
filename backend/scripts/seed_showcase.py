@@ -116,6 +116,7 @@ DB_URL_ARG = "db-url"
 COMPANY_ARG = "company"
 ABBR_ARG = "abbr"
 RNG_ARG = "rng"
+VARIANT_ARG = "variant"
 
 # Run once for the whole instance, before any tenant exists.
 GLOBAL_STEPS: list[tuple[str, str, list[str], set[str]]] = [
@@ -126,7 +127,7 @@ GLOBAL_STEPS: list[tuple[str, str, list[str], set[str]]] = [
 # Run once per tenant, in this order.
 TENANT_STEPS: list[tuple[str, str, list[str], set[str]]] = [
     ("core_demo", "Company, COA, parties, invoices, payments, stock, orders",
-     ["scripts.seed_demo"], {DB_URL_ARG, COMPANY_ARG, ABBR_ARG, RNG_ARG}),
+     ["scripts.seed_demo"], {DB_URL_ARG, COMPANY_ARG, ABBR_ARG, RNG_ARG, VARIANT_ARG}),
     ("manufacturing", "BOMs, work orders, CTP/reverse-schedule kit",
      ["scripts.seed_demo", "--manufacturing-topup"], {DB_URL_ARG, COMPANY_ARG}),
     ("assets", "Asset categories, assets, depreciation, maintenance",
@@ -180,13 +181,15 @@ class Tenant(NamedTuple):
     name: str
     abbr: str
     rng_seed: int  # seed_demo is deterministic; differ it so the tenants do too
+    variant: int  # which set of party/item names seed_demo should use
 
 
-# Same document mix in both, but different quantities, rates and dates — two
-# companies that happen to trade identically would look like a seeding bug.
-TENANTS: list[Tenant] = [Tenant(ARGS.company_name, ARGS.company_abbr, 42)]
+# Same document mix in both, but different customers, suppliers, products,
+# quantities and dates — two companies holding the same names and figures read
+# as one dataset seeded twice, which is exactly what a demo must not look like.
+TENANTS: list[Tenant] = [Tenant(ARGS.company_name, ARGS.company_abbr, 42, 0)]
 if not ARGS.single_tenant:
-    TENANTS.append(Tenant(ARGS.demo_company, ARGS.demo_abbr, 2026))
+    TENANTS.append(Tenant(ARGS.demo_company, ARGS.demo_abbr, 2026, 1))
 
 # The company the demo login owns: its own tenant, or the only one when
 # --single-tenant is given.
@@ -257,6 +260,8 @@ def _run_step(argv: list[str], flags: set[str], tenant: Tenant | None) -> None:
             argv = [*argv, "--abbr", tenant.abbr]
         if RNG_ARG in flags:
             argv = [*argv, "--seed", str(tenant.rng_seed)]
+        if VARIANT_ARG in flags:
+            argv = [*argv, "--variant", str(tenant.variant)]
     if DB_URL_ARG in flags:
         argv = [*argv, "--database-url", ARGS.database_url]
     subprocess.run(  # noqa: S603 — fixed module list, no shell

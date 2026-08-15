@@ -43,6 +43,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--country", default="IN")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed (deterministic data)")
     parser.add_argument(
+        "--variant",
+        type=int,
+        default=0,
+        choices=(0, 1),
+        help="Which set of party and item names to seed. 0 is the original set; "
+        "1 is an alternative set for a second tenant, so the two companies read "
+        "as different businesses.",
+    )
+    parser.add_argument(
         "--reset-schema",
         action="store_true",
         help="DESTRUCTIVE: drop schema public on the target DB, re-run all "
@@ -216,6 +225,57 @@ PURCHASE_ITEMS = [
     ("Control PCB v4", 530, "85340000"),              # printed circuits
     ("Packaging Carton L", 38, "48191000"),           # paper cartons (5% slab)
 ]
+
+# --- variant 1 -------------------------------------------------------------------------
+# A second tenant seeded with the same *shape* (same tax categories, credit-limit
+# pattern, HSN codes and GST slabs) but different names and prices, so the two
+# companies are visibly different businesses rather than one dataset twice.
+# Selected with --variant 1; keep the row counts and category order in step with
+# the lists above, because downstream seeding indexes into them positionally.
+CUSTOMERS_V1 = [
+    ("Sunrise Electricals", "In-State", 600_000),
+    ("Meridian Traders", "In-State", 275_000),
+    ("Kaveri Distributors", "Out-of-State", 350_000),
+    ("Nimbus Retail Group", "Out-of-State", 450_000),
+    ("Sahyadri Enterprises", "In-State", None),
+    ("Bluepeak Home Centre", "In-State", 175_000),
+    ("Trident Bazaar", None, None),  # no tax category -> no auto tax
+    ("Orchid Appliances", "Out-of-State", 225_000),
+]
+
+SUPPLIERS_V1 = [
+    ("Prakash Metals", "In-State"),
+    ("Sterling Components", "In-State"),
+    ("Deccan Polymers", "Out-of-State"),
+    ("Nova Plastics", "In-State"),
+    ("Ironwood Alloys", "Out-of-State"),
+    ("Crestline Packaging", None),
+]
+
+SALES_ITEMS_V1 = [
+    ("Stand Mixer S400", 3150, "85094000"),
+    ("Infrared Cooktop Max", 3899, "85166000"),
+    ("Air Fryer 6.0L", 5850, "85167900"),
+    ("Electric Kettle 2.2L", 1290, "85167100"),
+    ("Toaster QuadSlice", 1890, "85167200"),
+    ("Wet Grinder 3L", 6750, "85094000"),
+    ("Immersion Blender Pro", 1550, "85094000"),
+]
+
+PURCHASE_ITEMS_V1 = [
+    ("Copper Motor Winding 900W", 810, "85030000"),
+    ("Polycarbonate Body Shell", 275, "39269099"),
+    ("Titanium Steel Jar Set", 520, "73239300"),
+    ("Heating Element 2400W", 355, "85169000"),
+    ("Control PCB v6", 615, "85340000"),
+    ("Packaging Carton XL", 44, "48191000"),
+]
+
+if ARGS.variant == 1:  # rebind so every reference below picks up the variant
+    CUSTOMERS = CUSTOMERS_V1
+    SUPPLIERS = SUPPLIERS_V1
+    SALES_ITEMS = SALES_ITEMS_V1
+    PURCHASE_ITEMS = PURCHASE_ITEMS_V1
 
 
 def _d(value: float | int) -> Decimal:
