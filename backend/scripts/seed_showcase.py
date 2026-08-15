@@ -118,6 +118,12 @@ ABBR_ARG = "abbr"
 RNG_ARG = "rng"
 VARIANT_ARG = "variant"
 
+# Steps that must run on every start rather than once. Their seeders are
+# idempotent top-ups, and skipping them silently withholds anything a new module
+# added since the last run — a new role permission, say, which then looks like a
+# 403 bug on an upgraded database rather than a missing seed.
+ALWAYS_RUN = {"bootstrap", "statutory"}
+
 # Run once for the whole instance, before any tenant exists.
 GLOBAL_STEPS: list[tuple[str, str, list[str], set[str]]] = [
     ("bootstrap", "Masters, roles, permissions, admin user", ["scripts.seed"], set()),
@@ -364,7 +370,7 @@ async def main() -> None:
         label = name if tenant is None else f"{name}@{tenant.abbr}"
         if only is not None and name not in only:
             return
-        if only is None and label in done:
+        if only is None and label in done and name not in ALWAYS_RUN:
             print(f"  [ok] {label:<22} already seeded - skipped")
             return
 

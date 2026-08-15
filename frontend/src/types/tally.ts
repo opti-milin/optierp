@@ -182,15 +182,13 @@ export interface TallyRollbackResult {
   session: TallyImport;
 }
 
-export interface TallyWorkspaceStats {
-  total_imports: number;
-  completed_imports: number;
-  failed_imports: number;
-  documents_imported: number;
-  unmapped_names: number;
-  last_import_at: string | null;
-  last_import_status: string | null;
-  supported_entities: number;
+/** Shape every module workspace endpoint returns (see ModuleWorkspace.vue). */
+export interface WorkspaceStats {
+  currency: string;
+  chart_title: string;
+  trend_format?: "int" | "currency";
+  cards: { label: string; value: number; format: "int" | "currency" }[];
+  trend: { label: string; value: number }[];
 }
 
 /**

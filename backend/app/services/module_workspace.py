@@ -290,3 +290,49 @@ async def get_taxation_workspace(db: AsyncSession, company_id: uuid.UUID) -> dic
         ],
         "trend": trend,
     }
+
+
+async def get_migration_workspace(db: AsyncSession, company_id: uuid.UUID) -> dict[str, Any]:
+    """Data Migration workspace — Tally import health + a 12-month import trend."""
+    from app.models.tally import TallyImport, TallyMapping
+    from app.services.tally.catalogue import ENTITIES
+
+    sessions = list(
+        (
+            await db.execute(select(TallyImport).where(TallyImport.company_id == company_id))
+        ).scalars().all()
+    )
+    unmapped = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(TallyMapping)
+            .where(TallyMapping.company_id == company_id, TallyMapping.target_id.is_(None))
+        )
+        or 0
+    )
+
+    months = _last_12_months(date.today())
+    bucket: dict[tuple[int, int], int] = {}
+    for session in sessions:
+        created = session.creation
+        key = (created.year, created.month)
+        if key in bucket or key in months:
+            bucket[key] = bucket.get(key, 0) + session.imported_count
+    trend = [{"label": _MONTH_ABBR[m - 1], "value": bucket.get((y, m), 0)} for (y, m) in months]
+
+    return {
+        "currency": await _company_currency(db, company_id),
+        "chart_title": "Documents imported from Tally (12 months)",
+        "trend_format": "int",
+        "cards": [
+            {"label": "Imports", "value": len(sessions), "format": "int"},
+            {
+                "label": "Documents Imported",
+                "value": sum(s.imported_count for s in sessions),
+                "format": "int",
+            },
+            {"label": "Names Unmapped", "value": unmapped, "format": "int"},
+            {"label": "Entities Supported", "value": len(ENTITIES), "format": "int"},
+        ],
+        "trend": trend,
+    }

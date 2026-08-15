@@ -474,6 +474,8 @@ async def validate_import(
     unresolved: dict[str, list[str]] = {}
     planned: dict[str, int] = {}
     blockers: list[str] = []
+    #: entity_key -> casefolded names this run will have created by voucher time
+    will_exist: dict[str, set[str]] = {}
 
     for entity_key in ENTITY_ORDER:
         spec = ENTITY_BY_KEY.get(entity_key)
@@ -488,10 +490,19 @@ async def validate_import(
         planned[entity_key] = len(rows)
 
         if spec.stage < STAGE_VOUCHER:
+            # Masters land before vouchers in the same run, so a name this
+            # import is about to create counts as resolvable — reporting it as
+            # unresolved would send a tester hunting for a problem that the run
+            # itself fixes a moment later.
+            will_exist.setdefault(entity_key, set()).update(
+                (r.tally_name or "").strip().casefold() for r in rows if r.tally_name
+            )
             continue
         # Vouchers can only post if the ledgers/items they name are mapped.
         for row in rows:
             for name, kind in _referenced_names(row):
+                if name.strip().casefold() in will_exist.get(kind, set()):
+                    continue
                 if book.resolve(kind, name) is None:
                     unresolved.setdefault(kind, [])
                     if name not in unresolved[kind]:

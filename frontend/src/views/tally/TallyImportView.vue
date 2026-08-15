@@ -7,7 +7,7 @@ import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import { formatDate } from "@/utils/format";
 import type { ErrorEnvelope } from "@/types/core";
-import type { TallyImport, TallyImportListItem, TallyWorkspaceStats } from "@/types/tally";
+import type { TallyImport, TallyImportListItem, WorkspaceStats } from "@/types/tally";
 
 const router = useRouter();
 const route = useRoute();
@@ -20,7 +20,7 @@ const focusEntities = computed(() =>
 );
 
 const rows = ref<TallyImportListItem[]>([]);
-const stats = ref<TallyWorkspaceStats | null>(null);
+const stats = ref<WorkspaceStats | null>(null);
 const loading = ref(false);
 const uploading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
@@ -100,7 +100,7 @@ async function load(): Promise<void> {
   try {
     const [list, workspace] = await Promise.all([
       api.get<TallyImportListItem[]>("/tally/imports"),
-      api.get<TallyWorkspaceStats>("/tally/workspace"),
+      api.get<WorkspaceStats>("/tally/workspace"),
     ]);
     rows.value = list.data;
     stats.value = workspace.data;
@@ -129,23 +129,18 @@ onMounted(load);
     </div>
 
     <div v-if="stats" class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-      <div class="rounded-lg border border-gray-200 bg-white p-4">
-        <div class="text-xs uppercase text-gray-400">Imports</div>
-        <div class="text-2xl font-semibold text-gray-900">{{ stats.total_imports }}</div>
-      </div>
-      <div class="rounded-lg border border-gray-200 bg-white p-4">
-        <div class="text-xs uppercase text-gray-400">Documents imported</div>
-        <div class="text-2xl font-semibold text-gray-900">{{ stats.documents_imported }}</div>
-      </div>
-      <div class="rounded-lg border border-gray-200 bg-white p-4">
-        <div class="text-xs uppercase text-gray-400">Names still unmapped</div>
-        <div class="text-2xl font-semibold" :class="stats.unmapped_names ? 'text-amber-600' : 'text-gray-900'">
-          {{ stats.unmapped_names }}
+      <div
+        v-for="card in stats.cards"
+        :key="card.label"
+        class="rounded-lg border border-gray-200 bg-white p-4"
+      >
+        <div class="text-xs uppercase text-gray-400">{{ card.label }}</div>
+        <div
+          class="text-2xl font-semibold"
+          :class="card.label === 'Names Unmapped' && card.value ? 'text-amber-600' : 'text-gray-900'"
+        >
+          {{ card.value }}
         </div>
-      </div>
-      <div class="rounded-lg border border-gray-200 bg-white p-4">
-        <div class="text-xs uppercase text-gray-400">Entities supported</div>
-        <div class="text-2xl font-semibold text-gray-900">{{ stats.supported_entities }}</div>
       </div>
     </div>
 

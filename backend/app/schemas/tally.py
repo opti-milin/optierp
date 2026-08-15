@@ -230,16 +230,3 @@ class TallyRollbackResponse(BaseModel):
     cancelled: int
     failed: list[str]
     session: TallyImportResponse
-
-
-class TallyWorkspaceStats(BaseModel):
-    """Numbers for the Data Migration workspace card."""
-
-    total_imports: int
-    completed_imports: int
-    failed_imports: int
-    documents_imported: int
-    unmapped_names: int
-    last_import_at: datetime | None
-    last_import_status: str | None
-    supported_entities: int
