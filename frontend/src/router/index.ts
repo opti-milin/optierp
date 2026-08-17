@@ -531,6 +531,17 @@ const routes: RouteRecordRaw[] = [
       { path: "tally", name: "tally-imports", component: () => import("@/views/tally/TallyImportView.vue") },
       { path: "tally/coverage", name: "tally-coverage", component: () => import("@/views/tally/TallyCoverageView.vue") },
       { path: "tally/imports/:id", name: "tally-import-detail", component: () => import("@/views/tally/TallyImportDetailView.vue"), props: true },
+      // Module 13 — Company Secretarial & Governance. One module, two shells: the
+      // home view renders a client roster for a practice and a single-entity
+      // overview for a business (see docs/SECRETARIAL_GAP_AND_PLAN.md §2.3).
+      { path: "secretarial", name: "secretarial-home", component: () => import("@/views/secretarial/SecretarialHomeView.vue") },
+      { path: "secretarial/entities", name: "secretarial-entities", component: () => import("@/views/secretarial/EntityListView.vue") },
+      { path: "secretarial/clients", name: "secretarial-clients", component: () => import("@/views/secretarial/PracticeClientsView.vue") },
+      { path: "secretarial/directors", name: "secretarial-directors", component: () => import("@/views/secretarial/DirectorsView.vue") },
+      { path: "secretarial/registers/:slug", name: "secretarial-register", component: () => import("@/views/secretarial/RegisterView.vue"), props: true },
+      { path: "secretarial/compliance", name: "secretarial-compliance", component: () => import("@/views/secretarial/ComplianceCalendarView.vue") },
+      { path: "secretarial/rules", name: "secretarial-rules", component: () => import("@/views/secretarial/RulesReviewView.vue") },
+      { path: "secretarial/access", name: "secretarial-access", component: () => import("@/views/secretarial/EngagementsView.vue") },
       // Module 06+ routes register here per module
     ],
   },

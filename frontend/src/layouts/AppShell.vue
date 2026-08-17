@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { brand } from "@/brand";
+import EntitySwitcher from "@/components/secretarial/EntitySwitcher.vue";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
 import { useModuleFlagsStore } from "@/stores/moduleFlags";
@@ -43,6 +44,7 @@ const GLOBAL_NAV: WsNavGroup[] = [
       { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
       { label: "Accounting", to: "/accounting", icon: "📊" },
       { label: "Taxation", to: "/taxation", icon: "🧾" },
+      { label: "Secretarial", to: "/secretarial", icon: "⚖" },
     ],
   },
   {
@@ -62,6 +64,9 @@ const filteredGlobalNav = computed<WsNavGroup[]>(() => {
     items: g.items.filter((i) => {
       if (i.to === "/manufacturing" && !flags.flags.manufacturing) return false;
       if (i.to === "/taxation" && !flags.flags.taxation) return false;
+      // Module 13 is opt-in — most tenants keeping books here do not run their
+      // own secretarial function, and an unused module in the nav is noise.
+      if (i.to === "/secretarial" && !flags.flags.secretarial) return false;
       return true;
     }),
   }));
@@ -180,6 +185,10 @@ async function logout(): Promise<void> {
           <span aria-hidden="true" class="text-base leading-none">{{ sidebarCollapsed ? "»" : "«" }}</span>
         </button>
       </div>
+      <!-- Working-entity context. Persistent and always visible inside the module:
+           every generative action is scoped to it, and acting on the wrong client is
+           the mistake this whole category exists to prevent. -->
+      <EntitySwitcher v-if="!sidebarCollapsed && currentModule === 'secretarial'" />
       <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-2">
         <div v-for="(group, gi) in sidebarGroups" :key="gi" class="mb-2">
           <div

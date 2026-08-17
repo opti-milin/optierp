@@ -1,18 +1,132 @@
 [
-  {"name": "System Manager", "description": "Full administrative access (superuser)", "is_system": true},
-  {"name": "Accounts Manager", "description": "Manage accounting masters and transactions", "is_system": true},
-  {"name": "Accounts User", "description": "Create accounting transactions", "is_system": true},
-  {"name": "Stock Manager", "description": "Manage inventory masters and transactions", "is_system": true},
-  {"name": "Stock User", "description": "Create stock transactions", "is_system": true},
-  {"name": "Purchase Manager", "description": "Manage procurement", "is_system": true},
-  {"name": "Purchase User", "description": "Create purchase documents", "is_system": true},
-  {"name": "Sales Manager", "description": "Manage sales", "is_system": true},
-  {"name": "Sales User", "description": "Create sales documents", "is_system": true},
-  {"name": "HR Manager", "description": "Manage HR and payroll", "is_system": true},
-  {"name": "HR User", "description": "Create HR documents", "is_system": true},
-  {"name": "Projects Manager", "description": "Manage projects and tasks", "is_system": true},
-  {"name": "Manufacturing Manager", "description": "Manage BOMs and work orders", "is_system": true},
-  {"name": "Quality Manager", "description": "Manage quality inspections and goals", "is_system": true},
-  {"name": "Support Team", "description": "Handle support issues and SLAs", "is_system": true},
-  {"name": "Employee", "description": "Self-service access", "is_system": true}
+  {
+    "name": "System Manager",
+    "description": "Full administrative access (superuser)",
+    "is_system": true
+  },
+  {
+    "name": "Accounts Manager",
+    "description": "Manage accounting masters and transactions",
+    "is_system": true
+  },
+  {
+    "name": "Accounts User",
+    "description": "Create accounting transactions",
+    "is_system": true
+  },
+  {
+    "name": "Stock Manager",
+    "description": "Manage inventory masters and transactions",
+    "is_system": true
+  },
+  {
+    "name": "Stock User",
+    "description": "Create stock transactions",
+    "is_system": true
+  },
+  {
+    "name": "Purchase Manager",
+    "description": "Manage procurement",
+    "is_system": true
+  },
+  {
+    "name": "Purchase User",
+    "description": "Create purchase documents",
+    "is_system": true
+  },
+  {
+    "name": "Sales Manager",
+    "description": "Manage sales",
+    "is_system": true
+  },
+  {
+    "name": "Sales User",
+    "description": "Create sales documents",
+    "is_system": true
+  },
+  {
+    "name": "HR Manager",
+    "description": "Manage HR and payroll",
+    "is_system": true
+  },
+  {
+    "name": "HR User",
+    "description": "Create HR documents",
+    "is_system": true
+  },
+  {
+    "name": "Projects Manager",
+    "description": "Manage projects and tasks",
+    "is_system": true
+  },
+  {
+    "name": "Manufacturing Manager",
+    "description": "Manage BOMs and work orders",
+    "is_system": true
+  },
+  {
+    "name": "Quality Manager",
+    "description": "Manage quality inspections and goals",
+    "is_system": true
+  },
+  {
+    "name": "Support Team",
+    "description": "Handle support issues and SLAs",
+    "is_system": true
+  },
+  {
+    "name": "Employee",
+    "description": "Self-service access",
+    "is_system": true
+  },
+  {
+    "name": "Company Secretary",
+    "description": "Manage statutory records, registers and compliance (Module 13)",
+    "is_system": true
+  },
+  {
+    "name": "CS Associate",
+    "description": "Create and edit secretarial records; cannot waive obligations or issue certified copies",
+    "is_system": true
+  },
+  {
+    "name": "CS Trainee",
+    "description": "Read secretarial records and draft entries",
+    "is_system": true
+  },
+  {
+    "name": "Compliance Reviewer",
+    "description": "Review and publish statutory content; approve compliance completion",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Secretarial",
+    "description": "Projection of an engagement: full secretarial access to a client's entity. Not assigned by hand.",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Observer",
+    "description": "Projection of a read-only engagement. Not assigned by hand.",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Facts",
+    "description": "Engagement projection: read derived financial facts only. Not assigned by hand.",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Reports",
+    "description": "Engagement projection: read financial statements. Not assigned by hand.",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Ledger",
+    "description": "Engagement projection: read the general ledger and source documents. Not assigned by hand.",
+    "is_system": true
+  },
+  {
+    "name": "Delegated CS Banking",
+    "description": "Engagement projection: read bank data. Granted only by explicit opt-in. Not assigned by hand.",
+    "is_system": true
+  }
 ]

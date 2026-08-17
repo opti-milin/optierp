@@ -438,6 +438,10 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # INSERT/UPDATE/DELETE/SUBMIT/CANCEL
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # Set when the actor was working under a delegated engagement (Module 13): the
+    # firm they acted *from*, as distinct from company_id — the tenant whose data
+    # was touched. Three facts, not two. See docs/SECRETARIAL_GAP_AND_PLAN.md §2.2.
+    acting_company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     data_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     data_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     ip_address: Mapped[str | None] = mapped_column(INET)

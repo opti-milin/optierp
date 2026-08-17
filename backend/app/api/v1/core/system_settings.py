@@ -19,11 +19,15 @@ router = APIRouter(prefix="/settings", tags=["core: settings"])
 class ModuleFlags(BaseModel):
     manufacturing: bool = True
     taxation: bool = True
+    # Module 13 is opt-in: most tenants keeping books here do not run their own
+    # secretarial function, and an unused module in the nav is noise.
+    secretarial: bool = False
 
 
 class ModuleFlagsUpdate(BaseModel):
     manufacturing: bool | None = None
     taxation: bool | None = None
+    secretarial: bool | None = None
 
 
 @router.get(

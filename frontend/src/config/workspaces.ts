@@ -800,6 +800,86 @@ function withTallyImport(config: WorkspaceConfig, moduleKey: string): WorkspaceC
   };
 }
 
+// Module 13 — Company Secretarial & Governance. Deliberately has no `withTallyImport`
+// wrapper: statutory records do not come out of a Tally file.
+const SECRETARIAL: WorkspaceConfig = {
+  key: "secretarial",
+  title: "Secretarial & Compliance",
+  statsEndpoint: "/secretarial/workspace",
+  sidebar: [
+    {
+      items: [
+        { label: "Home", to: "/", icon: "⌂" },
+        { label: "Overview", to: "/secretarial", icon: "▦" },
+        { label: "Clients", to: "/secretarial/clients", icon: "👥" },
+        { label: "Entities", to: "/secretarial/entities", icon: "🏢" },
+        { label: "Compliance calendar", to: "/secretarial/compliance", icon: "🗓" },
+      ],
+    },
+    {
+      title: "Registers",
+      items: [
+        { label: "Directors & KMP", to: "/secretarial/directors" },
+        { label: "Members", to: "/secretarial/registers/members" },
+        { label: "Committees", to: "/secretarial/registers/committees" },
+        { label: "Group structure", to: "/secretarial/registers/group-links" },
+        { label: "Related parties", to: "/secretarial/registers/related-parties" },
+        { label: "Beneficial owners", to: "/secretarial/registers/beneficial-owners" },
+        { label: "Auditors", to: "/secretarial/registers/auditors" },
+        { label: "Charges", to: "/secretarial/registers/charges" },
+        { label: "DSC register", to: "/secretarial/registers/dscs" },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [
+        { label: "Statutory content review", to: "/secretarial/rules" },
+        { label: "Access & engagements", to: "/secretarial/access" },
+      ],
+    },
+  ],
+  cards: [
+    {
+      title: "Master data",
+      links: [
+        { label: "Entities", to: "/secretarial/entities" },
+        { label: "Directors, partners & KMP", to: "/secretarial/directors" },
+        { label: "Committees", to: "/secretarial/registers/committees" },
+        { label: "Group structure", to: "/secretarial/registers/group-links" },
+      ],
+    },
+    {
+      title: "Statutory registers",
+      links: [
+        { label: "Register of members (s.88)", to: "/secretarial/registers/members" },
+        { label: "Related parties (s.188)", to: "/secretarial/registers/related-parties" },
+        { label: "Beneficial owners (s.90)", to: "/secretarial/registers/beneficial-owners" },
+        { label: "Charges (s.85)", to: "/secretarial/registers/charges" },
+        { label: "Auditors (s.139)", to: "/secretarial/registers/auditors" },
+        { label: "Digital signatures", to: "/secretarial/registers/dscs" },
+      ],
+    },
+    {
+      title: "Compliance",
+      links: [
+        { label: "Calendar", to: "/secretarial/compliance" },
+        { label: "Statutory content review", to: "/secretarial/rules" },
+      ],
+    },
+    {
+      title: "Practice",
+      links: [
+        { label: "Client roster", to: "/secretarial/clients" },
+        { label: "Access & engagements", to: "/secretarial/access" },
+        { label: "Board meetings", planned: true },
+        { label: "Circular resolutions", planned: true },
+        { label: "Certified true copies", planned: true },
+        { label: "Document library", planned: true },
+      ],
+    },
+  ],
+};
+
 export const WORKSPACES: Record<string, WorkspaceConfig> = {
   selling: withTallyImport(SELLING, "selling"),
   buying: withTallyImport(BUYING, "buying"),
@@ -809,4 +889,5 @@ export const WORKSPACES: Record<string, WorkspaceConfig> = {
   taxation: withTallyImport(TAXATION, "accounting"),
   manufacturing: withTallyImport(MANUFACTURING, "manufacturing"),
   migration: MIGRATION,
+  secretarial: SECRETARIAL,
 };

@@ -17,6 +17,9 @@ MODULE_FLAGS_KEY = "module_flags"
 MODULE_FLAGS_DEFAULTS: dict[str, bool] = {
     "manufacturing": True,
     "taxation": True,
+    # Module 13 is opt-in: most tenants keeping books here do not run their own
+    # secretarial function, and an unused module in the nav is noise.
+    "secretarial": False,
 }
 
 

@@ -7,13 +7,13 @@ import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { brand } from "@/brand";
 import { useAuthStore } from "@/stores/auth";
-import { useModuleFlagsStore } from "@/stores/moduleFlags";
+import { useModuleFlagsStore, type ModuleFlags } from "@/stores/moduleFlags";
 
 interface Tile {
   label: string;
   to: string;
   icon: string;
-  flag?: "manufacturing" | "taxation";
+  flag?: keyof ModuleFlags;
 }
 
 const ALL_TILES: Tile[] = [
@@ -24,6 +24,7 @@ const ALL_TILES: Tile[] = [
   { label: "Accounting", to: "/accounting", icon: "📊" },
   { label: "Taxation", to: "/taxation", icon: "🧾", flag: "taxation" },
   { label: "Assets", to: "/assets", icon: "🏗" },
+  { label: "Secretarial", to: "/secretarial", icon: "⚖", flag: "secretarial" },
   { label: "Data Migration", to: "/data-migration", icon: "⇥" },
   { label: "Setup", to: "/companies", icon: "⚙" },
   { label: "Reports", to: "/reports", icon: "📈" },
