@@ -535,7 +535,7 @@ const routes: RouteRecordRaw[] = [
       // home view renders a client roster for a practice and a single-entity
       // overview for a business (see docs/SECRETARIAL_GAP_AND_PLAN.md §2.3).
       { path: "secretarial", name: "secretarial-home", component: () => import("@/views/secretarial/SecretarialHomeView.vue") },
-      { path: "secretarial/entities", name: "secretarial-entities", component: () => import("@/views/secretarial/EntityListView.vue") },
+      { path: "secretarial/company", name: "secretarial-company", component: () => import("@/views/secretarial/CompanyProfileView.vue") },
       { path: "secretarial/clients", name: "secretarial-clients", component: () => import("@/views/secretarial/PracticeClientsView.vue") },
       { path: "secretarial/directors", name: "secretarial-directors", component: () => import("@/views/secretarial/DirectorsView.vue") },
       { path: "secretarial/registers/:slug", name: "secretarial-register", component: () => import("@/views/secretarial/RegisterView.vue"), props: true },

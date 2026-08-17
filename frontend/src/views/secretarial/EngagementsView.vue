@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Delegation, from both sides: engagements this account granted over its own
-// entities, and engagements it holds over clients' entities.
+// Delegation, from both sides: access this account has granted over its own
+// records, and access clients have granted it over theirs.
 //
 // The access summary is deliberately shown in plain words before activation.
 // `ledger_read` is the default, so a client could otherwise hand over their whole
@@ -96,11 +96,15 @@ async function end(e: Engagement): Promise<void> {
 <template>
   <div>
     <div class="mb-4">
-      <h1 class="text-xl font-semibold text-gray-900">Access & engagements</h1>
+      <h1 class="text-xl font-semibold text-gray-900">
+        {{ store.isPractice ? "Client access" : "My CS" }}
+      </h1>
       <p class="max-w-3xl text-sm text-gray-500">
-        Who can work on your statutory records, and whose records you can work on. Access is
-        always scoped to one entity, always revocable by the owner, and never includes the
-        ability to change your accounts.
+        {{
+          store.isPractice
+            ? "Clients who have given you access to their own records, and any access you have granted over yours."
+            : "The Company Secretary or firm you have asked to look after your statutory records. You can take that access back at any time, and they can never change your accounts."
+        }}
       </p>
     </div>
 
@@ -109,9 +113,9 @@ async function end(e: Engagement): Promise<void> {
     </p>
     <p v-if="loading" class="text-sm text-gray-500">Loading…</p>
 
-    <h2 class="mb-2 text-sm font-semibold text-gray-900">Access you have granted</h2>
+    <h2 class="mb-2 text-sm font-semibold text-gray-900">Firms you have given access to</h2>
     <p v-if="!granted.length" class="mb-6 rounded border border-gray-200 bg-white p-4 text-sm text-gray-500">
-      No firm has access to your records.
+      Nobody outside your account can see your statutory records.
     </p>
     <div v-else class="mb-6 space-y-3">
       <div v-for="e in granted" :key="e.id" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -124,7 +128,7 @@ async function end(e: Engagement): Promise<void> {
               </span>
             </p>
             <p class="text-sm text-gray-500">
-              on {{ e.entity_name }} · {{ ACCESS_LABEL[e.financial_access] }}
+              for {{ e.entity_name }} · {{ ACCESS_LABEL[e.financial_access] }}
               <span v-if="e.include_banking"> · includes banking</span>
             </p>
           </div>
@@ -163,7 +167,7 @@ async function end(e: Engagement): Promise<void> {
       </div>
     </div>
 
-    <h2 class="mb-2 text-sm font-semibold text-gray-900">Clients who have engaged you</h2>
+    <h2 class="mb-2 text-sm font-semibold text-gray-900">Clients who have given you access</h2>
     <p v-if="!held.length" class="rounded border border-gray-200 bg-white p-4 text-sm text-gray-500">
       No client has granted you access yet.
     </p>
@@ -171,7 +175,7 @@ async function end(e: Engagement): Promise<void> {
       <table class="min-w-full divide-y divide-gray-200 text-sm">
         <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
           <tr>
-            <th class="px-3 py-2">Client entity</th>
+            <th class="px-3 py-2">Client</th>
             <th class="px-3 py-2">Granted by</th>
             <th class="px-3 py-2">Accounts access</th>
             <th class="px-3 py-2">Status</th>

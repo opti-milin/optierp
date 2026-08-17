@@ -6,11 +6,13 @@ import EntitySwitcher from "@/components/secretarial/EntitySwitcher.vue";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
 import { useModuleFlagsStore } from "@/stores/moduleFlags";
+import { useSecretarialStore } from "@/stores/secretarial";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const flags = useModuleFlagsStore();
+const secretarial = useSecretarialStore();
 
 const SIDEBAR_COLLAPSED_KEY = "optireach.sidebarCollapsed";
 const sidebarCollapsed = ref(false);
@@ -132,9 +134,17 @@ function updateModule(path: string): void {
 watch(() => route.path, updateModule, { immediate: true });
 
 const isHome = computed(() => route.name === "dashboard"); // launcher: full-page, no sidebar
-const sidebarGroups = computed<WsNavGroup[]>(() =>
-  currentModule.value ? WORKSPACES[currentModule.value].sidebar : filteredGlobalNav.value,
-);
+const sidebarGroups = computed<WsNavGroup[]>(() => {
+  if (!currentModule.value) return filteredGlobalNav.value;
+  const groups = WORKSPACES[currentModule.value].sidebar;
+  // Secretarial ships one menu for two audiences. A company that sells
+  // appliances has no clients; a CS practice has no single "my company".
+  // Showing either the other's vocabulary is the fastest way to confuse both.
+  const profile = secretarial.settings?.profile ?? "business";
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.profiles || i.profiles.includes(profile)) }))
+    .filter((g) => g.items.length > 0);
+});
 const headerTitle = computed(() =>
   currentModule.value ? WORKSPACES[currentModule.value].title : brand.value.product_name,
 );

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The module's front door. Two shells behind one route (plan §2.3):
 //  - practice tenants land on the client roster;
-//  - business tenants land on their own entity's overview.
+//  - business tenants land on their own company's overview.
 // Same components either way — only the opening screen differs, because building
 // two dashboards would double the maintenance cost of one conditional.
 import { computed, onMounted, ref } from "vue";
@@ -73,7 +73,7 @@ onMounted(async () => {
       <p class="max-w-3xl text-sm text-gray-500">
         {{
           isPractice
-            ? "Your client entities, their statutory registers and what each of them owes the Registrar."
+            ? "Your clients, their statutory registers, and what each of them owes the Registrar."
             : "Directors and members, statutory registers, and the ROC filings this company owes."
         }}
       </p>
@@ -125,10 +125,10 @@ onMounted(async () => {
               {{ isPractice ? "Clients" : "Registers" }}
             </h2>
             <RouterLink
-              :to="isPractice ? '/secretarial/clients' : '/secretarial/entities'"
+              :to="isPractice ? '/secretarial/clients' : '/secretarial/company'"
               class="text-xs text-blue-600 hover:underline"
             >
-              View all →
+              {{ isPractice ? "View all →" : "Company details →" }}
             </RouterLink>
           </div>
 
@@ -149,7 +149,7 @@ onMounted(async () => {
               <tbody class="divide-y divide-gray-100">
                 <tr v-if="!clients.length">
                   <td colspan="5" class="px-3 py-6 text-center text-gray-400">
-                    No clients yet. Add an entity, or ask a client to grant you an engagement.
+                    No clients yet. Use “Add client” to get started.
                   </td>
                 </tr>
                 <tr v-for="c in clients" :key="c.id" class="hover:bg-gray-50">

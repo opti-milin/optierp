@@ -114,19 +114,20 @@ async def get_workspace(db: AsyncSession, company_id: uuid.UUID) -> dict[str, An
     bucket = {(int(r.y), int(r.m)): int(r.c) for r in rows}
     trend = [{"label": _MONTH_ABBR[m - 1], "value": bucket.get((y, m), 0)} for (y, m) in months]
 
+    # The cards are named for whoever is reading them. A company that sells
+    # appliances has no "entities" — it has itself — so a count of 1 would be
+    # noise at best and confusing at worst.
     cards: list[dict[str, Any]] = []
     if settings.profile == "practice":
         client_states = await roster_service.counts_by_state(db, company_id)
-        cards.append(
-            {
-                "label": "Active clients",
-                "value": client_states.get("active", 0),
-                "format": "int",
-            }
+        cards.extend(
+            [
+                {"label": "Active clients", "value": client_states.get("active", 0), "format": "int"},
+                {"label": "Companies & LLPs", "value": int(entity_count), "format": "int"},
+            ]
         )
     cards.extend(
         [
-            {"label": "Entities", "value": int(entity_count), "format": "int"},
             {"label": "Directors & partners", "value": int(director_count), "format": "int"},
             {"label": "People on record", "value": int(person_count), "format": "int"},
             {"label": "Open obligations", "value": int(open_items), "format": "int"},

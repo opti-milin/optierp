@@ -181,7 +181,7 @@ async function cease(row: Appointment): Promise<void> {
           Person not on the list? Add them
         </summary>
         <p class="mb-2 mt-2 text-xs text-gray-500">
-          People are shared across every entity in this account, so a director sitting on three
+          People are shared across every company in this account, so a director sitting on three
           boards is one record — that is what makes batch declarations possible.
         </p>
         <div class="grid gap-2 sm:grid-cols-4">

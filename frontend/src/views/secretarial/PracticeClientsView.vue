@@ -7,6 +7,7 @@
 // worse than a blank one.
 import { computed, ref } from "vue";
 import { api } from "@/api/client";
+import CompanyForm from "@/components/secretarial/CompanyForm.vue";
 import { useSecretarialStore } from "@/stores/secretarial";
 import type { ErrorEnvelope, ListResponse } from "@/types/core";
 import type { PracticeClient } from "@/types/secretarial";
@@ -17,6 +18,7 @@ const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
 const search = ref("");
 const stateFilter = ref("");
+const showAdd = ref(false);
 
 const RELATIONSHIP_TONE: Record<string, string> = {
   own: "bg-green-100 text-green-800",
@@ -61,6 +63,13 @@ async function setState(client: PracticeClient, onboarding_state: string): Promi
   await load();
 }
 
+async function onClientAdded(entityId: string): Promise<void> {
+  showAdd.value = false;
+  await store.refreshEntities();
+  store.setEntity(entityId);
+  await load();
+}
+
 function openClient(client: PracticeClient): void {
   // Only entities this account owns can be opened directly; a delegated client
   // lives in the client's own tenant and needs a company switch first.
@@ -76,11 +85,24 @@ function openClient(client: PracticeClient): void {
 
 <template>
   <div>
-    <div class="mb-4">
-      <h1 class="text-xl font-semibold text-gray-900">Clients</h1>
-      <p class="max-w-3xl text-sm text-gray-500">
-        {{ clients.length }} on the roster · {{ billableCount }} active and billable
-      </p>
+    <div class="mb-4 flex items-start justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900">Clients</h1>
+        <p class="max-w-3xl text-sm text-gray-500">
+          {{ clients.length }} on the roster · {{ billableCount }} active and billable
+        </p>
+      </div>
+      <button
+        class="rounded bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-700"
+        @click="showAdd = !showAdd"
+      >
+        {{ showAdd ? "Cancel" : "Add client" }}
+      </button>
+    </div>
+
+    <div v-if="showAdd" class="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <h2 class="mb-3 text-sm font-semibold text-gray-900">Add a client</h2>
+      <CompanyForm mode="client" @saved="onClientAdded" @cancel="showAdd = false" />
     </div>
 
     <div class="mb-3 flex flex-wrap items-end gap-2">
@@ -123,7 +145,7 @@ function openClient(client: PracticeClient): void {
           <tr v-if="loading"><td colspan="7" class="px-3 py-6 text-center text-gray-400">Loading…</td></tr>
           <tr v-else-if="!shown.length">
             <td colspan="7" class="px-3 py-6 text-center text-gray-400">
-              No clients yet. Add an entity, or ask a client to grant you an engagement.
+              No clients yet. Press “Add client” above.
             </td>
           </tr>
           <tr v-for="c in shown" :key="c.id" class="hover:bg-gray-50">

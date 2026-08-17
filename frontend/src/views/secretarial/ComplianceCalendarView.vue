@@ -120,7 +120,7 @@ async function setStatus(item: ComplianceItem, status: string): Promise<void> {
       <h1 class="text-xl font-semibold text-gray-900">Compliance calendar</h1>
       <p class="max-w-3xl text-sm text-gray-500">
         Every ROC obligation for the selected financial year, with its statutory due date
-        computed from the entity's own year end.
+        computed from that company's own year end.
       </p>
     </div>
 
@@ -142,7 +142,7 @@ async function setStatus(item: ComplianceItem, status: string): Promise<void> {
         <input v-model="openOnly" type="checkbox" @change="load" /> Open only
       </label>
       <label class="flex items-center gap-1.5 pb-1.5 text-sm text-gray-600">
-        <input v-model="scopeAll" type="checkbox" @change="load" /> All entities
+        <input v-model="scopeAll" type="checkbox" @change="load" /> {{ store.isPractice ? "All clients" : "All companies" }}
       </label>
       <button
         class="rounded bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-700"
@@ -164,7 +164,7 @@ async function setStatus(item: ComplianceItem, status: string): Promise<void> {
       class="mb-3 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"
     >
       {{ generateResult.items_created }} created, {{ generateResult.items_refreshed }} refreshed,
-      {{ generateResult.items_skipped_not_applicable }} not applicable to this entity.
+      {{ generateResult.items_skipped_not_applicable }} not applicable here.
       <span v-if="generateResult.unpublished_rules_ignored" class="font-medium">
         {{ generateResult.unpublished_rules_ignored }} rule(s) skipped — not yet reviewed and
         published by a qualified professional

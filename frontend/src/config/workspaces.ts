@@ -17,6 +17,14 @@ export interface WsNavItem {
   label: string;
   to: string;
   icon?: string;
+  /**
+   * Secretarial only. Which tenant profile this item belongs to.
+   *
+   * A company that sells appliances has no clients, so it must never see a
+   * "Clients" menu; a CS practice has no single "my company", so it must never
+   * see "Company details". Omit to show the item to everyone.
+   */
+  profiles?: ("practice" | "business")[];
 }
 
 export interface WsNavGroup {
@@ -811,8 +819,16 @@ const SECRETARIAL: WorkspaceConfig = {
       items: [
         { label: "Home", to: "/", icon: "⌂" },
         { label: "Overview", to: "/secretarial", icon: "▦" },
-        { label: "Clients", to: "/secretarial/clients", icon: "👥" },
-        { label: "Entities", to: "/secretarial/entities", icon: "🏢" },
+        // A practice works across clients; a business works on itself. Neither
+        // should be shown the other's vocabulary — the word "entity" is an
+        // internal one and appears in neither menu.
+        { label: "Clients", to: "/secretarial/clients", icon: "👥", profiles: ["practice"] },
+        {
+          label: "Company details",
+          to: "/secretarial/company",
+          icon: "🏢",
+          profiles: ["business"],
+        },
         { label: "Compliance calendar", to: "/secretarial/compliance", icon: "🗓" },
       ],
     },
@@ -834,7 +850,10 @@ const SECRETARIAL: WorkspaceConfig = {
       title: "Setup",
       items: [
         { label: "Statutory content review", to: "/secretarial/rules" },
-        { label: "Access & engagements", to: "/secretarial/access" },
+        // Same screen, named for who is reading it: a business is hiring a CS,
+        // a practice is seeing which clients have hired them.
+        { label: "My CS", to: "/secretarial/access", profiles: ["business"] },
+        { label: "Client access", to: "/secretarial/access", profiles: ["practice"] },
       ],
     },
   ],
@@ -842,7 +861,6 @@ const SECRETARIAL: WorkspaceConfig = {
     {
       title: "Master data",
       links: [
-        { label: "Entities", to: "/secretarial/entities" },
         { label: "Directors, partners & KMP", to: "/secretarial/directors" },
         { label: "Committees", to: "/secretarial/registers/committees" },
         { label: "Group structure", to: "/secretarial/registers/group-links" },
@@ -869,8 +887,8 @@ const SECRETARIAL: WorkspaceConfig = {
     {
       title: "Practice",
       links: [
-        { label: "Client roster", to: "/secretarial/clients" },
-        { label: "Access & engagements", to: "/secretarial/access" },
+        { label: "Clients", to: "/secretarial/clients" },
+        { label: "Who can access these records", to: "/secretarial/access" },
         { label: "Board meetings", planned: true },
         { label: "Circular resolutions", planned: true },
         { label: "Certified true copies", planned: true },
