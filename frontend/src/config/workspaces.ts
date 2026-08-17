@@ -718,12 +718,95 @@ const MANUFACTURING: WorkspaceConfig = {
   ],
 };
 
+// Module 12 — Data Migration. Its own workspace because a migration is a
+// project, not a screen: upload, map, dry run, compare, roll back, repeat.
+const MIGRATION: WorkspaceConfig = {
+  key: "migration",
+  title: "Data Migration",
+  statsEndpoint: "/tally/workspace",
+  sidebar: [
+    {
+      items: [
+        { label: "Home", to: "/", icon: "⌂" },
+        { label: "Data Migration", to: "/data-migration", icon: "⇥" },
+        { label: "Tally Imports", to: "/tally", icon: "📥" },
+        { label: "Coverage Matrix", to: "/tally/coverage", icon: "🗺" },
+      ],
+    },
+    {
+      title: "Check the result",
+      items: [
+        { label: "Chart of Accounts", to: "/accounts" },
+        { label: "Trial Balance", to: "/reports?tab=trial-balance" },
+        { label: "General Ledger", to: "/reports?tab=general-ledger" },
+        { label: "Stock Balance", to: "/stock-balance" },
+        { label: "Customers", to: "/m/customer" },
+        { label: "Suppliers", to: "/m/supplier" },
+        { label: "Products & Services", to: "/items" },
+      ],
+    },
+  ],
+  cards: [
+    {
+      title: "Import from Tally",
+      links: [
+        { label: "New / recent imports", to: "/tally" },
+        { label: "What comes across (coverage)", to: "/tally/coverage" },
+      ],
+    },
+    {
+      title: "Compare against Tally",
+      links: [
+        { label: "Trial Balance", to: "/reports?tab=trial-balance" },
+        { label: "General Ledger", to: "/reports?tab=general-ledger" },
+        { label: "Balance Sheet", to: "/reports?tab=balance-sheet" },
+        { label: "Profit and Loss", to: "/reports?tab=profit-and-loss" },
+        { label: "Stock Balance", to: "/stock-balance" },
+        { label: "Accounts Receivable", to: "/reports?tab=receivable" },
+        { label: "Accounts Payable", to: "/reports?tab=payable" },
+      ],
+    },
+    {
+      title: "Masters it creates",
+      links: [
+        { label: "Chart of Accounts", to: "/accounts" },
+        { label: "Customers", to: "/m/customer" },
+        { label: "Suppliers", to: "/m/supplier" },
+        { label: "Products & Services", to: "/items" },
+        { label: "Warehouses", to: "/warehouses" },
+        { label: "Cost Centers", to: "/cost-centers" },
+      ],
+    },
+  ],
+};
+
+/**
+ * Every module gets the same "Import from Tally" entry, deep-linked so the
+ * wizard pre-selects that module's entities. Appended here rather than repeated
+ * in each config, so a new module inherits it automatically.
+ */
+function withTallyImport(config: WorkspaceConfig, moduleKey: string): WorkspaceConfig {
+  const link = { label: "Import from Tally", to: `/tally?module=${moduleKey}` };
+  return {
+    ...config,
+    sidebar: [...config.sidebar, { title: "Data Migration", items: [link] }],
+    cards: [
+      ...config.cards,
+      {
+        title: "Data Migration",
+        links: [link, { label: "What comes across (coverage)", to: "/tally/coverage" }],
+      },
+    ],
+  };
+}
+
 export const WORKSPACES: Record<string, WorkspaceConfig> = {
-  selling: SELLING,
-  buying: BUYING,
-  stock: STOCK,
-  accounting: ACCOUNTING,
-  assets: ASSETS,
-  taxation: TAXATION,
-  manufacturing: MANUFACTURING,
+  selling: withTallyImport(SELLING, "selling"),
+  buying: withTallyImport(BUYING, "buying"),
+  stock: withTallyImport(STOCK, "stock"),
+  accounting: withTallyImport(ACCOUNTING, "accounting"),
+  assets: withTallyImport(ASSETS, "assets"),
+  taxation: withTallyImport(TAXATION, "accounting"),
+  manufacturing: withTallyImport(MANUFACTURING, "manufacturing"),
+  migration: MIGRATION,
 };

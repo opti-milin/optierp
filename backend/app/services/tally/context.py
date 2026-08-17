@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, AsyncIterator
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +61,13 @@ class ImportContext:
     logs: list[TallyImportLog] = field(default_factory=list)
     #: current staging row, so helpers can attach messages without plumbing
     current: TallyStagingRecord | None = None
+    #: "<party uuid>:<tally bill ref>" -> invoice id, built as invoices import.
+    #: This is how a Tally receipt finds the invoice its "Agst Ref" settles.
+    bill_index: dict[str, uuid.UUID] = field(default_factory=dict)
+    bill_doctype: dict[str, str] = field(default_factory=dict)
+    #: casefolded Tally group name -> its parent group, from this file's GROUP
+    #: records. Lets any importer walk a name up to its reserved ancestor.
+    group_parents: dict[str, str | None] = field(default_factory=dict)
 
     # -- counters ---------------------------------------------------------------------
     def counter(self, entity_key: str) -> EntityCounters:
@@ -119,6 +127,11 @@ class ImportContext:
         is re-marked ``Error`` and committed, so the tester sees the reason in
         the UI even though the document never existed.
         """
+        # A previous row's rollback expires every object the session holds — the
+        # rest of this batch, the import session, the company. Reload whatever is
+        # stale before any column is touched, or the first read would try to
+        # lazy-load from sync context and blow up with MissingGreenlet.
+        await self._reload_if_expired(record, self.session, self.company)
         self.current = record
         counters = self.counter(record.entity_key)
         counters.total += 1
@@ -138,15 +151,25 @@ class ImportContext:
         finally:
             self.current = None
 
+    async def _reload_if_expired(self, *objects: Any) -> None:
+        for obj in objects:
+            if obj is not None and sa_inspect(obj).expired:
+                await self.db.refresh(obj)
+
     async def _fail(
         self, record: TallyStagingRecord, text: str, field_name: str | None = None
     ) -> None:
         """Roll back the failed row, then persist the failure on the row itself."""
+        # Read the id *before* the rollback: rollback expires every loaded
+        # object, and touching an expired attribute afterwards would trigger a
+        # lazy refresh from sync context (MissingGreenlet).
+        record_id = record.id
         await self.db.rollback()
         # The rollback discarded our in-memory edits along with the document, so
         # re-read the staging row before writing the error onto it.
-        fresh = await self.db.get(TallyStagingRecord, record.id)
-        target = fresh if fresh is not None else record
+        target = await self.db.get(TallyStagingRecord, record_id)
+        if target is None:  # pragma: no cover - the row is committed at parse time
+            return
         target.status = "Error"
         target.target_id = None
         self.message(target, "error", text, field_name)

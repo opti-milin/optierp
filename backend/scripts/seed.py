@@ -172,6 +172,14 @@ DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     ("Manufacturing Manager", "Subcontract Job", _ACCOUNTS_TXN_ALL),
     ("Manufacturing Manager", "Quality Inspection", _ACCOUNTS_TXN_ALL),
     ("Manufacturing Manager", "Stock Entry", _ACCOUNTS_TXN_USER),
+    # Module 12 — Data Migration (Tally import). Running an import creates
+    # masters *and* posts vouchers across every module, so only Accounts Manager
+    # gets the write/submit/cancel actions; other managers can watch the run.
+    ("Accounts Manager", "Tally Import", _ACCOUNTS_TXN_ALL),
+    ("Accounts User", "Tally Import", ["read", "report"]),
+    ("Stock Manager", "Tally Import", ["read", "report"]),
+    ("Sales Manager", "Tally Import", ["read", "report"]),
+    ("Purchase Manager", "Tally Import", ["read", "report"]),
 ]
 
 

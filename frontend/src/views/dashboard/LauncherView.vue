@@ -24,6 +24,7 @@ const ALL_TILES: Tile[] = [
   { label: "Accounting", to: "/accounting", icon: "📊" },
   { label: "Taxation", to: "/taxation", icon: "🧾", flag: "taxation" },
   { label: "Assets", to: "/assets", icon: "🏗" },
+  { label: "Data Migration", to: "/data-migration", icon: "⇥" },
   { label: "Setup", to: "/companies", icon: "⚙" },
   { label: "Reports", to: "/reports", icon: "📈" },
 ];
