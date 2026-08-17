@@ -30,8 +30,28 @@ curl -X PUT http://localhost:8000/api/v1/settings/module-flags \
   -d '{"secretarial":true}'
 ```
 
-Log in at http://localhost:8080 (`admin@example.com` / `ChangeMe!123`). **Secretarial**
-now appears in the launcher and the sidebar.
+### You need two logins, and neither should be the admin
+
+The module has two audiences, and the difference only becomes real with two separate
+accounts. More importantly: **`admin@example.com` is a `System Manager`, and that role is
+allowed everything everywhere** — `has_permission()` returns `True` for it before any
+check runs ([permissions.py:55](../backend/app/core/permissions.py#L55)). Testing the
+delegated access ladder as admin would prove nothing.
+
+```bash
+docker compose exec backend python -m scripts.seed_secretarial_demo
+```
+
+| Login | Password | Who they are |
+|---|---|---|
+| `owner@mangoappliances.com` | `Demo!Pass123` | The appliance business. Does its own secretarial work. Profile: **business**. |
+| `cs@optireachsecretarial.com` | `Demo!Pass123` | The CS practice. Works on clients. Profile: **practice**. |
+
+Neither holds `System Manager`, so what they can and cannot do is the real answer.
+Use `admin@example.com` / `ChangeMe!123` only for setup (module flags, publishing rules).
+
+Log in at http://localhost:8080. **Secretarial** appears in the launcher and sidebar
+once the flag is on for that company.
 
 ---
 
@@ -200,13 +220,24 @@ WHERE user_id = '<firm user>' AND company_id = '<client company>' AND role LIKE 
 
 ### What a delegated CS can and cannot do
 
-Signed in as the delegated user, switched into the client company:
+This is the part worth checking properly, as `cs@optireachsecretarial.com` — **not** as
+admin. Verified 2026-08-17 with exactly these calls:
 
-- [ ] Can open the client's **trial balance / P&L / general ledger** (read).
-- [ ] **403 on posting a journal entry** — no rung of the ladder grants write.
-- [ ] **403 on bank transactions and payment entries** — outside the ladder entirely,
-      needs a separate explicit opt-in.
-- [ ] **403 on Settings.**
+| Action | Result | Why |
+|---|---|---|
+| Switch into the client *before* any grant | **403** "You do not have access to this company" | No role there yet |
+| `GET /secretarial/entities` | **200** | Secretarial access |
+| `GET /secretarial/compliance/items` | **200** | Secretarial access |
+| `GET /reports/trial-balance?fiscal_year_id=…` | **200** | `reports_read` rung |
+| `GET /reports/general-ledger?from_date=…&to_date=…` | **200** | `ledger_read` rung |
+| `GET /bank-transactions` | **403** | Outside the ladder — separate opt-in |
+| `POST /journal-entries` | **403** | No rung grants write |
+| `POST /sales-invoices` | **403** | No rung grants write |
+| `PUT /settings/module-flags` | **403** | Settings never granted |
+
+If you copy these into a shell, note that `/reports/trial-balance` needs
+`fiscal_year_id` and `/reports/general-ledger` needs `from_date`/`to_date` — a 404 or
+422 there is a malformed URL, not an access decision, and proves nothing either way.
 
 ---
 
@@ -251,6 +282,14 @@ engine is never mistaken for a finished module.
 ---
 
 ## Known rough edges
+
+0. **One test in the suite is red, and it is not this module's.**
+   `tests/integration/test_tally_import.py::test_workspace_stats_track_the_run` asserts
+   `stats["total_imports"]`, a key commit `33f9eca` removed from the Tally workspace
+   schema before this branch started; the test was never updated. Run the suite with the
+   postgres superuser and `-p no:randomly` and you get **209 passed, 1 failed, 0 errors** —
+   the errors in a default run are test-ordering interference over the shared `erp_test`
+   database, not real failures.
 
 1. **Company switching resets on page reload.** `POST /auth/refresh` re-issues the token
    against `users.default_company_id`, so a hard refresh sends you back to your default
