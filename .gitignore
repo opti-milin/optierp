@@ -35,3 +35,6 @@ backups/
 
 # Claude Code local tool config
 .claude/
+
+# TypeScript incremental build cache — regenerated on every build.
+frontend/tsconfig.tsbuildinfo
