@@ -33,6 +33,7 @@ from app.api.v1.core import (
     companies,
     currencies,
     naming_series,
+    ocr,
     print_docs,
     print_settings,
     roles,
@@ -113,6 +114,7 @@ api_v1_router.include_router(workflows.router)
 api_v1_router.include_router(system_settings.router)
 api_v1_router.include_router(print_settings.router)
 api_v1_router.include_router(print_docs.router)
+api_v1_router.include_router(ocr.router)
 
 # Module 02 — Accounts
 api_v1_router.include_router(accounts_masters.router)

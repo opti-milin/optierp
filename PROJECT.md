@@ -43,9 +43,10 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 
 ## 2. Current Transition State
 
-- **Branch:** `develop`
-- **Latest migration head:** `0092_drop_legacy_itr` (after `0091_tax_filings` / `0090` / …).
+- **Branch:** `feat/ocr` (on current `develop`, including Module 13 secretarial).
+- **Latest migration head:** `0097_portal_token_lookup` (after `0096` / `0095` / `0094` secretarial / `0093_tally_import`).
 - **Exact spot:** **Manufacturing Phases 0–9 complete** (incl. live delivery-date chain + outbound transit days). True finite-capacity APS remains out of scope.
+- **OCR line-item extraction** — Data Entry **OCR** tab calls `POST /api/v1/ocr/extract` (OpenAI-compatible vision). Set `OCR_API_KEY` to enable. See [docs/OCR.md](docs/OCR.md).
 - **ITR enterprise rearchitecture** — [docs/plans/itr_enterprise_rearchitecture.plan.md](docs/plans/itr_enterprise_rearchitecture.plan.md) is the **master spec**. Architecture: [docs/TAXATION_ARCHITECTURE.md](docs/TAXATION_ARCHITECTURE.md).
   - **Phases 1–8 done** (`0085`–`0091`): statutory catalogue, registrations, kernel, computations/runs, challans/credits/GL, corporate depth, interest/calendar, ITR-6 filings.
   - **Phase 9 done**: Tax Workspace (`/tax/workspace`) with Heads/Adjustments/Depreciation/Set-off/MAT/Credits/Challans/Result/Runs·Audit/Form tabs; legacy `IncomeTaxView` removed.

@@ -35,7 +35,7 @@ pieces are **the same four commercial blocks on every document**, so they should
 - **Now in scope** (were deferred): **Taxes & Charges**, **Import (Download/Upload)**,
   **Additional Discount**, **full Totals** (grand total, rounding adjustment, rounded total,
   in-words). **Still excluded:** Scan Barcode.
-- **Data entry = 3 modes:** Manual · Import (Tally / CSV) · OCR (API-backed, future). See §6.
+- **Data entry = 3 modes:** Manual · Import (Tally / CSV) · OCR (API-backed). See §6.
 - **Goods + Services naming:** the app must read correctly for both. See §5.
 
 ---
@@ -134,9 +134,9 @@ A single **Data Entry** control above the items grid, with three modes:
    - **CSV** — download a template (ERPNext's `allow_import` pattern), fill, upload → parse → populate grid.
    - **Tally** — accept Tally's export (XML or CSV) and map vouchers/masters → our line items.
    - One parser interface, two adapters (CSV, Tally), so more sources slot in later.
-3. **OCR** *(stub now, API later)* — upload an invoice/PO image or PDF → (future) call an OCR
-   service → extract line items → populate the grid. Build the upload + "review extracted rows"
-   UI now; wire the API when ready. Clearly labelled "OCR extraction connects via API (coming soon)".
+3. **OCR** — upload an invoice/PO image or PDF → `POST /api/v1/ocr/extract` (OpenAI-compatible
+   vision) → match against the item master → review extracted rows → populate the grid.
+   See [`OCR.md`](OCR.md). Set `OCR_API_KEY` to enable; the UI disables Extract until then.
 
 This subsumes ERPNext's Download/Upload and keeps "Get Items From" (pull from another document)
 as a fourth, document-to-document path.
@@ -155,7 +155,7 @@ as a fourth, document-to-document path.
 
 **Phase B — Naming + data entry**
 6. Goods/Services relabel (§5).
-7. Data-entry modes: Manual (done) + Import (CSV, then Tally) + OCR stub (§6).
+7. Data-entry modes: Manual (done) + Import (CSV, then Tally) + OCR extract API (§6).
 
 **Phase C — Document-specific**
 8. **Standalone Delivery Note create form** (wire `ItemsGrid`, per-row warehouse, SO linkage).

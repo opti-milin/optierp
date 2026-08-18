@@ -52,6 +52,12 @@ services:
       SEED_DEMO: "${SEED_DEMO:-true}"
       DEMO_EMAIL: "${DEMO_EMAIL:-demo@optireach.in}"
       DEMO_PASSWORD: "${DEMO_PASSWORD:-Demo@12345}"
+      # OCR (Data Entry). Set OCR_API_KEY in a repo-root .env or the shell.
+      # OpenAI-compatible vision (gpt-4o-mini by default). Empty key → Extract stays disabled.
+      OCR_PROVIDER: "${OCR_PROVIDER:-openai}"
+      OCR_API_KEY: "${OCR_API_KEY:-}"
+      OCR_API_BASE: "${OCR_API_BASE:-https://api.openai.com/v1}"
+      OCR_MODEL: "${OCR_MODEL:-gpt-4o-mini}"
     ports:
       - "8000:8000"
     depends_on:

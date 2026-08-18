@@ -57,6 +57,8 @@ takes ~2 minutes, since it posts real documents through the service layer).
 
 Set `SEED_DEMO=false` before `up` for a bare install (masters + admin only).
 
+**OCR (optional):** scanned invoice/PO → line items on Sales/Purchase forms. Set `OCR_API_KEY` in a repo-root `.env` (OpenAI-compatible vision) and restart the backend. See [`docs/OCR.md`](docs/OCR.md).
+
 **Common issues**
 - Port `5432` already in use (Windows PostgreSQL): stop the host service, or change the host mapping in `docker-compose.yml`.
 - Frontend shows API errors for a few seconds: wait for backend health — frontend now waits on the API healthcheck.

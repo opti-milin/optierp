@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # --- Scheduler ---
     scheduler_enabled: bool = True
 
+    # --- OCR (line-item extraction from scanned invoices / POs) ---
+    # OpenAI-compatible vision API. Empty key → extract returns `ocr_not_configured`.
+    ocr_provider: str = "openai"  # openai | azure | disabled
+    ocr_api_key: str = ""
+    ocr_api_base: str = "https://api.openai.com/v1"
+    ocr_model: str = "gpt-4o-mini"
+    ocr_timeout_seconds: float = 90
+    ocr_max_bytes: int = 10 * 1024 * 1024
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

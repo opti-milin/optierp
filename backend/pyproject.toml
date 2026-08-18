@@ -19,6 +19,7 @@ dependencies = [
     "apscheduler>=3.10",
     "redis>=5.2",
     "aiosmtplib>=3.0",
+    "httpx>=0.28",
     # PDF engine for document printing (Section 4.5). Needs native libs (Pango/Cairo/
     # gdk-pixbuf) — installed in the Docker image. MANUAL_REVIEW: WeasyPrint (vs. wkhtmltopdf).
     "weasyprint>=63",

@@ -24,6 +24,7 @@ Archived Cursor `.plan.md` briefs → **[`plans/`](plans/README.md)**.
 | [SELLING_BUYING_PARITY.md](SELLING_BUYING_PARITY.md) | Selling ↔ Buying parity |
 | [TALLY_IMPORT.md](TALLY_IMPORT.md) | Tally import — entity/group/voucher mapping reference (engineers) |
 | [TALLY_IMPORT_HOW_IT_WORKS.md](TALLY_IMPORT_HOW_IT_WORKS.md) | Tally import — plain-language walkthrough (everyone) |
+| [OCR.md](OCR.md) | OCR line-item extraction (scanned invoice / PO → grid) |
 
 ## Product / architecture
 
