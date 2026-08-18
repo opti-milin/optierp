@@ -39,6 +39,75 @@ SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seeds"
 _ACCOUNTS_TXN_ALL = ["read", "write", "create", "submit", "cancel", "amend", "print", "email", "report"]
 _ACCOUNTS_TXN_USER = ["read", "write", "create", "submit", "print", "email", "report"]
 
+# --- Module 13 (Secretarial) ------------------------------------------------------
+# Every doctype in the module, and who may do what with it.
+_SECRETARIAL_DOCTYPES = (
+    "Secretarial Entity",
+    "Secretarial Person",
+    "Secretarial Member",
+    "Secretarial Committee",
+    "Secretarial Group Link",
+    "Secretarial Related Party",
+    "Secretarial Beneficial Owner",
+    "Secretarial Auditor",
+    "Secretarial Charge",
+    "Secretarial DSC",
+    "Secretarial File",
+    "Secretarial Compliance Item",
+    # Phases 2-4
+    "Secretarial Document",
+    "Secretarial Meeting",
+    "Secretarial Circular Resolution",
+    "Secretarial Certified True Copy",
+    "Secretarial Filing",
+)
+
+_CS_FULL = ["read", "write", "create", "delete", "submit", "cancel", "print", "email", "report"]
+_CS_ASSOCIATE = ["read", "write", "create", "print", "report"]
+_CS_TRAINEE = ["read", "report"]
+
+# The read-only financial ladder of plan §2.2.1. These roles exist purely as
+# engagement projections and are created/destroyed by the grant lifecycle — never
+# assigned by hand. `can_read` and nothing else, by construction: there is no code
+# path that could turn a delegated grant into write access on the books.
+_LEDGER_DOCTYPES = ("GL Entry", "Journal Entry", "Sales Invoice", "Purchase Invoice")
+_REPORT_DOCTYPES = ("Account", "Cost Center", "Fiscal Year")
+_BANKING_DOCTYPES = ("Bank Account", "Bank Transaction", "Payment Entry")
+
+_SECRETARIAL_PERMISSIONS: list[tuple[str, str, list[str]]] = [
+    *[("Company Secretary", dt, _CS_FULL) for dt in _SECRETARIAL_DOCTYPES],
+    *[("CS Associate", dt, _CS_ASSOCIATE) for dt in _SECRETARIAL_DOCTYPES],
+    *[("CS Trainee", dt, _CS_TRAINEE) for dt in _SECRETARIAL_DOCTYPES],
+    # An associate drafts and circulates but does not certify: issuing a CTC puts a
+    # document into a bank's hands, so it stays with the Company Secretary. That falls
+    # out of `submit` — which POST /secretarial/ctcs requires and `_CS_ASSOCIATE` does
+    # not carry. Listing the doctype again with a narrower action list would achieve
+    # nothing: `_grant` only ever turns permissions on, never off.
+    *[("Compliance Reviewer", dt, ["read", "report"]) for dt in _SECRETARIAL_DOCTYPES],
+    # Publishing statutory content and signing off completion is the reviewer's job.
+    ("Compliance Reviewer", "Secretarial Compliance Rule", ["read", "write", "submit", "report"]),
+    ("Compliance Reviewer", "Secretarial Compliance Item", ["read", "write", "submit", "report"]),
+    # Content packs sit behind the same publish gate as the rules, and the review
+    # endpoint is gated on `submit` against Secretarial Document. Without this the role
+    # designed to publish statutory content cannot publish half of it.
+    ("Compliance Reviewer", "Secretarial Document", ["read", "write", "submit", "report"]),
+    ("Company Secretary", "Secretarial Compliance Rule", ["read", "report"]),
+    ("CS Associate", "Secretarial Compliance Rule", ["read", "report"]),
+    ("CS Trainee", "Secretarial Compliance Rule", ["read", "report"]),
+    # Delegation is granted and revoked by whoever owns the data, not by the firm.
+    ("Company Secretary", "Secretarial Engagement", ["read", "report"]),
+    ("Accounts Manager", "Secretarial Engagement", _CS_FULL),
+    ("Accounts Manager", "Secretarial Entity", ["read", "report"]),
+    # --- Engagement projections (read-only, never assigned manually) --------------
+    *[("Delegated CS Secretarial", dt, _CS_ASSOCIATE) for dt in _SECRETARIAL_DOCTYPES],
+    *[("Delegated CS Observer", dt, _CS_TRAINEE) for dt in _SECRETARIAL_DOCTYPES],
+    ("Delegated CS Secretarial", "Secretarial Compliance Rule", ["read", "report"]),
+    ("Delegated CS Observer", "Secretarial Compliance Rule", ["read", "report"]),
+    *[("Delegated CS Reports", dt, ["read", "report"]) for dt in _REPORT_DOCTYPES],
+    *[("Delegated CS Ledger", dt, ["read", "report"]) for dt in _LEDGER_DOCTYPES],
+    *[("Delegated CS Banking", dt, ["read", "report"]) for dt in _BANKING_DOCTYPES],
+]
+
 DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     # Module 01 — Core / Setup
     ("Accounts Manager", "Company", ["read"]),
@@ -180,6 +249,8 @@ DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     ("Stock Manager", "Tally Import", ["read", "report"]),
     ("Sales Manager", "Tally Import", ["read", "report"]),
     ("Purchase Manager", "Tally Import", ["read", "report"]),
+    # Module 13 — Company Secretarial & Governance.
+    *_SECRETARIAL_PERMISSIONS,
 ]
 
 
@@ -210,6 +281,92 @@ async def seed_masters(db: AsyncSession) -> None:
     await db.flush()
 
     await _seed_hsn_codes(db)
+    await _seed_secretarial_rules(db)
+    await _seed_secretarial_packs(db)
+
+
+async def _seed_secretarial_packs(db: AsyncSession) -> None:
+    """Load the document content packs as **draft**, same gate as the rules.
+
+    Each pack's fragments are validated as block trees on load rather than at render
+    time, so a malformed pack is a seeding failure a developer sees, never a broken
+    document a client sees.
+    """
+    from app.models.secretarial import SecretarialContentPack
+    from app.services.secretarial import blocks as block_lib
+
+    existing = set(
+        (
+            await db.execute(
+                select(SecretarialContentPack.code, SecretarialContentPack.version).where(
+                    SecretarialContentPack.company_id.is_(None)
+                )
+            )
+        ).all()
+    )
+    added = 0
+    for row in _load("secretarial_content_packs.json"):
+        if (row["code"], 1) in existing:
+            continue
+        for name, tree in (row.get("fragments") or {}).items():
+            block_lib.validate_tree(tree, where=f"{row['code']}.{name}")
+        db.add(
+            SecretarialContentPack(
+                company_id=None,
+                version=1,
+                is_system=True,
+                review_status="draft",
+                **row,
+            )
+        )
+        added += 1
+    if added:
+        await db.flush()
+        print(f"Seeded {added} secretarial content packs (draft — awaiting legal review)")
+
+
+async def _seed_secretarial_rules(db: AsyncSession) -> None:
+    """Load the Companies Act / LLP Act compliance catalogue as **draft** rules.
+
+    Deliberately not published. Plan §2.12: statutory wording and applicability are
+    reviewed by a qualified Company Secretary, and only ``published`` rules generate
+    calendar rows. Seeding them as drafts means the whole engine is testable from day
+    one while it remains impossible for unreviewed text to reach a client's calendar.
+
+    To publish after review:
+        python -m scripts.publish_secretarial_content --reviewer-name "..." \\
+            --reviewer-credential "ACS 12345"
+    """
+    from app.models.secretarial import SecretarialComplianceRule
+
+    existing = set(
+        (
+            await db.execute(
+                select(SecretarialComplianceRule.code, SecretarialComplianceRule.version).where(
+                    SecretarialComplianceRule.company_id.is_(None)
+                )
+            )
+        ).all()
+    )
+    added = 0
+    for row in _load("secretarial_compliance_rules.json"):
+        if (row["code"], 1) in existing:
+            continue
+        db.add(
+            SecretarialComplianceRule(
+                company_id=None,
+                version=1,
+                is_system=True,
+                is_active=True,
+                review_status="draft",
+                authority="MCA",
+                **row,
+            )
+        )
+        added += 1
+    if added:
+        await db.flush()
+        print(f"Seeded {added} secretarial compliance rules (draft — awaiting legal review)")
 
 
 async def _seed_hsn_codes(db: AsyncSession) -> None:

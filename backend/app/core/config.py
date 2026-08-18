@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # --- CORS ---
     allowed_origins: str = "http://localhost:5173"
 
+    # Public base URL of the SPA. Used to build the tokenised links emailed to
+    # directors, who have no login (Module 13) — the link has to be absolute because
+    # it is opened from an email client, not from within the app.
+    public_base_url: str = "http://localhost:8080"
+
     # --- Email ---
     # MANUAL_REVIEW: email provider — plain SMTP assumed (vs. SendGrid/SES).
     smtp_host: str = "localhost"

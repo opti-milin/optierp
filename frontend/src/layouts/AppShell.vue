@@ -2,14 +2,17 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { brand } from "@/brand";
+import EntitySwitcher from "@/components/secretarial/EntitySwitcher.vue";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
 import { useModuleFlagsStore } from "@/stores/moduleFlags";
+import { useSecretarialStore } from "@/stores/secretarial";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const flags = useModuleFlagsStore();
+const secretarial = useSecretarialStore();
 
 const SIDEBAR_COLLAPSED_KEY = "optireach.sidebarCollapsed";
 const sidebarCollapsed = ref(false);
@@ -43,6 +46,7 @@ const GLOBAL_NAV: WsNavGroup[] = [
       { label: "Manufacturing", to: "/manufacturing", icon: "🏭" },
       { label: "Accounting", to: "/accounting", icon: "📊" },
       { label: "Taxation", to: "/taxation", icon: "🧾" },
+      { label: "Secretarial", to: "/secretarial", icon: "⚖" },
     ],
   },
   {
@@ -62,6 +66,9 @@ const filteredGlobalNav = computed<WsNavGroup[]>(() => {
     items: g.items.filter((i) => {
       if (i.to === "/manufacturing" && !flags.flags.manufacturing) return false;
       if (i.to === "/taxation" && !flags.flags.taxation) return false;
+      // Module 13 is opt-in — most tenants keeping books here do not run their
+      // own secretarial function, and an unused module in the nav is noise.
+      if (i.to === "/secretarial" && !flags.flags.secretarial) return false;
       return true;
     }),
   }));
@@ -127,9 +134,17 @@ function updateModule(path: string): void {
 watch(() => route.path, updateModule, { immediate: true });
 
 const isHome = computed(() => route.name === "dashboard"); // launcher: full-page, no sidebar
-const sidebarGroups = computed<WsNavGroup[]>(() =>
-  currentModule.value ? WORKSPACES[currentModule.value].sidebar : filteredGlobalNav.value,
-);
+const sidebarGroups = computed<WsNavGroup[]>(() => {
+  if (!currentModule.value) return filteredGlobalNav.value;
+  const groups = WORKSPACES[currentModule.value].sidebar;
+  // Secretarial ships one menu for two audiences. A company that sells
+  // appliances has no clients; a CS practice has no single "my company".
+  // Showing either the other's vocabulary is the fastest way to confuse both.
+  const profile = secretarial.settings?.profile ?? "business";
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.profiles || i.profiles.includes(profile)) }))
+    .filter((g) => g.items.length > 0);
+});
 const headerTitle = computed(() =>
   currentModule.value ? WORKSPACES[currentModule.value].title : brand.value.product_name,
 );
@@ -180,6 +195,10 @@ async function logout(): Promise<void> {
           <span aria-hidden="true" class="text-base leading-none">{{ sidebarCollapsed ? "»" : "«" }}</span>
         </button>
       </div>
+      <!-- Working-entity context. Persistent and always visible inside the module:
+           every generative action is scoped to it, and acting on the wrong client is
+           the mistake this whole category exists to prevent. -->
+      <EntitySwitcher v-if="!sidebarCollapsed && currentModule === 'secretarial'" />
       <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-2">
         <div v-for="(group, gi) in sidebarGroups" :key="gi" class="mb-2">
           <div

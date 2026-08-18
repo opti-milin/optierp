@@ -24,6 +24,9 @@ SCHEDULED_JOBS: list[dict[str, Any]] = [
     {"func": "app.jobs.assets.process_depreciation", "trigger": "cron", "hour": 3},
     # Advance-tax shortfall reminders (idempotent via tax_compliance_reminders).
     {"func": "app.jobs.tax_reminders.process_tax_reminders", "trigger": "cron", "hour": 7},
+    # Secretarial: roll compliance statuses, chase ROC deadlines, refresh practice
+    # rosters (idempotent via secretarial_compliance_reminders).
+    {"func": "app.jobs.secretarial_reminders.run_nightly", "trigger": "cron", "hour": 8},
 ]
 
 scheduler = AsyncIOScheduler()
