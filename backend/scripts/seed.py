@@ -54,6 +54,12 @@ _SECRETARIAL_DOCTYPES = (
     "Secretarial DSC",
     "Secretarial File",
     "Secretarial Compliance Item",
+    # Phases 2-4
+    "Secretarial Document",
+    "Secretarial Meeting",
+    "Secretarial Circular Resolution",
+    "Secretarial Certified True Copy",
+    "Secretarial Filing",
 )
 
 _CS_FULL = ["read", "write", "create", "delete", "submit", "cancel", "print", "email", "report"]
@@ -72,10 +78,19 @@ _SECRETARIAL_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     *[("Company Secretary", dt, _CS_FULL) for dt in _SECRETARIAL_DOCTYPES],
     *[("CS Associate", dt, _CS_ASSOCIATE) for dt in _SECRETARIAL_DOCTYPES],
     *[("CS Trainee", dt, _CS_TRAINEE) for dt in _SECRETARIAL_DOCTYPES],
+    # An associate drafts and circulates but does not certify: issuing a CTC puts a
+    # document into a bank's hands, so it stays with the Company Secretary. That falls
+    # out of `submit` — which POST /secretarial/ctcs requires and `_CS_ASSOCIATE` does
+    # not carry. Listing the doctype again with a narrower action list would achieve
+    # nothing: `_grant` only ever turns permissions on, never off.
     *[("Compliance Reviewer", dt, ["read", "report"]) for dt in _SECRETARIAL_DOCTYPES],
     # Publishing statutory content and signing off completion is the reviewer's job.
     ("Compliance Reviewer", "Secretarial Compliance Rule", ["read", "write", "submit", "report"]),
     ("Compliance Reviewer", "Secretarial Compliance Item", ["read", "write", "submit", "report"]),
+    # Content packs sit behind the same publish gate as the rules, and the review
+    # endpoint is gated on `submit` against Secretarial Document. Without this the role
+    # designed to publish statutory content cannot publish half of it.
+    ("Compliance Reviewer", "Secretarial Document", ["read", "write", "submit", "report"]),
     ("Company Secretary", "Secretarial Compliance Rule", ["read", "report"]),
     ("CS Associate", "Secretarial Compliance Rule", ["read", "report"]),
     ("CS Trainee", "Secretarial Compliance Rule", ["read", "report"]),
@@ -267,6 +282,47 @@ async def seed_masters(db: AsyncSession) -> None:
 
     await _seed_hsn_codes(db)
     await _seed_secretarial_rules(db)
+    await _seed_secretarial_packs(db)
+
+
+async def _seed_secretarial_packs(db: AsyncSession) -> None:
+    """Load the document content packs as **draft**, same gate as the rules.
+
+    Each pack's fragments are validated as block trees on load rather than at render
+    time, so a malformed pack is a seeding failure a developer sees, never a broken
+    document a client sees.
+    """
+    from app.models.secretarial import SecretarialContentPack
+    from app.services.secretarial import blocks as block_lib
+
+    existing = set(
+        (
+            await db.execute(
+                select(SecretarialContentPack.code, SecretarialContentPack.version).where(
+                    SecretarialContentPack.company_id.is_(None)
+                )
+            )
+        ).all()
+    )
+    added = 0
+    for row in _load("secretarial_content_packs.json"):
+        if (row["code"], 1) in existing:
+            continue
+        for name, tree in (row.get("fragments") or {}).items():
+            block_lib.validate_tree(tree, where=f"{row['code']}.{name}")
+        db.add(
+            SecretarialContentPack(
+                company_id=None,
+                version=1,
+                is_system=True,
+                review_status="draft",
+                **row,
+            )
+        )
+        added += 1
+    if added:
+        await db.flush()
+        print(f"Seeded {added} secretarial content packs (draft — awaiting legal review)")
 
 
 async def _seed_secretarial_rules(db: AsyncSession) -> None:

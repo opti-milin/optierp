@@ -663,6 +663,7 @@ class GenerateCalendarResult(BaseModel):
     items_refreshed: int
     items_skipped_not_applicable: int
     unpublished_rules_ignored: int
+    applicability_unknown: int = 0
 
 
 # --- Workspace ------------------------------------------------------------------

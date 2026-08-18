@@ -31,12 +31,13 @@ from app.schemas.secretarial import (
     GenerateCalendarResult,
 )
 from app.services.audit import log_audit, serialize_document
+from app.services.secretarial import applicability as applicability_engine
 from app.services.secretarial import content as content_service
+from app.services.secretarial import financial_facts as facts_service
 from app.services.secretarial.common import (
     compute_due_date,
     fy_period,
     get_entity,
-    is_applicable,
     parse_fy,
 )
 
@@ -76,9 +77,16 @@ async def generate_calendar(
     unpublished = len([r for r in all_rules if r.review_status != "published"])
 
     created = refreshed = skipped = 0
+    unknown_applicability: list[str] = []
 
     for entity in entities:
         period_start, period_end = fy_period(payload.fy, entity.fy_end_mmdd)
+
+        # Phase 4: thresholds are decided from real numbers where we have them.
+        # An entity whose books are in this account gets them derived from the
+        # ledger; everyone else from whatever was entered by hand.
+        facts = await facts_service.get_facts(db, entity, payload.fy)
+        predicate_context = applicability_engine.build_context(entity, facts)
         is_first_fy = bool(
             entity.incorporated_on and period_start <= entity.incorporated_on <= period_end
         )
@@ -101,9 +109,17 @@ async def generate_calendar(
         }
 
         for rule in rules:
-            if not is_applicable(rule.applicability, entity):
+            verdict, reasons = applicability_engine.evaluate(
+                rule.applicability, predicate_context
+            )
+            if verdict == applicability_engine.Verdict.NOT_APPLICABLE:
                 skipped += 1
                 continue
+            if verdict == applicability_engine.Verdict.UNKNOWN:
+                # Never silently exempt a company because a figure is missing —
+                # that is how a compliance tool tells someone they owe nothing.
+                # The row is created and flagged for a human instead.
+                unknown_applicability.append(f"{entity.entity_name}: {rule.code}")
             # An entity incorporated after the year closed has no obligations for it.
             if entity.incorporated_on and entity.incorporated_on > period_end:
                 skipped += 1
@@ -135,6 +151,12 @@ async def generate_calendar(
                         period_end=period_end,
                         due_on=due_on,
                         status="overdue" if due_on < date.today() else "upcoming",
+                        notes=(
+                            "Applicability could not be decided automatically: "
+                            + "; ".join(reasons)
+                            if verdict == applicability_engine.Verdict.UNKNOWN
+                            else None
+                        ),
                         owner=user.id,
                         modified_by=user.id,
                     )
@@ -157,6 +179,12 @@ async def generate_calendar(
             company_id=str(user.company_id),
             count=unpublished,
         )
+    if unknown_applicability:
+        logger.info(
+            "secretarial_calendar_applicability_unknown",
+            company_id=str(user.company_id),
+            count=len(unknown_applicability),
+        )
 
     return GenerateCalendarResult(
         fy=payload.fy,
@@ -166,6 +194,7 @@ async def generate_calendar(
         items_refreshed=refreshed,
         items_skipped_not_applicable=skipped,
         unpublished_rules_ignored=unpublished,
+        applicability_unknown=len(unknown_applicability),
     )
 
 
@@ -268,9 +297,25 @@ async def update_item(
             data.setdefault("completed_on", date.today())
 
     before = serialize_document(item)
+    previous_status = item.status
     for field, value in data.items():
         setattr(item, field, value)
     item.modified_by = user.id
+
+    if item.status != previous_status:
+        # Append-only trail: who moved it, when, and why (plan §19.10).
+        from app.models.secretarial import SecretarialStatusHistory
+
+        db.add(
+            SecretarialStatusHistory(
+                company_id=user.company_id,
+                item_id=item.id,
+                from_status=previous_status,
+                to_status=item.status,
+                reason=data.get("waived_reason") or data.get("notes"),
+                changed_by=user.id,
+            )
+        )
     await db.flush()
     await log_audit(
         db,

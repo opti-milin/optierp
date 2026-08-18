@@ -833,6 +833,16 @@ const SECRETARIAL: WorkspaceConfig = {
       ],
     },
     {
+      title: "Governance",
+      items: [
+        { label: "Meetings", to: "/secretarial/meetings" },
+        { label: "Circular resolutions", to: "/secretarial/circulars" },
+        { label: "Document library", to: "/secretarial/documents" },
+        { label: "Certified true copies", to: "/secretarial/ctcs" },
+        { label: "Filings", to: "/secretarial/filings" },
+      ],
+    },
+    {
       title: "Registers",
       items: [
         { label: "Directors & KMP", to: "/secretarial/directors" },
@@ -885,14 +895,20 @@ const SECRETARIAL: WorkspaceConfig = {
       ],
     },
     {
+      title: "Governance",
+      links: [
+        { label: "Meetings, agendas & minutes", to: "/secretarial/meetings" },
+        { label: "Circular resolutions (s.175)", to: "/secretarial/circulars" },
+        { label: "Document library", to: "/secretarial/documents" },
+        { label: "Certified true copies", to: "/secretarial/ctcs" },
+        { label: "Filings & evidence chain", to: "/secretarial/filings" },
+      ],
+    },
+    {
       title: "Practice",
       links: [
         { label: "Clients", to: "/secretarial/clients" },
         { label: "Who can access these records", to: "/secretarial/access" },
-        { label: "Board meetings", planned: true },
-        { label: "Circular resolutions", planned: true },
-        { label: "Certified true copies", planned: true },
-        { label: "Document library", planned: true },
       ],
     },
   ],

@@ -52,8 +52,13 @@ from app.api.v1.manufacturing import (
     workspace as manufacturing_workspace,
 )
 from app.api.v1 import registry as metadata_engine
+from app.api.v1 import portal as secretarial_portal
 from app.api.v1.secretarial import (
+    circulars as secretarial_circulars,
     compliance as secretarial_compliance,
+    documents as secretarial_documents,
+    filings as secretarial_filings,
+    meetings as secretarial_meetings,
     engagements as secretarial_engagements,
     entities as secretarial_entities,
     files as secretarial_files,
@@ -196,6 +201,12 @@ api_v1_router.include_router(tally_catalogue.router)
 # "/secretarial" routers: its /entities/{id} path would otherwise shadow the more
 # specific /secretarial/registers/... and /secretarial/compliance/... prefixes.
 api_v1_router.include_router(secretarial_registers.router)
+api_v1_router.include_router(secretarial_documents.router)
+api_v1_router.include_router(secretarial_meetings.router)
+api_v1_router.include_router(secretarial_circulars.router)
+api_v1_router.include_router(secretarial_filings.router)
+# Unauthenticated by design: directors hold capability tokens, not accounts.
+api_v1_router.include_router(secretarial_portal.router)
 api_v1_router.include_router(secretarial_compliance.router)
 api_v1_router.include_router(secretarial_files.router)
 api_v1_router.include_router(secretarial_engagements.router)

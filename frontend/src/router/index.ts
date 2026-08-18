@@ -31,6 +31,21 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/auth/LoginView.vue"),
     meta: { public: true },
   },
+  // The director portal (Module 13). Public by design: the people opening these links
+  // hold a capability token and no account, so they must never meet the login screen.
+  // Outside the AppShell too — there is no tenant context and nothing to navigate to.
+  {
+    path: "/p/c/:token",
+    name: "portal-circulation",
+    component: () => import("@/views/portal/CirculationView.vue"),
+    meta: { public: true },
+  },
+  {
+    path: "/p/r/:token",
+    name: "portal-consent",
+    component: () => import("@/views/portal/ConsentView.vue"),
+    meta: { public: true },
+  },
   {
     path: "/",
     component: () => import("@/layouts/AppShell.vue"),
@@ -542,6 +557,14 @@ const routes: RouteRecordRaw[] = [
       { path: "secretarial/compliance", name: "secretarial-compliance", component: () => import("@/views/secretarial/ComplianceCalendarView.vue") },
       { path: "secretarial/rules", name: "secretarial-rules", component: () => import("@/views/secretarial/RulesReviewView.vue") },
       { path: "secretarial/access", name: "secretarial-access", component: () => import("@/views/secretarial/EngagementsView.vue") },
+      // Phases 2-3 — the document engine and the governance thread.
+      { path: "secretarial/meetings", name: "secretarial-meetings", component: () => import("@/views/secretarial/MeetingsView.vue") },
+      { path: "secretarial/meetings/:id", name: "secretarial-meeting", component: () => import("@/views/secretarial/MeetingDetailView.vue"), props: true },
+      { path: "secretarial/circulars", name: "secretarial-circulars", component: () => import("@/views/secretarial/CircularsView.vue") },
+      { path: "secretarial/circulars/:id", name: "secretarial-circular", component: () => import("@/views/secretarial/CircularDetailView.vue"), props: true },
+      { path: "secretarial/documents", name: "secretarial-documents", component: () => import("@/views/secretarial/DocumentsView.vue") },
+      { path: "secretarial/ctcs", name: "secretarial-ctcs", component: () => import("@/views/secretarial/CtcsView.vue") },
+      { path: "secretarial/filings", name: "secretarial-filings", component: () => import("@/views/secretarial/FilingsView.vue") },
       // Module 06+ routes register here per module
     ],
   },

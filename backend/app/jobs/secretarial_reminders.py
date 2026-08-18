@@ -177,8 +177,86 @@ async def refresh_practice_rosters(*, on_date: date | None = None) -> int:
     return updated
 
 
+async def sweep_circular_expiry() -> int:
+    """Close out circulars whose response deadline has passed.
+
+    A resolution that quietly stays "circulating" forever is worse than one marked
+    expired: somebody eventually acts on it believing it is still live.
+    """
+    from app.services.secretarial import circular as circular_service
+
+    closed = 0
+    async with async_session_factory() as db:
+        tenants = await _tenants_with_module(db)
+    for company_id in tenants:
+        async with async_session_factory() as db:
+            await set_company_context(db, company_id)
+            try:
+                closed += await circular_service.sweep_expired(db, company_id)
+            except Exception:  # noqa: BLE001 — one tenant must not stop the rest
+                await db.rollback()
+                logger.exception("secretarial_expiry_sweep_failed", company_id=str(company_id))
+    logger.info("secretarial_circulars_expired", closed=closed)
+    return closed
+
+
+async def revoke_tokens_for_ceased_officers() -> int:
+    """Withdraw portal links held by people who no longer hold office.
+
+    An expiry date alone leaves a window: a director who resigned yesterday still has a
+    working consent link until it lapses. This closes it the same night.
+    """
+    from app.models.secretarial import SecretarialAppointment, SecretarialPortalToken
+    from app.services.secretarial import circulation as circulation_service
+
+    revoked = 0
+    async with async_session_factory() as db:
+        tenants = await _tenants_with_module(db)
+
+    for company_id in tenants:
+        async with async_session_factory() as db:
+            await set_company_context(db, company_id)
+            try:
+                live = (
+                    await db.execute(
+                        select(SecretarialPortalToken.person_id)
+                        .where(
+                            SecretarialPortalToken.company_id == company_id,
+                            SecretarialPortalToken.revoked_at.is_(None),
+                            SecretarialPortalToken.person_id.isnot(None),
+                        )
+                        .distinct()
+                    )
+                ).scalars().all()
+                for person_id in live:
+                    still_serving = await db.scalar(
+                        select(SecretarialAppointment.id).where(
+                            SecretarialAppointment.company_id == company_id,
+                            SecretarialAppointment.person_id == person_id,
+                            SecretarialAppointment.ceased_on.is_(None),
+                        )
+                    )
+                    if still_serving is None:
+                        revoked += await circulation_service.revoke_tokens_for_person(
+                            db, person_id, company_id, "No longer holds office"
+                        )
+            except Exception:  # noqa: BLE001
+                await db.rollback()
+                logger.exception("secretarial_token_revocation_failed", company_id=str(company_id))
+
+    logger.info("secretarial_tokens_revoked", revoked=revoked)
+    return revoked
+
+
 async def run_nightly(*, on_date: date | None = None) -> dict[str, int]:
     """Entry point registered with the scheduler."""
     sent = await process_secretarial_reminders(on_date=on_date)
     refreshed = await refresh_practice_rosters(on_date=on_date)
-    return {"reminders_sent": sent, "rosters_refreshed": refreshed}
+    expired = await sweep_circular_expiry()
+    revoked = await revoke_tokens_for_ceased_officers()
+    return {
+        "reminders_sent": sent,
+        "rosters_refreshed": refreshed,
+        "circulars_expired": expired,
+        "tokens_revoked": revoked,
+    }
