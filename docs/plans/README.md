@@ -7,6 +7,7 @@ files as the original design brief.
 
 | Plan | Date | Status | Living doc |
 |------|------|--------|------------|
+| [Secretarial Phase 5 — Capital & s.186](secretarial_phase5_capital.plan.md) | 2026-08-21 | **Complete** — `0100` transfers/certificates/capital events/s.186 + `0101` meeting-serial fix; deep demo seed | [SECRETARIAL_GAP_AND_PLAN.md](../SECRETARIAL_GAP_AND_PLAN.md) |
 | [OCR Line Extraction](ocr_line_extraction.plan.md) | 2026-08-18 | **Complete** — Data Entry OCR tab → `/ocr/extract` (OpenAI-compatible vision) | [OCR.md](../OCR.md) |
 | [Income Tax CA Workspace](income_tax_ca_workspace.plan.md) | 2026-08-04 | **Complete** — unified workspace, BFF + preview compute, minimal data entry, terminology sweep | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |
 | [ITR Enterprise Rearchitecture](itr_enterprise_rearchitecture.plan.md) | 2026-07-31 | **Complete** — Phases 1–10 (`0085`–`0092` + kernel + Tax Workspace); UX superseded by the CA Workspace plan above | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |

@@ -19,20 +19,39 @@ Idempotent: re-running updates the roles and leaves existing users alone.
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import select
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Note: do not use .test/.local domains here — email-validator rejects reserved TLDs.
+DEFAULT_PASSWORD = "Demo!Pass123"
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--password", default=DEFAULT_PASSWORD)
+    parser.add_argument(
+        "--database-url",
+        default=os.environ.get("SEED_DATABASE_URL")
+        or os.environ.get("MIGRATIONS_DATABASE_URL")
+        or os.environ.get("DATABASE_URL"),
+    )
+    return parser.parse_args()
+
+
+ARGS = _parse_args()
+if ARGS.database_url:
+    os.environ["DATABASE_URL"] = ARGS.database_url
+
+from sqlalchemy import select  # noqa: E402
 
 from app.core.database import async_session_factory, set_company_context  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models.core import Company, User, UserRole  # noqa: E402
 from app.models.secretarial import SecretarialSettings  # noqa: E402
-
-# Note: do not use .test/.local domains here — email-validator rejects reserved TLDs.
-DEFAULT_PASSWORD = "Demo!Pass123"
+from app.services import module_flags as module_flags_service  # noqa: E402
 
 # (email, first name, company name, roles)
 DEMO_USERS = [
@@ -91,10 +110,6 @@ async def _ensure_user(db, email: str, first_name: str, company: Company, roles:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--password", default=DEFAULT_PASSWORD)
-    args = parser.parse_args()
-
     async with async_session_factory() as db:
         for email, first_name, company_name, roles in DEMO_USERS:
             company = await _company(db, company_name)
@@ -102,7 +117,7 @@ async def main() -> None:
                 print(f"! company '{company_name}' not found — run scripts.seed_showcase first")
                 continue
             print(f"{company_name}:")
-            await _ensure_user(db, email, first_name, company, roles, args.password)
+            await _ensure_user(db, email, first_name, company, roles, ARGS.password)
 
             # secretarial_settings is RLS-protected, so the tenant context has to
             # be set before writing — the policy applies to INSERT too.
@@ -119,11 +134,17 @@ async def main() -> None:
             else:
                 settings.profile = "business"
             await db.flush()
+            # Without this flag the launcher and sidebar hide the module, so a
+            # freshly seeded demo would look like Secretarial was never built.
+            await module_flags_service.update_module_flags(
+                db, company.id, {"secretarial": True}
+            )
+            print("  secretarial module flag on")
 
         await db.commit()
 
     print(
-        f"\nLogins (password: {args.password})\n"
+        f"\nLogins (password: {ARGS.password})\n"
         f"  owner@mangoappliances.com        — the appliance business, does its own secretarial work\n"
         f"  cs@optireachsecretarial.com      — the CS practice, works on clients\n\n"
         "Neither is a System Manager, so permission checks actually apply to them."

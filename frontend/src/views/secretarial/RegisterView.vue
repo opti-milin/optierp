@@ -24,6 +24,106 @@ const search = ref("");
 const fy = ref("");
 const activeOnly = ref(false);
 const syncResult = ref<string | null>(null);
+const adding = ref(false);
+const saving = ref(false);
+const form = ref<Record<string, string>>({});
+
+interface FieldSpec {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "select";
+  required?: boolean;
+  options?: string[];
+}
+
+const ADD_FIELDS: Record<string, FieldSpec[]> = {
+  members: [
+    { key: "member_name", label: "Member name", type: "text", required: true },
+    { key: "folio_no", label: "Folio", type: "text", required: true },
+    {
+      key: "member_type",
+      label: "Type",
+      type: "select",
+      options: ["individual", "body_corporate", "trust", "huf", "nominee", "government"],
+    },
+    { key: "shares_held", label: "Shares held", type: "number" },
+    { key: "share_class", label: "Share class", type: "text" },
+    { key: "joined_on", label: "Joined on", type: "date" },
+    { key: "pan", label: "PAN", type: "text" },
+  ],
+  committees: [
+    { key: "committee_name", label: "Committee name", type: "text", required: true },
+    { key: "committee_type", label: "Type", type: "text" },
+    { key: "constituted_on", label: "Constituted on", type: "date" },
+    { key: "quorum", label: "Quorum", type: "number" },
+  ],
+  "group-links": [
+    { key: "related_entity_name", label: "Related entity", type: "text", required: true },
+    { key: "related_cin", label: "CIN", type: "text" },
+    {
+      key: "relation",
+      label: "Relation",
+      type: "select",
+      required: true,
+      options: ["holding", "subsidiary", "associate", "joint_venture", "fellow_subsidiary"],
+    },
+    { key: "shareholding_pct", label: "Shareholding %", type: "number" },
+    { key: "valid_from", label: "Valid from", type: "date", required: true },
+  ],
+  "related-parties": [
+    { key: "party_name", label: "Party name", type: "text", required: true },
+    {
+      key: "basis",
+      label: "Basis",
+      type: "select",
+      required: true,
+      options: ["director", "kmp", "member", "group", "relative", "manual"],
+    },
+    { key: "relationship_note", label: "Note", type: "text" },
+    { key: "valid_from", label: "Valid from", type: "date" },
+  ],
+  "beneficial-owners": [
+    { key: "person_name", label: "Name", type: "text", required: true },
+    {
+      key: "classification",
+      label: "Classification",
+      type: "select",
+      required: true,
+      options: ["bo", "sbo", "ubo"],
+    },
+    { key: "holding_pct", label: "Holding %", type: "number" },
+    { key: "valid_from", label: "Valid from", type: "date", required: true },
+    { key: "declared_on", label: "Declared on", type: "date" },
+  ],
+  auditors: [
+    { key: "firm_name", label: "Firm name", type: "text", required: true },
+    { key: "registration_no", label: "Registration no.", type: "text" },
+    {
+      key: "auditor_type",
+      label: "Type",
+      type: "select",
+      options: ["statutory", "internal", "secretarial", "cost", "tax"],
+    },
+    { key: "appointed_on", label: "Appointed on", type: "date" },
+    { key: "email", label: "Email", type: "text" },
+  ],
+  charges: [
+    { key: "holder_name", label: "Charge holder", type: "text", required: true },
+    { key: "charge_type", label: "Type", type: "text" },
+    { key: "amount_secured", label: "Amount secured", type: "number" },
+    { key: "created_on", label: "Created on", type: "date" },
+    { key: "srn", label: "SRN", type: "text" },
+  ],
+  dscs: [
+    { key: "holder_name", label: "Holder", type: "text", required: true },
+    { key: "serial_no", label: "Serial no.", type: "text" },
+    { key: "issuing_authority", label: "Issuing authority", type: "text" },
+    { key: "issued_on", label: "Issued on", type: "date" },
+    { key: "expires_on", label: "Expires on", type: "date" },
+  ],
+};
+
+const addFields = computed(() => ADD_FIELDS[slug.value] ?? []);
 
 const label = computed(
   () => registers.value.find((r) => r.slug === slug.value)?.label ?? slug.value,
@@ -97,6 +197,40 @@ function exportUrl(): string {
   return `/api/v1/secretarial/registers/${slug.value}/export?${params}`;
 }
 
+function openAdd(): void {
+  adding.value = true;
+  form.value = {};
+}
+
+async function saveRow(): Promise<void> {
+  if (!store.entityId) return;
+  saving.value = true;
+  error.value = null;
+  try {
+    const body: Record<string, unknown> = { entity_id: store.entityId };
+    for (const field of addFields.value) {
+      const raw = form.value[field.key];
+      if (raw === undefined || raw === "") {
+        if (field.required) {
+          error.value = { detail: `${field.label} is required.`, code: "required", field: field.key };
+          saving.value = false;
+          return;
+        }
+        continue;
+      }
+      body[field.key] = field.type === "number" ? Number(raw) : raw;
+    }
+    await api.post(`/secretarial/registers/${slug.value}`, body);
+    adding.value = false;
+    form.value = {};
+    await load();
+  } catch (e) {
+    error.value = (e as { response?: { data: ErrorEnvelope } }).response?.data ?? (e as ErrorEnvelope);
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function syncRelatedParties(): Promise<void> {
   if (!store.entityId) return;
   const resp = await api.post<{ added: number; updated: number; removed: number; kept_manual: number }>(
@@ -113,6 +247,7 @@ watch(
   () => [slug.value, store.entityId],
   async () => {
     syncResult.value = null;
+    adding.value = false;
     await load();
   },
 );
@@ -188,7 +323,47 @@ watch(
       >
         Sync from master data
       </button>
+      <button
+        v-if="addFields.length"
+        class="rounded bg-blue-700 px-3 py-1.5 text-sm text-white hover:bg-blue-600"
+        @click="openAdd"
+      >
+        Add row
+      </button>
     </div>
+
+    <form
+      v-if="adding"
+      class="mb-3 grid grid-cols-1 gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:grid-cols-2 lg:grid-cols-3"
+      @submit.prevent="saveRow"
+    >
+      <div v-for="field in addFields" :key="field.key">
+        <label class="block text-xs text-gray-600">{{ field.label }}</label>
+        <select
+          v-if="field.type === 'select'"
+          v-model="form[field.key]"
+          class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+        >
+          <option value="">—</option>
+          <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+        <input
+          v-else
+          v-model="form[field.key]"
+          :type="field.type"
+          class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          :required="field.required"
+        />
+      </div>
+      <div class="flex items-end gap-2 sm:col-span-2">
+        <button type="submit" class="rounded bg-gray-800 px-3 py-1.5 text-sm text-white" :disabled="saving">
+          {{ saving ? "Saving…" : "Save" }}
+        </button>
+        <button type="button" class="rounded border border-gray-300 px-3 py-1.5 text-sm" @click="adding = false">
+          Cancel
+        </button>
+      </div>
+    </form>
 
     <p v-if="syncResult" class="mb-3 rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-800">
       {{ syncResult }}

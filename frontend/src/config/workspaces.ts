@@ -830,6 +830,7 @@ const SECRETARIAL: WorkspaceConfig = {
           profiles: ["business"],
         },
         { label: "Compliance calendar", to: "/secretarial/compliance", icon: "🗓" },
+        { label: "Financial figures", to: "/secretarial/facts", icon: "₹" },
       ],
     },
     {
@@ -840,6 +841,13 @@ const SECRETARIAL: WorkspaceConfig = {
         { label: "Document library", to: "/secretarial/documents" },
         { label: "Certified true copies", to: "/secretarial/ctcs" },
         { label: "Filings", to: "/secretarial/filings" },
+      ],
+    },
+    {
+      title: "Capital",
+      items: [
+        { label: "Share capital", to: "/secretarial/capital" },
+        { label: "Loans & investments", to: "/secretarial/s186" },
       ],
     },
     {

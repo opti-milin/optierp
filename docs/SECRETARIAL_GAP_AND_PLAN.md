@@ -1,8 +1,8 @@
 # Module 13 — Company Secretarial & Governance: gap & plan
 
-**Status:** Phases 0–1 **BUILT** 2026-08-17 (migrations `0094`–`0095`); Phases 2–6 designed, not built
+**Status:** Phases 0–5 engineering **BUILT** (migrations `0094`–`0101`; Phase 4 tables shipped in `0096`, Phase 5 in `0100`). Phase 6 not started. Demo click-through: `scripts.seed_secretarial_demo` + `scripts.seed_secretarial_scenario` + `scripts.seed_secretarial_deep`.
 **Source brief:** [cosecoffice-technical-teardown.md](cosecoffice-technical-teardown.md) — competitor teardown; §§11–12, 17–19 there are recommendations, not observed internals.
-**Migrations:** `0094` onwards. **Branch:** `feat/secretarial` (off `feat/manufacturing`).
+**Migrations:** `0094` onwards. **Branch:** `develop` / `feat/ocr` (Module 13 landed on `develop`).
 
 This is the *living* doc. Update the phase checkboxes here as work lands; treat the
 teardown as the frozen design brief.
@@ -205,7 +205,7 @@ in the ERP sense and without DIN/KYC/effective-dating. Link optionally
 ### 2.5 Documents are re-renderable, not blobs
 
 The repo has no object storage and no file-upload surface at all today (Tally takes
-base64 in a JSON body with a size cap — `api/v1/tally/imports.py`). Building a document
+base64 in a JSON body with a size cap — `api/v1/migration/imports.py`). Building a document
 library on blob storage would be a large detour.
 
 Instead: **a generated document is stored as its inputs plus a pinned template version,
@@ -424,9 +424,10 @@ entity-scoped ones; append-only where marked.
 `secretarial_financial_facts` · `secretarial_filings` (form, SRN, challan, filed_on) ·
 `secretarial_compliance_status_history` *(append-only)* — plus applicability columns on the rule catalogue
 
-**Phase 5 — capital & s.186 (`0099`)**
-`secretarial_share_transfer_details` · `secretarial_share_certificates` · `secretarial_capital_events` ·
-`s186_limits` · `s186_entries`
+**Phase 5 — capital & s.186 (`0100`) — BUILT**
+`secretarial_share_transfer_details` · `secretarial_share_certificates` ·
+`secretarial_distinctive_seq` · `secretarial_capital_events` ·
+`secretarial_s186_limits` · `secretarial_s186_entries`
 
 **Phase 6 — practice & differentiation (`0100`)**
 `secretarial_tasks` · `secretarial_task_checklist_items` · `secretarial_approvals` (maker–checker) ·
@@ -484,7 +485,9 @@ frontend/src/
 | Circular | `draft → circulating → passed \| failed \| expired → ratified` | **Rule 5 eligibility gate on `draft→circulating`** — 422 with statutory refs; outcome computed server-side from responses, never client-set |
 | Consent response | `pending → viewed → consented \| declined \| abstained` | append-only; one active token per (circular, person) |
 | CTC | `issued` only | append-only; a correction is a *new* issuance referencing the superseded one |
-| Share transfer | `draft → board_approved → issued_posted → [reverted(reason)]` | reason mandatory; certificates cancelled/reissued in the same transaction |
+| Share transfer | `draft → board_approved → issued_posted → [reverted(reason)]` | reason mandatory; approval refused against a meeting not yet held; certificates cancelled/reissued in the same transaction |
+| Share certificate | `issued → cancelled \| surrendered` | never edited; a replacement supersedes and carries the **same distinctive range**, and a GiST exclusion constraint stops two live certificates of a class overlapping |
+| Capital event | `draft → approved → allotted`, plus `cancelled` before allotment | approval needs the authorising resolution; a dividend is refused above distributable profit and the s.123 verdict is frozen onto the row; allotment cuts a certificate per allottee in the same transaction |
 | Compliance item | `not_applicable → upcoming → due → in_progress → pending_review → filed → completed`, plus `overdue`, `waived(reason)` | waive needs reason + permission; every transition appended to history |
 | Task | `open → in_progress → blocked → done \| cancelled` | — |
 
@@ -624,6 +627,11 @@ sticky-module logic in `AppShell.vue`.
 Public routes `/p/c/:token` (circulation) and `/p/r/:token` (consent) render in a
 minimal mobile-first layout with no app chrome and no auth.
 
+Phase 5 adds a **Capital** sidebar group: `/secretarial/capital` (cap table · certificates ·
+transfers · capital events, with the s.123 dividend check on the cap-table tab) and
+`/secretarial/s186` (the MBP-2 register against its s.186(2) ceiling). Both are served by
+`/api/v1/secretarial/capital/*`.
+
 ---
 
 ## 10. Phases
@@ -657,42 +665,61 @@ yet), reminder job live.
 **Done when:** every register renders, filters by FY, and exports; the calendar shows the
 right ~15 rows for a private company and ~6 for an LLP, and emails a reminder at T-7.
 
-### Phase 2 — Document engine · `0096` · ~2.5 weeks
+### Phase 2 — Document engine · `0096` · ✅ **BUILT 2026-08-18**
 Block-tree schema (§2.6) + content-pack loader, **PDF renderer only**, letterhead layer,
-document library with versioning and diff summary, guided event forms, the 15 packs in §6
-plus the LLP agreement and partners' resolution packs.
-**Done when:** a director-appointment event captured in a guided form produces a board
-resolution and appointment letter as PDF on letterhead, re-downloads byte-identically a
-week later, and produces a *new version* (not an overwrite) after the effective date
-changes — and `render_docx.py` can be added without touching a single pack.
+document library with versioning, guided event forms, New version (regenerate). Packs
+seed as `draft`; `seed_secretarial_scenario` publishes them with a placeholder reviewer
+so Generate actually produces a PDF.
+**Still open:** `render_docx.py` (Phase 6). Byte-identical re-download is the HTML/PDF
+path, not a stored blob.
 
-### Phase 3 — Governance · `0097` · ~3.5 weeks *(the moat)*
-Meetings (BM/AGM/EGM/committee) with committee-scoped participants · agenda builder ·
-SS-1/SS-2 date math and minutes-book numbering · attendance and leave of absence ·
-notice/minutes/attendance from one agenda · tracked circulation with tokenised links and
-pending→viewed→acknowledged evidence · **director portal** · circular resolutions with the
-Rule 5 gate, live tally, auto pass/fail/expire and ratification chaining · CTC with six
-passage modes, prefill, signatory grid and append-only issuance log · audit exports.
-**Done when:** the full thread runs — circulate a resolution, consent from a phone with no
-login, watch it auto-pass, see the ratification item appear on the next board agenda
-(created automatically if none exists), and issue a CTC prefilled from it — with a CSV
-audit export that stands up to inspection.
+### Phase 3 — Governance · `0096`+`0097` · ✅ **BUILT 2026-08-18** *(the moat)*
+Meetings (BM/AGM/EGM/committee) with agenda · SS-1/SS-2 date math and minutes-book
+numbering · notice/minutes/attendance from one agenda · tracked circulation with
+tokenised links · **director portal** (`0097` token lookup) · circular resolutions with
+the Rule 5 gate · CTC with issuance log.
+**Still open:** the full “circulate → phone consent → auto-pass → auto ratification
+agenda → CTC” thread is wired but needs live emails on directors to exercise end-to-end
+without the API; demo seed creates the draft meeting and both circulars (one eligible,
+one Rule-5 blocked).
 
-### Phase 4 — Compliance engine & filings · `0098` · ~2 weeks
-Financial-facts interface (both modes), applicability AST, nightly + on-change evaluation,
-status history, filings with form/SRN/challan tied back to the source resolution.
-**Done when:** an entity that crosses the CSR threshold in the ledger automatically gains
-its CSR rows, and a filed MGT-7 shows the chain resolution → document → form → SRN → challan.
+### Phase 4 — Compliance engine & filings · `0096` (not a separate `0098`) · ✅ **BUILT 2026-08-18**
+Financial-facts interface (ledger-derived and manual), applicability AST, filings with
+form/SRN/challan and an evidence-chain walk. UI: **Financial figures**
+(`/secretarial/facts`) plus the same panel on Company details.
+**Still open:** nightly on-change re-evaluation of the calendar when facts cross a
+threshold is generate-on-demand, not a watcher.
 
-### Phase 5 — Capital & s.186 · `0099` · ~2.5 weeks
-SH-4 legal wrapper on the existing `ShareTransfer`, SH-1 certificates with distinctive
-ranges and deferred issue, register of members/transfers/renewed certificates,
-revert-with-reason, right issue / private placement / ESOP packs, s.186 register with
-ledger-derived enabling limits, dividend distributable-profit check.
-**Done when:** a transfer moves shares, issues a certificate, cancels the original, and a
-revert with reason realigns the register while leaving the full trail intact.
+### Phase 5 — Capital & s.186 · `0100` · ✅ **BUILT 2026-08-21**
+SH-4 wrapper on the accounts `ShareTransfer`, SH-1 certificates with serialised
+distinctive ranges and deferred issue, register of transfers and renewed certificates,
+revert-with-reason, right issue / private placement / ESOP / s.186 packs, s.186 register
+with ledger-derived enabling limits, s.123 dividend check. UI: **Share capital**
+(`/secretarial/capital`) and **Loans & investments** (`/secretarial/s186`).
 
-### Phase 6 — Practice & differentiation · `0100` · ~3.5 weeks
+**The load-bearing decision:** there is still exactly one cap table, and it is the
+accounts one. `secretarial_share_transfer_details` *wraps* a `share_transfers` row rather
+than duplicating it; where the client's books are elsewhere the wrapper stands alone and
+the cap-table endpoint reports `source: register` instead of `ledger`. See
+[the plan](plans/secretarial_phase5_capital.plan.md) §1.
+
+**Two integrity mechanisms worth knowing before editing:** distinctive numbers come from
+a locked counter row (the minutes-book pattern) and are additionally protected by a GiST
+exclusion constraint, so two live certificates of a class can never claim the same
+shares; and a cancelled certificate's range is never returned to the pool — the
+replacement carries it, because the range identifies the shares and not the paper.
+
+**Still open:** PAS-3/SH-7 are recorded as filings by hand rather than pre-filled from
+the capital event; ESOP exercise (options → shares) is not modelled, only the grant; a
+transfer surrenders a whole certificate, so splitting one is a manual cancel-and-reissue.
+
+Two defects in earlier phases surfaced while driving this end to end and were fixed:
+meetings were numbered per entity instead of per book (`0101`), so an entity's first AGM
+collided with its first board meeting; and `transition(…, "held", on_date=…)` ignored the
+date, stamping a meeting recorded after the fact with today and starting the SS-1 minutes
+clocks from the wrong day.
+
+### Phase 6 — Practice & differentiation · `0102` · ~3.5 weeks · ❌ not started
 Task manager with checklist templates, maker–checker approvals, read-only client portal,
 `transfer_entity_ownership()` (managed → delegated promotion), **DOCX renderer**, AI
 drafting at declared slots, MCA import adapters (manual + Excel + provider seam), e-sign

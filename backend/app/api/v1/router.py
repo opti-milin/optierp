@@ -55,6 +55,7 @@ from app.api.v1.manufacturing import (
 from app.api.v1 import registry as metadata_engine
 from app.api.v1 import portal as secretarial_portal
 from app.api.v1.secretarial import (
+    capital as secretarial_capital,
     circulars as secretarial_circulars,
     compliance as secretarial_compliance,
     documents as secretarial_documents,
@@ -202,6 +203,7 @@ api_v1_router.include_router(tally_catalogue.router)
 # Module 13 — Company Secretarial & Governance. `entities` last among the bare
 # "/secretarial" routers: its /entities/{id} path would otherwise shadow the more
 # specific /secretarial/registers/... and /secretarial/compliance/... prefixes.
+api_v1_router.include_router(secretarial_capital.router)
 api_v1_router.include_router(secretarial_registers.router)
 api_v1_router.include_router(secretarial_documents.router)
 api_v1_router.include_router(secretarial_meetings.router)

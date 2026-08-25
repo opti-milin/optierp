@@ -44,8 +44,9 @@ Vue 3 SPA  ──HTTP/JSON──►  FastAPI (app/api routers, thin)
 ## 2. Current Transition State
 
 - **Branch:** `feat/ocr` (on current `develop`, including Module 13 secretarial).
-- **Latest migration head:** `0097_portal_token_lookup` (after `0096` / `0095` / `0094` secretarial / `0093_tally_import`).
+- **Latest migration head:** `0101_meeting_serial_per_type` (after `0100_secretarial_capital`, `0094`–`0097` secretarial, `0093_tally_import`).
 - **Exact spot:** **Manufacturing Phases 0–9 complete** (incl. live delivery-date chain + outbound transit days). True finite-capacity APS remains out of scope.
+- **Module 13 Secretarial** — Phases 0–5 engineering built (`0094`–`0101`). **Phase 5 (capital & s.186, `0100`)**: SH-4 transfers wrapping the accounts cap table, SH-1 certificates with serialised distinctive ranges, capital events (rights issue / placement / ESOP / dividend), the s.186 register against its s.186(2) ceiling, and the s.123 dividend check — UI at `/secretarial/capital` and `/secretarial/s186`. Phase 6 (tasks, maker–checker, DOCX, client portal) not started. Demo: `seed_secretarial_demo` → `seed_secretarial_scenario` → **`seed_secretarial_deep`** (the last one drives every submodule through a real lifecycle — signed minutes, consents, CTCs, a posted transfer). See [docs/SECRETARIAL_GAP_AND_PLAN.md](docs/SECRETARIAL_GAP_AND_PLAN.md) and [docs/SECRETARIAL_VERIFY.md](docs/SECRETARIAL_VERIFY.md).
 - **OCR line-item extraction** — Data Entry **OCR** tab calls `POST /api/v1/ocr/extract` (OpenAI-compatible vision). Set `OCR_API_KEY` to enable. See [docs/OCR.md](docs/OCR.md).
 - **ITR enterprise rearchitecture** — [docs/plans/itr_enterprise_rearchitecture.plan.md](docs/plans/itr_enterprise_rearchitecture.plan.md) is the **master spec**. Architecture: [docs/TAXATION_ARCHITECTURE.md](docs/TAXATION_ARCHITECTURE.md).
   - **Phases 1–8 done** (`0085`–`0091`): statutory catalogue, registrations, kernel, computations/runs, challans/credits/GL, corporate depth, interest/calendar, ITR-6 filings.

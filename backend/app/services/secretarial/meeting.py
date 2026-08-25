@@ -523,7 +523,17 @@ async def transition(
             raise ValidationError(str(check["message"]), field="notice_sent_on")
 
     elif target == "held":
-        meeting.held_at = meeting.held_at or datetime.now(UTC)
+        # `on_date` is honoured here, not just on the notice and minutes steps. A meeting
+        # is routinely marked held some days after it happened — while writing the minutes
+        # — and stamping it with today would put the wrong date on the minute book and
+        # start the SS-1 fifteen/thirty-day clocks from the wrong day. The scheduled
+        # time of day is kept, since that is the time the notice named.
+        if meeting.held_at is None:
+            meeting.held_at = (
+                datetime.combine(on_date, meeting.scheduled_at.timetz())
+                if on_date is not None
+                else datetime.now(UTC)
+            )
         draft_due, signed_due = ss_dates.minutes_deadlines(meeting.held_at.date())
         meeting.minutes_draft_due_on = draft_due
         meeting.minutes_signed_due_on = signed_due

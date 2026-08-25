@@ -75,7 +75,11 @@ class SecretarialMeeting(Base, DocumentMixin, CompanyScopedMixin):
 
     __tablename__ = "secretarial_meetings"
     __table_args__ = (
-        UniqueConstraint("entity_id", "serial_no", name="uq_secretarial_meeting_serial"),
+        # Per book, not per entity: "the 5th Board Meeting" and "the 5th AGM" are
+        # different meetings that both legitimately carry the number 5.
+        UniqueConstraint(
+            "entity_id", "meeting_type", "serial_no", name="uq_secretarial_meeting_serial"
+        ),
         Index("ix_secretarial_meetings_entity", "entity_id", "meeting_type", "scheduled_at"),
         Index("ix_secretarial_meetings_status", "company_id", "status"),
     )

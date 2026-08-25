@@ -60,6 +60,13 @@ _SECRETARIAL_DOCTYPES = (
     "Secretarial Circular Resolution",
     "Secretarial Certified True Copy",
     "Secretarial Filing",
+    # Phase 5 — capital. Appended to the same tuple on purpose: every role and every
+    # engagement projection below is built by iterating it, so the new doctypes inherit
+    # the whole matrix without a single new rule.
+    "Secretarial Share Transfer",
+    "Secretarial Share Certificate",
+    "Secretarial Capital Event",
+    "Secretarial s.186 Entry",
 )
 
 _CS_FULL = ["read", "write", "create", "delete", "submit", "cancel", "print", "email", "report"]

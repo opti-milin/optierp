@@ -7,6 +7,7 @@
 import { ref, watch } from "vue";
 import { api } from "@/api/client";
 import CompanyForm from "@/components/secretarial/CompanyForm.vue";
+import FinancialFactsPanel from "@/components/secretarial/FinancialFactsPanel.vue";
 import { useSecretarialStore } from "@/stores/secretarial";
 import type { ErrorEnvelope } from "@/types/core";
 import type { EntityDetail } from "@/types/secretarial";
@@ -46,7 +47,7 @@ watch(() => store.entityId, load);
 </script>
 
 <template>
-  <div class="max-w-3xl">
+  <div class="max-w-4xl">
     <div class="mb-4">
       <h1 class="text-xl font-semibold text-gray-900">Company details</h1>
       <p class="text-sm text-gray-500">
@@ -64,6 +65,13 @@ watch(() => store.entityId, load);
 
     <div v-if="detail" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <CompanyForm :existing="detail" mode="company" @saved="onSaved" @cancel="load" />
+    </div>
+
+    <div v-if="store.entityId" class="mt-6">
+      <FinancialFactsPanel
+        :entity-id="store.entityId"
+        :linked="Boolean(detail?.linked_company_id)"
+      />
     </div>
   </div>
 </template>

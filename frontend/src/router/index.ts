@@ -565,6 +565,9 @@ const routes: RouteRecordRaw[] = [
       { path: "secretarial/documents", name: "secretarial-documents", component: () => import("@/views/secretarial/DocumentsView.vue") },
       { path: "secretarial/ctcs", name: "secretarial-ctcs", component: () => import("@/views/secretarial/CtcsView.vue") },
       { path: "secretarial/filings", name: "secretarial-filings", component: () => import("@/views/secretarial/FilingsView.vue") },
+      { path: "secretarial/facts", name: "secretarial-facts", component: () => import("@/views/secretarial/FactsView.vue") },
+      { path: "secretarial/capital", name: "secretarial-capital", component: () => import("@/views/secretarial/CapitalView.vue") },
+      { path: "secretarial/s186", name: "secretarial-s186", component: () => import("@/views/secretarial/S186View.vue") },
       // Module 06+ routes register here per module
     ],
   },
