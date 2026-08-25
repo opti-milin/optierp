@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { brand } from "@/brand";
+import DelegatedBanner from "@/components/secretarial/DelegatedBanner.vue";
 import EntitySwitcher from "@/components/secretarial/EntitySwitcher.vue";
 import { WORKSPACES, type WsNavGroup } from "@/config/workspaces";
 import { useAuthStore } from "@/stores/auth";
@@ -198,6 +199,9 @@ async function logout(): Promise<void> {
       <!-- Working-entity context. Persistent and always visible inside the module:
            every generative action is scoped to it, and acting on the wrong client is
            the mistake this whole category exists to prevent. -->
+      <!-- One level above the entity: which *tenant* am I acting in. Rendered before
+           the switcher so a delegated visit is the first thing read, not the last. -->
+      <DelegatedBanner v-if="!sidebarCollapsed && currentModule === 'secretarial'" />
       <EntitySwitcher v-if="!sidebarCollapsed && currentModule === 'secretarial'" />
       <nav class="sidebar-scroll flex-1 overflow-y-scroll scroll-smooth p-2">
         <div v-for="(group, gi) in sidebarGroups" :key="gi" class="mb-2">
@@ -252,7 +256,13 @@ async function logout(): Promise<void> {
            already changes in those cases. Including the query string here would
            remount the view on every filter, tab or section change, discarding
            unsaved editor state — so views that drive their own query must watch it. -->
-      <RouterView :key="route.path" />
+      <!-- Keyed on the tenant as well as the path. Switching company replaces every
+           record on screen, and a view that stays mounted keeps rendering the previous
+           tenant's data until something happens to refetch it — which, on a page whose
+           whole job is "whose company am I looking at", is the one stale state that is
+           genuinely unsafe. -->
+      <p v-if="secretarial.switchingTenant" class="p-6 text-sm text-gray-500">Switching company…</p>
+      <RouterView v-else :key="`${auth.companyId ?? 'none'}:${route.path}`" />
     </main>
   </div>
 </template>

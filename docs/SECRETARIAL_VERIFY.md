@@ -220,6 +220,31 @@ WHERE user_id = '<firm user>' AND company_id = '<client company>' AND role LIKE 
 - [ ] Press **Activate**. The same query now returns **4** rows, and critically
       `company_id IS NOT NULL` on every one — a global role row would leak the firm into
       every tenant that user touches.
+
+### Opening a delegated client from the UI
+
+The roster is the front door for this — no curl needed. Signed in as
+`cs@optireachsecretarial.com`, go to **Clients**:
+
+- [ ] The delegated row (Mango Appliances Demo) offers **Open their account →**. The
+      managed rows say "Work on this" instead, because those records are already in
+      this tenant and only the selection changes.
+- [ ] Pressing it switches tenant and lands on the Secretarial overview showing the
+      *client's* numbers, not the firm's.
+- [ ] A blue **"Working inside a client account"** banner sits at the top of the sidebar,
+      names the client, says the work is logged against the firm, and carries a
+      one-click **← Back to <firm>**. This is the one indicator that must never be
+      wrong: acting in the wrong *tenant* is worse than acting on the wrong entity.
+- [ ] The sidebar flips to the client's own profile — "Company details" and "My CS"
+      replace "Clients" and "Client access" — because inside their tenant that is what
+      the module is.
+- [ ] Press **Back**. The banner clears and the firm's own roster and totals return.
+- [ ] **Hard-refresh while inside a client.** You are returned to the firm and the
+      banner disappears. That is `POST /auth/refresh` re-issuing against
+      `default_company_id` (rough edge 1 below); the banner is cleared rather than left
+      claiming a visit that has ended. Click in again to resume.
+- [ ] **No 403s in the browser console** during either switch. Firm-side views are
+      unmounted for the duration, so nothing refetches under the other tenant's token.
 - [ ] The firm can now `POST /auth/switch-company` into the client and see the client's
       entity on its roster, tagged `delegated`.
 - [ ] **The firm tries to revoke its own engagement → refused**: "Only the client who
