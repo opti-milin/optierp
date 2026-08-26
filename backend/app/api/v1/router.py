@@ -69,10 +69,11 @@ from app.api.v1.secretarial import (
     workspace as secretarial_workspace,
 )
 from app.api.v1.selling import cm_plans, quotations, sales_orders, workspace as selling_workspace
-from app.api.v1.tally import (
-    catalogue as tally_catalogue,
-    imports as tally_imports,
-    mappings as tally_mappings,
+from app.api.v1.migration import (
+    catalogue as migration_catalogue,
+    imports as migration_imports,
+    mappings as migration_mappings,
+    sources as migration_sources,
 )
 from app.api.v1.tax import (
     calendar as tax_calendar,
@@ -194,11 +195,13 @@ api_v1_router.include_router(tax_filings.router)
 api_v1_router.include_router(tax_catalogue.router)
 api_v1_router.include_router(tax_registrations.router)
 
-# Module 12 — Data Migration (import from Tally). `catalogue` last: its prefix is
-# the bare "/tally", so the more specific sub-prefixes above must match first.
-api_v1_router.include_router(tally_imports.router)
-api_v1_router.include_router(tally_mappings.router)
-api_v1_router.include_router(tally_catalogue.router)
+# Module 12 — Data Migration (Tally XML/CSV + spreadsheets). `catalogue` last: its prefix is
+# the bare "/migration", so the more specific sub-prefixes above must match first.
+api_v1_router.include_router(migration_imports.router)
+api_v1_router.include_router(migration_mappings.router)
+api_v1_router.include_router(migration_sources.router)
+api_v1_router.include_router(migration_sources.template_router)
+api_v1_router.include_router(migration_catalogue.router)
 
 # Module 13 — Company Secretarial & Governance. `entities` last among the bare
 # "/secretarial" routers: its /entities/{id} path would otherwise shadow the more

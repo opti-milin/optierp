@@ -1,0 +1,94 @@
+"""Coverage-matrix + workspace endpoints — Module 12.
+
+`/migration/catalogue` is the machine-readable answer to "what can I bring over from
+Tally?". The UI renders it as a table and the docs are generated from the same
+data, so the three can never drift apart.
+"""
+
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import ValidationError
+from app.core.permissions import require_permission
+from app.core.security import CurrentUser, get_tenant_db
+from app.schemas.migration import (
+    MigrationCatalogueResponse,
+    MigrationEntityCoverage,
+    MigrationSyncStateResponse,
+)
+from app.services import module_workspace
+from app.services.migration import runner
+from app.services.migration.catalogue import ENTITIES, PRIMARY_GROUPS, VOUCHER_TYPES, coverage_matrix
+
+router = APIRouter(prefix="/migration", tags=["data migration"])
+
+PERMISSION = "Data Migration"
+
+
+@router.get(
+    "/catalogue",
+    response_model=MigrationCatalogueResponse,
+    summary="Tally coverage matrix",
+    description=(
+        "Every Tally entity the importer understands, the OptiERP DocType it "
+        "becomes, and how completely it maps. Also returns the ledger-group and "
+        "voucher-type classification tables the importer uses."
+    ),
+)
+async def get_catalogue(
+    current_user: Annotated[CurrentUser, Depends(require_permission(PERMISSION, "read"))],
+) -> MigrationCatalogueResponse:
+    return MigrationCatalogueResponse(
+        entities=[MigrationEntityCoverage(**row) for row in coverage_matrix()],
+        primary_groups={
+            name: {
+                "root_type": spec.root_type,
+                "account_type": spec.account_type,
+                "party_type": spec.party_type,
+            }
+            for name, spec in PRIMARY_GROUPS.items()
+        },
+        voucher_types={name: spec.doctype for name, spec in VOUCHER_TYPES.items()},
+        modules=sorted({e.module for e in ENTITIES}),
+    )
+
+
+@router.get(
+    "/workspace",
+    summary="Data Migration workspace stats",
+    description="Number cards (imports, documents imported, unmapped names) plus a "
+    "12-month trend, in the shape every module workspace page renders.",
+)
+async def get_workspace(
+    current_user: Annotated[CurrentUser, Depends(require_permission(PERMISSION, "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> dict[str, Any]:
+    if current_user.company_id is None:
+        raise ValidationError("An active company is required")
+    return await module_workspace.get_migration_workspace(db, current_user.company_id)
+
+
+@router.get(
+    "/sync-state",
+    response_model=MigrationSyncStateResponse,
+    summary="How far this company has synced from Tally",
+    description=(
+        "Per Tally company: how many documents came across, the period they "
+        "cover, and the high-water `ALTERID`.\n\n"
+        "That last number is the useful one for a repeat import. Tally bumps "
+        "`ALTERID` on every create or edit, so everything above it is exactly "
+        "what has changed since — which turns the next export from 'the whole "
+        "year again' into a narrow one.\n\n"
+        "Derived from the imported-document ledger, not a stored counter, so it "
+        "cannot drift out of step with what was actually imported."
+    ),
+)
+async def get_sync_state(
+    current_user: Annotated[CurrentUser, Depends(require_permission(PERMISSION, "read"))],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> MigrationSyncStateResponse:
+    if current_user.company_id is None:
+        raise ValidationError("An active company is required")
+    return MigrationSyncStateResponse(**await runner.sync_state(db, current_user.company_id))

@@ -123,6 +123,7 @@ async def get_stock_reconciliation(
 async def list_stock_reconciliations(
     db: AsyncSession, company_id: uuid.UUID | None, page: int = 1, page_size: int = 20,
     purpose: str | None = None,
+    *, include_cancelled: bool = False,
 ) -> tuple[list[StockReconciliation], int]:
     stmt = (
         select(StockReconciliation)
@@ -131,6 +132,12 @@ async def list_stock_reconciliations(
     )
     if purpose:
         stmt = stmt.where(StockReconciliation.purpose == purpose)
+    # Cancelled documents keep their reversing entries — that is the audit
+    # trail — but they are noise in the working list, and a rolled-back import
+    # would otherwise leave its cancelled documents on every screen. Pass
+    # include_cancelled=True to see them.
+    if not include_cancelled:
+        stmt = stmt.where(StockReconciliation.docstatus != DOCSTATUS_CANCELLED)
     return await paginate(db, stmt, page, page_size)
 
 

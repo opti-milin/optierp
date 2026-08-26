@@ -27,6 +27,9 @@ SCHEDULED_JOBS: list[dict[str, Any]] = [
     # Secretarial: roll compliance statuses, chase ROC deadlines, refresh practice
     # rosters (idempotent via secretarial_compliance_reminders).
     {"func": "app.jobs.secretarial_reminders.run_nightly", "trigger": "cron", "hour": 8},
+    # Retire Tally imports whose background run stopped beating (idempotent;
+    # only touches sessions stuck in "Importing" past the heartbeat timeout).
+    {"func": "app.jobs.migration_reaper.run_reaper", "trigger": "interval", "minutes": 10},
 ]
 
 scheduler = AsyncIOScheduler()

@@ -20,6 +20,10 @@ dependencies = [
     "redis>=5.2",
     "aiosmtplib>=3.0",
     "httpx>=0.28",
+    # Spreadsheet migration (Module 12): reads .xlsx exports from Tally, Zoho
+    # Books and anything else a customer is leaving behind, and writes the
+    # canonical OptiERP import template. Pure Python, no native libs.
+    "openpyxl>=3.1",
     # PDF engine for document printing (Section 4.5). Needs native libs (Pango/Cairo/
     # gdk-pixbuf) — installed in the Docker image. MANUAL_REVIEW: WeasyPrint (vs. wkhtmltopdf).
     "weasyprint>=63",

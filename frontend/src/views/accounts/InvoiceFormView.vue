@@ -387,7 +387,7 @@ function onGetItems(param: string, id: string): void {
   void router.push({ name: meta.value.newRoute, query: { [param]: id } });
 }
 
-// Import (CSV / Tally) → append rows. Invoices allow free-text lines, so an
+// Import (CSV / OCR) → append rows. Invoices allow free-text lines, so an
 // unknown item_code still imports (as its own name).
 function applyImportedRows(rows: ImportedRow[]): void {
   const additions: InvoiceItemIn[] = [];

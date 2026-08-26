@@ -7,6 +7,7 @@ files as the original design brief.
 
 | Plan | Date | Status | Living doc |
 |------|------|--------|------------|
+| [Data Migration — spreadsheet import](data_migration_spreadsheet.plan.md) | 2026-08-24 | **Complete** — `0102` rename to Data Migration; workbook adapter + Tally/Zoho/template profiles; mapping wizard with saved company profiles; generated .xlsx template | [DATA_MIGRATION.md](../DATA_MIGRATION.md) |
 | [Secretarial Phase 5 — Capital & s.186](secretarial_phase5_capital.plan.md) | 2026-08-21 | **Complete** — `0100` transfers/certificates/capital events/s.186 + `0101` meeting-serial fix; deep demo seed | [SECRETARIAL_GAP_AND_PLAN.md](../SECRETARIAL_GAP_AND_PLAN.md) |
 | [OCR Line Extraction](ocr_line_extraction.plan.md) | 2026-08-18 | **Complete** — Data Entry OCR tab → `/ocr/extract` (OpenAI-compatible vision) | [OCR.md](../OCR.md) |
 | [Income Tax CA Workspace](income_tax_ca_workspace.plan.md) | 2026-08-04 | **Complete** — unified workspace, BFF + preview compute, minimal data entry, terminology sweep | [TAXATION_ARCHITECTURE.md](../TAXATION_ARCHITECTURE.md) |

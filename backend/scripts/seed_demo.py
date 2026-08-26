@@ -43,15 +43,6 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--country", default="IN")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed (deterministic data)")
     parser.add_argument(
-        "--variant",
-        type=int,
-        default=0,
-        choices=(0, 1),
-        help="Which set of party and item names to seed. 0 is the original set; "
-        "1 is an alternative set for a second tenant, so the two companies read "
-        "as different businesses.",
-    )
-    parser.add_argument(
         "--reset-schema",
         action="store_true",
         help="DESTRUCTIVE: drop schema public on the target DB, re-run all "
@@ -64,13 +55,6 @@ def _parse_args() -> argparse.Namespace:
         help="Add ONLY the Modules 03-05 demo data (items, warehouses, stock, "
         "orders, fulfilment) to an EXISTING demo company — non-destructive. "
         "Run `alembic upgrade head` first.",
-    )
-    parser.add_argument(
-        "--manufacturing-topup",
-        action="store_true",
-        help="Idempotent: ensure Manufacturing masters for Phase-0 manual tests AND "
-        "Phase-7 CTP/reverse-schedule demo kit (FG-GEARBOX + lead-timed raws, ops, "
-        "partial stock, sample Sales Order). Safe to re-run.",
     )
     return parser.parse_args()
 
@@ -155,12 +139,13 @@ from app.schemas.stock import (  # noqa: E402
 )
 from app.schemas.manufacturing import (  # noqa: E402
     BOMCreate,
-    BOMItemIn,
-    BOMOperationIn,
+    WorkOrderCreate,
+    WorkOrderFinishIn,
 )
 from app.services import accounts_masters as masters  # noqa: E402
 from app.services import bom as bom_service  # noqa: E402
 from app.services import manufacturing_common as mfg_common  # noqa: E402
+from app.services import work_order as wo_service  # noqa: E402
 from app.services import budget as budget_service  # noqa: E402
 from app.services import delivery_note as dn_service  # noqa: E402
 from app.services import journal_entry as je_service  # noqa: E402
@@ -225,57 +210,6 @@ PURCHASE_ITEMS = [
     ("Control PCB v4", 530, "85340000"),              # printed circuits
     ("Packaging Carton L", 38, "48191000"),           # paper cartons (5% slab)
 ]
-
-# --- variant 1 -------------------------------------------------------------------------
-# A second tenant seeded with the same *shape* (same tax categories, credit-limit
-# pattern, HSN codes and GST slabs) but different names and prices, so the two
-# companies are visibly different businesses rather than one dataset twice.
-# Selected with --variant 1; keep the row counts and category order in step with
-# the lists above, because downstream seeding indexes into them positionally.
-CUSTOMERS_V1 = [
-    ("Sunrise Electricals", "In-State", 600_000),
-    ("Meridian Traders", "In-State", 275_000),
-    ("Kaveri Distributors", "Out-of-State", 350_000),
-    ("Nimbus Retail Group", "Out-of-State", 450_000),
-    ("Sahyadri Enterprises", "In-State", None),
-    ("Bluepeak Home Centre", "In-State", 175_000),
-    ("Trident Bazaar", None, None),  # no tax category -> no auto tax
-    ("Orchid Appliances", "Out-of-State", 225_000),
-]
-
-SUPPLIERS_V1 = [
-    ("Prakash Metals", "In-State"),
-    ("Sterling Components", "In-State"),
-    ("Deccan Polymers", "Out-of-State"),
-    ("Nova Plastics", "In-State"),
-    ("Ironwood Alloys", "Out-of-State"),
-    ("Crestline Packaging", None),
-]
-
-SALES_ITEMS_V1 = [
-    ("Stand Mixer S400", 3150, "85094000"),
-    ("Infrared Cooktop Max", 3899, "85166000"),
-    ("Air Fryer 6.0L", 5850, "85167900"),
-    ("Electric Kettle 2.2L", 1290, "85167100"),
-    ("Toaster QuadSlice", 1890, "85167200"),
-    ("Wet Grinder 3L", 6750, "85094000"),
-    ("Immersion Blender Pro", 1550, "85094000"),
-]
-
-PURCHASE_ITEMS_V1 = [
-    ("Copper Motor Winding 900W", 810, "85030000"),
-    ("Polycarbonate Body Shell", 275, "39269099"),
-    ("Titanium Steel Jar Set", 520, "73239300"),
-    ("Heating Element 2400W", 355, "85169000"),
-    ("Control PCB v6", 615, "85340000"),
-    ("Packaging Carton XL", 44, "48191000"),
-]
-
-if ARGS.variant == 1:  # rebind so every reference below picks up the variant
-    CUSTOMERS = CUSTOMERS_V1
-    SUPPLIERS = SUPPLIERS_V1
-    SALES_ITEMS = SALES_ITEMS_V1
-    PURCHASE_ITEMS = PURCHASE_ITEMS_V1
 
 
 def _d(value: float | int) -> Decimal:
@@ -708,10 +642,6 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         # --- parity-feature masters + party defaults ----------------------------
         extras = await seed_extra_masters(db, actor, company)
-        print(
-            "Income Tax statutory packs: load via scripts/load_statutory.py "
-            "or migration (not seeded here)."
-        )
         # default payment terms on a couple of parties; group/territory on a customer
         customers[0].payment_terms_template_id = extras["ptt_net30"]
         customers[3].payment_terms_template_id = extras["ptt_5050"]
@@ -881,11 +811,8 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
         for n in range(14):
             supplier = rng.choice(suppliers)
             posting = _date_in_fy(fy.year_start_date)
-            # Every other bill gets TDS so Form 26Q always has deductee rows
-            # (RNG alone has left demos empty before).
-            tds_category = (
-                tds_categories_list[n % len(tds_categories_list)] if tds_categories_list and n % 2 == 0 else None
-            )
+            # ~40% of invoices get a TDS category
+            tds_category = rng.choice(tds_categories_list) if rng.random() < 0.4 else None
             invoice = await pi_service.create_purchase_invoice(
                 db,
                 PurchaseInvoiceCreate(
@@ -904,47 +831,6 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
             if n % 7 != 6:
                 invoice = await pi_service.submit_purchase_invoice(db, invoice.id, actor)
             purchase_invoices.append(invoice)
-
-        # Guaranteed rows for GST Returns (prior month) + TDS Returns (current quarter).
-        # UI defaults to those windows; RNG-scattered FY dates alone often miss them.
-        q_start = date(TODAY.year, (TODAY.month - 1) // 3 * 3 + 1, 1)
-        prev_month_last = TODAY.replace(day=1) - timedelta(days=1)
-        prev_month_mid = prev_month_last.replace(day=min(15, prev_month_last.day))
-        gst_customer = next((c for c in customers if c.tax_category_id), customers[0])
-        tds_cat = tds_categories_list[0] if tds_categories_list else None
-        for i, posting in enumerate((prev_month_mid, TODAY, max(q_start, TODAY - timedelta(days=10)))):
-            gstr_si = await si_service.create_sales_invoice(
-                db,
-                SalesInvoiceCreate(
-                    customer_id=gst_customer.id,
-                    posting_date=posting,
-                    due_date=posting + timedelta(days=15),
-                    items=sales_items(2),
-                    remarks=f"GST returns demo SI #{i + 1}",
-                ),
-                actor,
-            )
-            await si_service.submit_sales_invoice(db, gstr_si.id, actor)
-        if tds_cat is not None:
-            for i, posting in enumerate(
-                (max(q_start, TODAY - timedelta(days=20)), max(q_start, TODAY - timedelta(days=5)))
-            ):
-                tds_pi = await pi_service.create_purchase_invoice(
-                    db,
-                    PurchaseInvoiceCreate(
-                        supplier_id=suppliers[0].id,
-                        posting_date=posting,
-                        due_date=posting + timedelta(days=30),
-                        bill_no=f"VEND-TDS-{2100 + i}",
-                        bill_date=posting,
-                        items=purchase_items(2),
-                        tax_withholding_category_id=tds_cat,
-                        remarks=f"TDS returns demo PI #{i + 1}",
-                    ),
-                    actor,
-                )
-                await pi_service.submit_purchase_invoice(db, tds_pi.id, actor)
-                purchase_invoices.append(tds_pi)
 
         submitted_pis = [i for i in purchase_invoices if i.docstatus == 1]
         for idx, invoice in enumerate(submitted_pis[: int(len(submitted_pis) * 0.55)]):
@@ -1205,9 +1091,6 @@ async def main() -> None:  # noqa: PLR0915 — linear demo scenario, clearer uns
 
         await seed_supply_chain(db, actor, customers, suppliers, income_account, recent, extras)
         await seed_manufacturing(db, actor, recent)
-        from scripts.seed_cm_planning_demo import seed_cm_planning  # noqa: PLC0415
-
-        await seed_cm_planning(db, actor, company.id)
 
         # Assign each item the GST slab template that matches its HSN rate, so the
         # rate charged (via the item-tax-template override) agrees with the item's
@@ -1538,7 +1421,7 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
         ),
         actor,
     )
-    qtn2, _ = await qtn_service.submit_quotation(db, qtn2.id, actor)  # (doc, warnings)
+    qtn2 = await qtn_service.submit_quotation(db, qtn2.id, actor)
 
     so1 = await so_service.create_sales_order(
         db,
@@ -1699,413 +1582,89 @@ async def seed_supply_chain(db, actor, customers, suppliers, income_account, rec
 
 
 async def seed_manufacturing(db, actor, recent) -> None:
-    """Ensure Phase-0 + Phase-7 planning demo manufacturing masters (idempotent).
-
-    Phase 0: warehouses, RAW-STEEL / FG-BRACKET, opening stock, flat BOM, settings.
-    Phase 7: CTP / reverse-schedule kit — RAW-ALUM (lead 7, low stock), RAW-BOLT
-    (lead 3, plenty), FG-GEARBOX with BOM operations, sample open Sales Order.
-    """
+    """Demo manufacturing data: BOM, Work Order, and Manufacture finish."""
     from sqlalchemy import select
-
-    from app.models.accounts import Account
-    from app.models.manufacturing import BOM, Operation, Workstation
-    from app.models.selling import Customer, SalesOrder, SalesOrderItem
-    from app.models.stock import Bin, Item, ItemGroup, Warehouse
-    from app.schemas.stock import ItemUpdate
+    from app.models.stock import Item, Warehouse
+    from app.schemas.manufacturing import BOMItemIn
 
     company_id = actor.company_id if isinstance(actor.company_id, uuid.UUID) else uuid.UUID(actor.company_id)
+    whs = (await db.execute(
+        select(Warehouse).where(
+            Warehouse.company_id == company_id,
+            Warehouse.warehouse_name.in_(["Main Store", "Showroom"]),
+        )
+    )).scalars().all()
+    wh_map = {wh.warehouse_name: wh for wh in whs}
+    main_store = wh_map.get("Main Store")
+    if main_store is None:
+        print("Manufacturing seed: Main Store warehouse not found; skipping manufacturing seed.")
+        return
 
-    async def _warehouse(name: str) -> Warehouse:
-        existing = await db.scalar(
-            select(Warehouse).where(
-                Warehouse.company_id == company_id, Warehouse.warehouse_name == name
-            )
-        )
-        if existing is not None:
-            return existing
-        return await stock_masters.create_warehouse(
-            db, WarehouseCreate(warehouse_name=name), actor
-        )
+    item_codes = [
+        "MIXER-GRINDER-X200",
+        "RM-COPPER-MOTOR-WINDING-750W",
+        "RM-ABS-BODY-SHELL",
+    ]
+    items = (await db.execute(
+        select(Item).where(Item.company_id == company_id, Item.item_code.in_(item_codes))
+    )).scalars().all()
+    item_map = {item.item_code: item for item in items}
+    missing = [code for code in item_codes if code not in item_map]
+    if missing:
+        print(f"Manufacturing seed: missing required items {missing}; skipping manufacturing seed.")
+        return
 
-    main_store = await _warehouse("Main Store")
-    wip_store = await _warehouse("WIP Store")
-    fg_store = await _warehouse("Finished Goods")
-
-    async def _item_group(name: str) -> ItemGroup:
-        existing = await db.scalar(
-            select(ItemGroup).where(
-                ItemGroup.company_id == company_id, ItemGroup.item_group_name == name
-            )
-        )
-        if existing is not None:
-            return existing
-        return await stock_masters.create_item_group(
-            db, ItemGroupCreate(item_group_name=name), actor
-        )
-
-    raw_group = await _item_group("Raw Materials")
-    fg_group = await _item_group("Finished Goods")
-
-    async def _item(
-        code: str,
-        *,
-        name: str,
-        group: ItemGroup,
-        valuation: Decimal,
-        is_sales: bool,
-        lead_time_days: int = 0,
-    ) -> Item:
-        existing = await db.scalar(
-            select(Item).where(Item.company_id == company_id, Item.item_code == code)
-        )
-        if existing is not None:
-            if existing.lead_time_days != lead_time_days:
-                await stock_masters.update_item(
-                    db, existing.id, ItemUpdate(lead_time_days=lead_time_days), actor
-                )
-                existing = await db.get(Item, existing.id)
-                assert existing is not None
-            return existing
-        return await stock_masters.create_item(
-            db,
-            ItemCreate(
-                item_code=code,
-                item_name=name,
-                item_group_id=group.id,
-                valuation_rate=valuation,
-                standard_rate=valuation if is_sales else _d(0),
-                is_sales_item=is_sales,
-                is_purchase_item=not is_sales,
-                lead_time_days=lead_time_days,
-                default_warehouse_id=main_store.id if not is_sales else fg_store.id,
-                hsn_sac_code="73269099" if is_sales else "72085100",
-                gst_treatment="Taxable",
-            ),
-            actor,
-        )
-
-    async def _ensure_stock(item: Item, warehouse: Warehouse, target: Decimal, rate: Decimal) -> None:
-        bin_row = await db.scalar(
-            select(Bin).where(Bin.item_id == item.id, Bin.warehouse_id == warehouse.id)
-        )
-        on_hand = bin_row.actual_qty if bin_row is not None else _d(0)
-        if on_hand >= target:
-            print(f"Manufacturing seed: {item.item_code} already has {on_hand} on hand — skipping receipt.")
-            return
-        need = target - on_hand
-        opening = await se_service.create_stock_entry(
-            db,
-            StockEntryCreate(
-                purpose="Material Receipt",
-                posting_date=recent(7),
-                to_warehouse_id=warehouse.id,
-                remarks=f"Manufacturing seed opening stock ({item.item_code})",
-                items=[StockEntryItemIn(item_id=item.id, qty=need, basic_rate=rate)],
-            ),
-            actor,
-        )
-        await se_service.submit_stock_entry(db, opening.id, actor)
-        print(f"Manufacturing seed: received {need} {item.item_code} @ ₹{rate} into {warehouse.warehouse_name}.")
-
-    raw_steel = await _item(
-        "RAW-STEEL",
-        name="Raw Steel Sheet",
-        group=raw_group,
-        valuation=_d(50),
-        is_sales=False,
-        lead_time_days=5,
-    )
-    fg_bracket = await _item(
-        "FG-BRACKET", name="Steel Bracket", group=fg_group, valuation=_d(120), is_sales=True
-    )
-    await _ensure_stock(raw_steel, main_store, _d(100), _d(50))
-
-    # --- Phase 7 CTP / reverse-schedule kit -----------------------------------------
-    raw_alum = await _item(
-        "RAW-ALUM",
-        name="Aluminium Billet",
-        group=raw_group,
-        valuation=_d(80),
-        is_sales=False,
-        lead_time_days=7,
-    )
-    raw_bolt = await _item(
-        "RAW-BOLT",
-        name="M8 Hex Bolt",
-        group=raw_group,
-        valuation=_d(2),
-        is_sales=False,
-        lead_time_days=3,
-    )
-    fg_gearbox = await _item(
-        "FG-GEARBOX",
-        name="Precision Gearbox",
-        group=fg_group,
-        valuation=_d(900),
-        is_sales=True,
-        lead_time_days=0,
-    )
-    # Low alum stock → CTP shows procurement wait; bolts plentiful
-    await _ensure_stock(raw_alum, main_store, _d(5), _d(80))
-    await _ensure_stock(raw_bolt, main_store, _d(500), _d(2))
-
-    async def _operation(name: str, hour_rate: Decimal) -> Operation:
-        existing = await db.scalar(
-            select(Operation).where(
-                Operation.company_id == company_id, Operation.operation_name == name
-            )
-        )
-        if existing is not None:
-            return existing
-        doc = await registry_service.create_document(
-            db,
-            get_descriptor("operation"),
-            {"operation_name": name, "default_hour_rate": str(hour_rate)},
-            actor,
-        )
-        obj = await db.get(Operation, uuid.UUID(str(doc["id"])))
-        assert obj is not None
-        return obj
-
-    async def _workstation(name: str, hour_rate: Decimal) -> Workstation:
-        existing = await db.scalar(
-            select(Workstation).where(
-                Workstation.company_id == company_id, Workstation.workstation_name == name
-            )
-        )
-        if existing is not None:
-            return existing
-        doc = await registry_service.create_document(
-            db,
-            get_descriptor("workstation"),
-            {"workstation_name": name, "hour_rate": str(hour_rate), "working_hours": "8"},
-            actor,
-        )
-        obj = await db.get(Workstation, uuid.UUID(str(doc["id"])))
-        assert obj is not None
-        return obj
-
-    op_machine = await _operation("Machine", _d(600))
-    ws_cnc = await _workstation("CNC-1", _d(600))
-
-    op_acct = await db.scalar(
-        select(Account).where(
-            Account.company_id == company_id,
-            Account.account_name == "Expenses Included In Valuation",
-            Account.is_group.is_(False),
-        )
-    )
+    production_item = item_map["MIXER-GRINDER-X200"]
+    raw_components = [
+        item_map["RM-COPPER-MOTOR-WINDING-750W"],
+        item_map["RM-ABS-BODY-SHELL"],
+    ]
 
     await mfg_common.update_manufacturing_settings(
         db,
         company_id,
         {
             "default_source_warehouse_id": str(main_store.id),
-            "default_wip_warehouse_id": str(wip_store.id),
-            "default_fg_warehouse_id": str(fg_store.id),
-            "over_production_percentage": "0",
+            "default_fg_warehouse_id": str(main_store.id),
         },
     )
 
-    existing_bom = await db.scalar(
-        select(BOM).where(
-            BOM.company_id == company_id,
-            BOM.production_item_id == fg_bracket.id,
-            BOM.docstatus == 1,
-            BOM.is_active.is_(True),
-        )
+    bom = await bom_service.create_bom(
+        db,
+        BOMCreate(
+            production_item_id=production_item.id,
+            quantity=_d(1),
+            is_default=True,
+            remarks="Demo manufacturing BOM",
+            items=[
+                BOMItemIn(item_id=raw_components[0].id, qty=_d(2)),
+                BOMItemIn(item_id=raw_components[1].id, qty=_d(3)),
+            ],
+        ),
+        actor,
     )
-    if existing_bom is None:
-        bom = await bom_service.create_bom(
-            db,
-            BOMCreate(
-                production_item_id=fg_bracket.id,
-                quantity=_d(1),
-                operating_cost=_d(20),
-                is_default=True,
-                remarks="Phase-0 manual test BOM — 2× RAW-STEEL + ₹20 labour",
-                items=[BOMItemIn(item_id=raw_steel.id, qty=_d(2))],
-            ),
-            actor,
-        )
-        await bom_service.submit_bom(db, bom.id, actor)
-        print(f"Manufacturing seed: submitted BOM {bom.name} for FG-BRACKET.")
-    else:
-        print(f"Manufacturing seed: active BOM {existing_bom.name} already exists.")
+    await bom_service.submit_bom(db, bom.id, actor)
 
-    gearbox_bom = await db.scalar(
-        select(BOM).where(
-            BOM.company_id == company_id,
-            BOM.production_item_id == fg_gearbox.id,
-            BOM.docstatus == 1,
-            BOM.is_active.is_(True),
-        )
+    wo = await wo_service.create_work_order(
+        db,
+        WorkOrderCreate(
+            bom_id=bom.id,
+            qty=_d(6),
+            source_warehouse_id=main_store.id,
+            fg_warehouse_id=main_store.id,
+            planned_start_date=recent(4),
+            remarks="Demo manufacturing run",
+        ),
+        actor,
     )
-    if gearbox_bom is None:
-        gearbox_bom = await bom_service.create_bom(
-            db,
-            BOMCreate(
-                production_item_id=fg_gearbox.id,
-                quantity=_d(1),
-                operating_cost=_d(0),
-                is_default=True,
-                remarks="Phase-7 CTP kit — 1× RAW-ALUM + 4× RAW-BOLT + Machine 96 mins",
-                items=[
-                    BOMItemIn(item_id=raw_alum.id, qty=_d(1)),
-                    BOMItemIn(item_id=raw_bolt.id, qty=_d(4)),
-                ],
-                operations=[
-                    BOMOperationIn(
-                        operation_id=op_machine.id,
-                        workstation_id=ws_cnc.id,
-                        time_in_mins=_d(96),
-                        hour_rate=_d(600),
-                    )
-                ],
-            ),
-            actor,
-        )
-        await bom_service.submit_bom(db, gearbox_bom.id, actor)
-        print(f"Manufacturing seed: submitted BOM {gearbox_bom.name} for FG-GEARBOX (CTP kit).")
-    else:
-        print(f"Manufacturing seed: FG-GEARBOX BOM {gearbox_bom.name} already exists.")
-
-    # Open Sales Order so pegging / Production Plan have demand for FG-GEARBOX
-    so_exists = await db.scalar(
-        select(SalesOrderItem)
-        .join(SalesOrder, SalesOrder.id == SalesOrderItem.order_id)
-        .where(
-            SalesOrder.company_id == company_id,
-            SalesOrder.docstatus == 1,
-            SalesOrderItem.item_id == fg_gearbox.id,
-        )
+    await wo_service.submit_work_order(db, wo.id, actor)
+    await wo_service.finish_work_order(
+        db,
+        wo.id,
+        WorkOrderFinishIn(qty=_d(6), posting_date=recent(2)),
+        actor,
     )
-    if so_exists is None:
-        customer = await db.scalar(
-            select(Customer).where(Customer.company_id == company_id).order_by(Customer.creation)
-        )
-        if customer is not None:
-            delivery = TODAY + timedelta(days=21)
-            so = await so_service.create_sales_order(
-                db,
-                SalesOrderCreate(
-                    customer_id=customer.id,
-                    posting_date=TODAY,
-                    delivery_date=delivery,
-                    remarks="Phase-7 CTP / pegging demo demand — 10× FG-GEARBOX",
-                    items=[
-                        OrderItemIn(
-                            item_id=fg_gearbox.id, qty=_d(10), rate=_d(1200), delivery_date=delivery
-                        )
-                    ],
-                ),
-                actor,
-            )
-            await so_service.submit_sales_order(db, so.id, actor)
-            print(f"Manufacturing seed: submitted Sales Order {so.name} for 10× FG-GEARBOX (delivery {delivery}).")
-        else:
-            print("Manufacturing seed: no Customer — skip FG-GEARBOX Sales Order.")
-    else:
-        print("Manufacturing seed: open Sales Order for FG-GEARBOX already exists.")
-
-    # Optional demo path: if the appliance items from seed_supply_chain exist, leave
-    # a finished mixer WO as sample history (skip if already finished once).
-    mixer = await db.scalar(
-        select(Item).where(
-            Item.company_id == company_id, Item.item_code == "MIXER-GRINDER-X200"
-        )
-    )
-    if mixer is not None and op_acct is not None:
-        from app.models.manufacturing import WorkOrder
-
-        prior = await db.scalar(
-            select(WorkOrder).where(
-                WorkOrder.company_id == company_id,
-                WorkOrder.production_item_id == mixer.id,
-                WorkOrder.status == "Completed",
-            )
-        )
-        if prior is None:
-            motor = await db.scalar(
-                select(Item).where(
-                    Item.company_id == company_id,
-                    Item.item_code == "RM-COPPER-MOTOR-WINDING-750W",
-                )
-            )
-            shell = await db.scalar(
-                select(Item).where(
-                    Item.company_id == company_id, Item.item_code == "RM-ABS-BODY-SHELL"
-                )
-            )
-            if motor is not None and shell is not None:
-                mixer_bom = await bom_service.create_bom(
-                    db,
-                    BOMCreate(
-                        production_item_id=mixer.id,
-                        quantity=_d(1),
-                        operating_cost=_d(50),
-                        is_default=True,
-                        remarks="Demo appliance BOM",
-                        items=[
-                            BOMItemIn(item_id=motor.id, qty=_d(1)),
-                            BOMItemIn(item_id=shell.id, qty=_d(1)),
-                        ],
-                    ),
-                    actor,
-                )
-                await bom_service.submit_bom(db, mixer_bom.id, actor)
-                print(f"Manufacturing seed: also submitted demo BOM {mixer_bom.name} for mixer.")
-
-    print(
-        "Manufacturing seed ready:\n"
-        f"  Warehouses: Main Store, WIP Store, Finished Goods\n"
-        f"  Phase 0: RAW-STEEL (lead 5d, stocked), FG-BRACKET\n"
-        f"  Phase 7 CTP kit: FG-GEARBOX ← RAW-ALUM (lead 7d, ~5 on hand) + RAW-BOLT "
-        f"(lead 3d, stocked) + Machine@CNC-1 (96 mins/unit)\n"
-        f"  Settings: source=Main Store, wip=WIP Store, fg=Finished Goods\n"
-        f"  Op-cost account: "
-        f"{'Expenses Included In Valuation' if op_acct else '(not found — pick any Expense account)'}\n"
-        "  Try: Manufacturing → Reports → CTP / Reverse Schedule → pick FG-GEARBOX qty 10."
-    )
-
-
-async def manufacturing_topup_main() -> None:
-    """Non-destructive: ensure Phase-0 manufacturing masters on the demo company."""
-    async with async_session_factory() as db:
-        company = await db.scalar(
-            select(Company).where(Company.company_name == ARGS.company_name)
-        )
-        if company is None:
-            # fall back to the first company if the demo name differs
-            company = await db.scalar(select(Company).order_by(Company.creation))
-        if company is None:
-            sys.exit("No company found — run a full seed first.")
-        admin = await db.scalar(select(User).where(User.email == ARGS.admin_email.lower()))
-        if admin is None:
-            admin = await db.scalar(select(User).order_by(User.creation))
-        if admin is None:
-            sys.exit("No admin user found.")
-        actor = CurrentUser(
-            {
-                "sub": str(admin.id),
-                "email": admin.email,
-                "company_id": str(company.id),
-                "roles": ["System Manager"],
-            }
-        )
-        await set_company_context(db, company.id)
-
-        def recent(days_ago: int) -> date:
-            return TODAY - timedelta(days=days_ago)
-
-        print(f"Manufacturing top-up for company '{company.company_name}' as {admin.email}…")
-        await seed_manufacturing(db, actor, recent)
-        from scripts.seed_cm_planning_demo import seed_cm_planning  # noqa: PLC0415
-
-        await seed_cm_planning(db, actor, company.id)
-        await db.commit()
-        print("Manufacturing top-up complete.")
-    await engine.dispose()
+    print("Manufacturing seed: created BOM, Work Order, and finished production for 6 units.")
 
 
 async def topup_main() -> None:
@@ -2184,9 +1743,7 @@ async def topup_main() -> None:
 
 
 if __name__ == "__main__":
-    if ARGS.manufacturing_topup:
-        asyncio.run(manufacturing_topup_main())
-    elif ARGS.phase3_topup:
+    if ARGS.phase3_topup:
         asyncio.run(topup_main())
     else:
         if ARGS.reset_schema:

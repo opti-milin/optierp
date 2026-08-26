@@ -9,7 +9,7 @@ import { useList } from "@/composables/useList";
 import { formatCurrency } from "@/utils/format";
 import { useCompanyCurrency } from "@/composables/useCompanyCurrency";
 import type { ItemListItem } from "@/types/stock";
-import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
+import ImportDataButton from "@/components/shared/ImportDataButton.vue";
 
 const router = useRouter();
 const companyCurrency = useCompanyCurrency();
@@ -50,7 +50,7 @@ onMounted(fetchList);
       <div class="flex items-center gap-3">
         <input v-model="search" class="form-input w-56" placeholder="Search code or name…"
                @keyup.enter="applySearch" />
-        <ImportFromTallyButton module="stock" entity="stock_item" />
+        <ImportDataButton module="stock" entity="stock_item" />
         <button class="btn-primary" @click="router.push('/items/new')">New Product / Service</button>
       </div>
     </div>

@@ -1,9 +1,16 @@
 <script setup lang="ts">
 // "Data Entry" control for transaction line items. Manual entry is the grid
 // itself; this adds the other two modes:
-//   • Import — from a CSV template or a Tally CSV export
-//   • OCR    — upload an invoice/PO; extraction runs through the API
+//   • CSV — a flat item_code/qty/rate list, for pasting a quote or a price sheet
+//   • OCR — upload an invoice/PO; extraction runs through the API
 // Emits parsed rows; the parent maps them to catalog items.
+//
+// There is deliberately no "migrate my books" mode here. This control only ever
+// produces line items, and a voucher is not a line-item list: it needs its party,
+// its ledgers and its tax rows resolved together, in dependency order. That is
+// Module 12 (Data Migration), which reads real Tally XML and real .xlsx exports.
+// A tab here that took a hand-made item_code/qty/rate CSV and called it "Tally"
+// only taught people the real importer did not exist — so we link to it instead.
 
 import { ref, watch } from "vue";
 import { api } from "@/api/client";
@@ -49,7 +56,7 @@ interface ReviewRow {
 const emit = defineEmits<{ import: [rows: ImportedRow[]] }>();
 
 const open = ref(false);
-const mode = ref<"csv" | "tally" | "ocr">("csv");
+const mode = ref<"csv" | "ocr">("csv");
 const note = ref<string | null>(null);
 
 const ocrConfigured = ref<boolean | null>(null);
@@ -273,7 +280,7 @@ function applyOcr(): void {
         <!-- mode tabs -->
         <div class="flex gap-4 border-b border-gray-200 px-5">
           <button
-            v-for="m in (['csv', 'tally', 'ocr'] as const)"
+            v-for="m in (['csv', 'ocr'] as const)"
             :key="m"
             type="button"
             class="-mb-px border-b-2 py-2 text-sm font-medium capitalize"
@@ -292,16 +299,14 @@ function applyOcr(): void {
               ↓ Download template
             </button>
             <input type="file" accept=".csv,text/csv" class="block w-full text-sm" @change="onFile" />
-          </template>
-
-          <!-- Tally -->
-          <template v-else-if="mode === 'tally'">
-            <p class="text-gray-600">
-              In Tally: <em>Gateway of Tally → Display → Export</em> to <strong>CSV</strong>, then upload it here
-              (same <code>item_code, qty, rate</code> columns).
+            <p class="border-t border-gray-100 pt-3 text-xs text-gray-500">
+              Moving your books from Tally? A voucher needs its party, ledgers and tax rows
+              imported together, which this list cannot carry.
+              <router-link :to="{ name: 'tally-imports' }" class="text-primary hover:underline" @click="close">
+                Use Tally Imports
+              </router-link>
+              to bring in a Tally XML export.
             </p>
-            <input type="file" accept=".csv,text/csv" class="block w-full text-sm" @change="onFile" />
-            <p class="text-xs text-gray-400">Direct Tally XML import connects via API (coming soon).</p>
           </template>
 
           <!-- OCR -->

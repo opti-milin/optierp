@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
-from app.core.security import CurrentUser, get_tenant_db
+from app.core.security import CurrentUser, get_current_user, get_tenant_db
 from app.schemas.core import SystemSettingResponse, SystemSettingUpsert
 from app.services import module_flags as module_flags_service
 from app.services import settings as settings_service
@@ -34,10 +34,14 @@ class ModuleFlagsUpdate(BaseModel):
     "/module-flags",
     response_model=ModuleFlags,
     summary="Get module feature flags",
-    description="Per-company toggles that hide optional modules from the UI (default: on).",
+    description=(
+        "Per-company toggles that hide optional modules from the UI. Any signed-in "
+        "user may read them (the launcher needs this); changing them still requires "
+        "System Settings write."
+    ),
 )
 async def get_module_flags(
-    current_user: Annotated[CurrentUser, Depends(require_permission("System Settings", "read"))],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ModuleFlags:
     if current_user.company_id is None:

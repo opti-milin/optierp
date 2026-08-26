@@ -31,6 +31,15 @@ async def lifespan(app: FastAPI):
         await ws_manager.startup()
     except Exception:  # noqa: BLE001 — realtime is optional in local dev
         logger.warning("websocket_redis_unavailable", redis_url=settings.redis_url)
+    # A restart is precisely the event that strands a Tally import mid-run: the
+    # task executing it died with the old process, and nothing else will ever
+    # move it off "Importing". Sweep before serving traffic.
+    try:
+        from app.services.migration.background import reap_stale_runs
+
+        await reap_stale_runs()
+    except Exception:  # noqa: BLE001 — never block startup on housekeeping
+        logger.warning("migration_reaper_startup_failed")
     logger.info("app_started", environment=settings.environment)
     yield
     await ws_manager.shutdown()

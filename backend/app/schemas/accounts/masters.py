@@ -30,6 +30,10 @@ class CustomerResponse(DocumentMeta):
     receivable_account_id: uuid.UUID | None
     credit_limit: Decimal | None
     tax_category_id: uuid.UUID | None
+    payment_terms_template_id: uuid.UUID | None = None
+    customer_group_id: uuid.UUID | None = None
+    territory_id: uuid.UUID | None = None
+    notes: str | None = None
     disabled: bool
     company_id: uuid.UUID
 
@@ -52,6 +56,9 @@ class SupplierResponse(DocumentMeta):
     default_currency: str | None
     payable_account_id: uuid.UUID | None
     tax_category_id: uuid.UUID | None
+    payment_terms_template_id: uuid.UUID | None = None
+    supplier_group_id: uuid.UUID | None = None
+    notes: str | None = None
     disabled: bool
     company_id: uuid.UUID
 

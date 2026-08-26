@@ -1,16 +1,67 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { brand } from "@/brand";
 import { useNamingSeries } from "@/composables/useNamingSeries";
+import { useModuleFlagsStore } from "@/stores/moduleFlags";
+import type { ErrorEnvelope } from "@/types/core";
 
 const pattern = ref("SINV-.YYYY.-");
 const { nextName, loading, error, preview } = useNamingSeries();
+
+const flags = useModuleFlagsStore();
+const secretarialOn = ref(false);
+const flagsNotice = ref<string | null>(null);
+const flagsError = ref<ErrorEnvelope | null>(null);
+const flagsSaving = ref(false);
+
+onMounted(async () => {
+  await flags.load();
+  secretarialOn.value = flags.flags.secretarial === true;
+});
+
+async function saveSecretarialFlag(): Promise<void> {
+  flagsSaving.value = true;
+  flagsNotice.value = null;
+  flagsError.value = null;
+  try {
+    await flags.setSecretarial(secretarialOn.value);
+    flagsNotice.value = secretarialOn.value
+      ? "Secretarial is on. It now appears on Home and in the sidebar."
+      : "Secretarial is off. It is hidden from Home and the sidebar.";
+  } catch (e) {
+    flagsError.value = e as ErrorEnvelope;
+  } finally {
+    flagsSaving.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="max-w-2xl space-y-6">
     <h1 class="text-xl font-semibold text-gray-900">Settings</h1>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-sm font-semibold text-gray-900">Modules</h2>
+      <p class="mt-1 text-sm text-gray-500">
+        Secretarial &amp; Compliance is off until you turn it on for this company.
+      </p>
+      <p v-if="flagsNotice" class="mt-3 rounded bg-green-50 px-3 py-2 text-sm text-green-700">
+        {{ flagsNotice }}
+      </p>
+      <p v-if="flagsError" class="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+        {{ flagsError.detail }}
+      </p>
+      <label class="mt-3 flex items-center gap-3 text-sm text-gray-800">
+        <input v-model="secretarialOn" type="checkbox" class="rounded border-gray-300" />
+        Enable Secretarial &amp; Compliance
+      </label>
+      <div class="mt-4 flex justify-end">
+        <button type="button" class="btn-primary" :disabled="flagsSaving" @click="saveSecretarialFlag">
+          {{ flagsSaving ? "Saving…" : "Save" }}
+        </button>
+      </div>
+    </section>
 
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 class="text-sm font-semibold text-gray-900">Naming Series</h2>

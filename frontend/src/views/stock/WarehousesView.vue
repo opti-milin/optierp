@@ -6,7 +6,7 @@ import { useRouter } from "vue-router";
 import DataTable, { type Column } from "@/components/shared/DataTable.vue";
 import { useStockStore } from "@/stores/stock";
 import type { Warehouse } from "@/types/stock";
-import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
+import ImportDataButton from "@/components/shared/ImportDataButton.vue";
 
 const router = useRouter();
 const store = useStockStore();
@@ -32,7 +32,7 @@ onMounted(() => store.fetchWarehouses());
         <p class="text-sm text-gray-500">{{ store.warehouses.length }} total</p>
       </div>
       <div class="flex items-center gap-2">
-        <ImportFromTallyButton module="stock" entity="godown" />
+        <ImportDataButton module="stock" entity="godown" />
         <button class="btn-primary" @click="router.push('/warehouses/new')">New Warehouse</button>
       </div>
     </div>

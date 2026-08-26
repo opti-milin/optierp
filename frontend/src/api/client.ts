@@ -72,6 +72,22 @@ export async function openPdf(path: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/** Fetch a protected binary with auth and save it under `filename`.
+ *  A plain <a href> cannot be used for these: the access token lives in memory and
+ *  rides an Authorization header, so a raw document navigation sends no
+ *  credentials and the API answers 401. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const resp = await api.get<Blob>(path, { responseType: "blob" });
+  const url = URL.createObjectURL(resp.data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Fetch protected HTML (a document preview) with auth, as a string for an iframe srcdoc.
  *  The bearer token can't ride a raw iframe navigation, so we fetch then inject. */
 export async function fetchPrintHtml(path: string): Promise<string> {

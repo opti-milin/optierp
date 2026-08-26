@@ -8,7 +8,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { api } from "@/api/client";
 import { useAccountsStore } from "@/stores/accounts";
 import type { AccountNode, ErrorEnvelope } from "@/types/core";
-import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
+import ImportDataButton from "@/components/shared/ImportDataButton.vue";
 
 const store = useAccountsStore();
 // The add/edit form renders above the (scrollable) tree; when the clicked row is
@@ -215,7 +215,7 @@ onMounted(load);
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <ImportFromTallyButton module="accounting" entity="ledger" />
+        <ImportDataButton module="accounting" entity="ledger" />
         <button class="btn-secondary" :disabled="loading" @click="load">Refresh</button>
       </div>
     </div>

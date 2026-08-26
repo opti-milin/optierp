@@ -38,3 +38,5 @@ backups/
 
 # TypeScript incremental build cache — regenerated on every build.
 frontend/tsconfig.tsbuildinfo
+testsprite_tests/tmp/
+testsprite_tests/tmp/config.json

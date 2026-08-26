@@ -22,8 +22,10 @@ Archived Cursor `.plan.md` briefs → **[`plans/`](plans/README.md)**.
 | [BUYING_GAP_REPORT.md](BUYING_GAP_REPORT.md) | Buying gaps |
 | [SELLING_GAP_REPORT.md](SELLING_GAP_REPORT.md) | Selling gaps |
 | [SELLING_BUYING_PARITY.md](SELLING_BUYING_PARITY.md) | Selling ↔ Buying parity |
-| [TALLY_IMPORT.md](TALLY_IMPORT.md) | Tally import — entity/group/voucher mapping reference (engineers) |
-| [TALLY_IMPORT_HOW_IT_WORKS.md](TALLY_IMPORT_HOW_IT_WORKS.md) | Tally import — plain-language walkthrough (everyone) |
+| [DATA_MIGRATION.md](DATA_MIGRATION.md) | Data migration — sources (Tally XML, Excel from any system), entity/group/voucher mapping reference (engineers) |
+| [DATA_MIGRATION_HOW_IT_WORKS.md](DATA_MIGRATION_HOW_IT_WORKS.md) | Data migration — plain-language walkthrough (everyone) |
+| [SECRETARIAL_GAP_AND_PLAN.md](SECRETARIAL_GAP_AND_PLAN.md) | Company Secretarial & Governance (Phases 0–4 built; 5–6 not started) |
+| [SECRETARIAL_VERIFY.md](SECRETARIAL_VERIFY.md) | Secretarial — hand verification + demo logins |
 | [OCR.md](OCR.md) | OCR line-item extraction (scanned invoice / PO → grid) |
 
 ## Product / architecture

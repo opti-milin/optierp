@@ -344,7 +344,7 @@ function acPayload(party: "customer" | "supplier"): Record<string, unknown> {
   };
 }
 
-// Import (CSV / Tally) → append catalog items to the grid. Unknown codes are
+// Import (CSV / OCR) → append catalog items to the grid. Unknown codes are
 // skipped because order lines require a real item.
 function applyImportedRows(rows: ImportedRow[]): void {
   const additions: OrderItemIn[] = [];

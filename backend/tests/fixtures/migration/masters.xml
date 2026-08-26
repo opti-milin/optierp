@@ -1,0 +1,229 @@
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>All Masters</REPORTNAME>
+        <STATICVARIABLES>
+          <SVCURRENTCOMPANY>OptiReach Import Test</SVCURRENTCOMPANY>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+      <REQUESTDATA>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <CURRENCY NAME="&#8377;" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-0000001d</GUID>
+            <MAILINGNAME>INR</MAILINGNAME>
+            <EXPANDEDSYMBOL>INR</EXPANDEDSYMBOL>
+            <DECIMALPLACES> 2</DECIMALPLACES>
+            <ALTERID> 207</ALTERID>
+          </CURRENCY>
+        </TALLYMESSAGE>
+
+        <!-- Reserved groups carry RESERVEDNAME = their own name. Treating that
+             as the parent made every one of them self-parented. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Current Assets" RESERVEDNAME="Current Assets">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000006</GUID>
+            <PARENT/>
+            <ALTERID> 7</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Current Liabilities" RESERVEDNAME="Current Liabilities">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000003</GUID>
+            <PARENT/>
+            <ALTERID> 4</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Capital Account" RESERVEDNAME="Capital Account">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000001</GUID>
+            <PARENT/>
+            <ALTERID> 2</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Reserves &amp; Surplus" RESERVEDNAME="Reserves &amp; Surplus">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-0000000a</GUID>
+            <PARENT>Capital Account</PARENT>
+            <ALTERID> 11</ALTERID>
+            <LANGUAGENAME.LIST>
+              <NAME.LIST TYPE="String">
+                <NAME>Reserves &amp; Surplus</NAME>
+                <NAME>Retained Earnings</NAME>
+              </NAME.LIST>
+              <LANGUAGEID> 1033</LANGUAGEID>
+            </LANGUAGENAME.LIST>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Sundry Creditors" RESERVEDNAME="Sundry Creditors">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000010</GUID>
+            <PARENT>Current Liabilities</PARENT>
+            <ISBILLWISEON>Yes</ISBILLWISEON>
+            <ALTERID> 17</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Sundry Debtors" RESERVEDNAME="Sundry Debtors">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000014</GUID>
+            <PARENT>Current Assets</PARENT>
+            <ISBILLWISEON>Yes</ISBILLWISEON>
+            <ALTERID> 21</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Duties &amp; Taxes" RESERVEDNAME="Duties &amp; Taxes">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-0000000e</GUID>
+            <PARENT>Current Liabilities</PARENT>
+            <ALTERID> 15</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GROUP NAME="Purchase Accounts" RESERVEDNAME="Purchase Accounts">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000018</GUID>
+            <PARENT/>
+            <ALTERID> 25</ALTERID>
+          </GROUP>
+        </TALLYMESSAGE>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <UNIT NAME="Nos" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000c0</GUID>
+            <ISSIMPLEUNIT>Yes</ISSIMPLEUNIT>
+            <ALTERID> 200</ALTERID>
+          </UNIT>
+        </TALLYMESSAGE>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <GODOWN NAME="Main Location" RESERVEDNAME="Main Location">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000c1</GUID>
+            <PARENT/>
+            <ALTERID> 201</ALTERID>
+          </GODOWN>
+        </TALLYMESSAGE>
+
+        <!-- A real party ledger: address, pincode and state live inside
+             LEDMAILINGDETAILS.LIST, and Tally keeps a dated history of them.
+             GSTIN lives inside LEDGSTREGDETAILS.LIST, not on the ledger. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <LEDGER NAME="TechSource Distributors" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000d3</GUID>
+            <CURRENCYNAME>&#8377;</CURRENCYNAME>
+            <PRIORSTATENAME>Gujarat</PRIORSTATENAME>
+            <PARENT>Sundry Creditors</PARENT>
+            <ISBILLWISEON>Yes</ISBILLWISEON>
+            <OPENINGBALANCE>32000.00</OPENINGBALANCE>
+            <ALTERID> 213</ALTERID>
+            <LEDGSTREGDETAILS.LIST>
+              <APPLICABLEFROM>20260401</APPLICABLEFROM>
+              <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+              <GSTIN>24AAACT1234C1ZV</GSTIN>
+              <PLACEOFSUPPLY>Gujarat</PLACEOFSUPPLY>
+            </LEDGSTREGDETAILS.LIST>
+            <LEDMAILINGDETAILS.LIST>
+              <ADDRESS.LIST TYPE="String">
+                <ADDRESS>Unit 3, Old Compound</ADDRESS>
+              </ADDRESS.LIST>
+              <APPLICABLEFROM>20200401</APPLICABLEFROM>
+              <PINCODE>390001</PINCODE>
+              <MAILINGNAME>TechSource Distributors</MAILINGNAME>
+              <STATE>Gujarat</STATE>
+              <COUNTRY>India</COUNTRY>
+            </LEDMAILINGDETAILS.LIST>
+            <LEDMAILINGDETAILS.LIST>
+              <ADDRESS.LIST TYPE="String">
+                <ADDRESS>45 Industrial Estate</ADDRESS>
+              </ADDRESS.LIST>
+              <APPLICABLEFROM>20260401</APPLICABLEFROM>
+              <PINCODE>450100</PINCODE>
+              <MAILINGNAME>TechSource Distributors</MAILINGNAME>
+              <STATE>Gujarat</STATE>
+              <COUNTRY>India</COUNTRY>
+            </LEDMAILINGDETAILS.LIST>
+          </LEDGER>
+        </TALLYMESSAGE>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <LEDGER NAME="ABC Retail Pvt Ltd" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000cf</GUID>
+            <CURRENCYNAME>&#8377;</CURRENCYNAME>
+            <PARENT>Sundry Debtors</PARENT>
+            <ISBILLWISEON>Yes</ISBILLWISEON>
+            <OPENINGBALANCE>-50000.00</OPENINGBALANCE>
+            <ALTERID> 209</ALTERID>
+            <LEDMAILINGDETAILS.LIST>
+              <ADDRESS.LIST TYPE="String">
+                <ADDRESS>ABC Test Address</ADDRESS>
+              </ADDRESS.LIST>
+              <APPLICABLEFROM>20260401</APPLICABLEFROM>
+              <PINCODE>401033</PINCODE>
+              <STATE>Maharashtra</STATE>
+              <COUNTRY>India</COUNTRY>
+            </LEDMAILINGDETAILS.LIST>
+          </LEDGER>
+        </TALLYMESSAGE>
+
+        <!-- A GST duty ledger: the rate lives in RATEOFTAXCALCULATION and the
+             head in GSTDUTYHEAD. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <LEDGER NAME="IGST 18%" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000d5</GUID>
+            <PARENT>Duties &amp; Taxes</PARENT>
+            <TAXTYPE>GST</TAXTYPE>
+            <GSTDUTYHEAD>IGST</GSTDUTYHEAD>
+            <RATEOFTAXCALCULATION> 18</RATEOFTAXCALCULATION>
+            <OPENINGBALANCE>0.00</OPENINGBALANCE>
+            <ALTERID> 215</ALTERID>
+          </LEDGER>
+        </TALLYMESSAGE>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <LEDGER NAME="Purchase - GST 18%" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000d4</GUID>
+            <PARENT>Purchase Accounts</PARENT>
+            <OPENINGBALANCE>0.00</OPENINGBALANCE>
+            <ALTERID> 214</ALTERID>
+          </LEDGER>
+        </TALLYMESSAGE>
+
+        <!-- Opening stock is split per godown in BATCHALLOCATIONS.LIST. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <STOCKITEM NAME="Laptop Computer" RESERVEDNAME="">
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-000000c5</GUID>
+            <PARENT/>
+            <BASEUNITS>Nos</BASEUNITS>
+            <GSTHSNCODE>84713010</GSTHSNCODE>
+            <OPENINGBALANCE>4 Nos</OPENINGBALANCE>
+            <OPENINGVALUE>200000.00</OPENINGVALUE>
+            <OPENINGRATE>50000.00/Nos</OPENINGRATE>
+            <ALTERID> 205</ALTERID>
+            <BATCHALLOCATIONS.LIST>
+              <GODOWNNAME>Main Location</GODOWNNAME>
+              <BATCHNAME>Primary Batch</BATCHNAME>
+              <OPENINGBALANCE>4 Nos</OPENINGBALANCE>
+              <OPENINGVALUE>200000.00</OPENINGVALUE>
+              <OPENINGRATE>50000.00/Nos</OPENINGRATE>
+            </BATCHALLOCATIONS.LIST>
+          </STOCKITEM>
+        </TALLYMESSAGE>
+
+        <!-- TallyPrime closes every export with this. NAME here is the company
+             GUID; the display name is REMOTECMPNAME. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <COMPANY>
+            <REMOTECMPINFO.LIST MERGE="Yes">
+              <NAME>6c5c39d3-8d04-455d-85f9-f53464f81e71</NAME>
+              <REMOTECMPNAME>OptiReach Import Test</REMOTECMPNAME>
+              <REMOTECMPSTATE>Maharashtra</REMOTECMPSTATE>
+            </REMOTECMPINFO.LIST>
+          </COMPANY>
+        </TALLYMESSAGE>
+
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>

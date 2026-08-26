@@ -148,6 +148,22 @@ TENANT_STEPS: list[tuple[str, str, list[str], set[str]]] = [
      ["scripts.seed_showcase_extras"], {DB_URL_ARG, COMPANY_ARG}),
 ]
 
+# Once-per-instance, after both tenants exist (needs company names + demo users).
+FINAL_STEPS: list[tuple[str, str, list[str], set[str]]] = [
+    (
+        "secretarial_demo",
+        "Secretarial logins and enable the module flag on both demo tenants",
+        ["scripts.seed_secretarial_demo"],
+        {DB_URL_ARG},
+    ),
+    (
+        "secretarial_scenario",
+        "Publish rules/packs and seed directors, registers, calendar, meetings, filings",
+        ["scripts.seed_secretarial_scenario"],
+        {DB_URL_ARG},
+    ),
+]
+
 if ARGS.list:
     print(f"{'SCOPE':<9} {'STEP':<16} DESCRIPTION")
     for name, desc, _argv, _flags in GLOBAL_STEPS:
@@ -155,6 +171,8 @@ if ARGS.list:
     for name, desc, _argv, _flags in TENANT_STEPS:
         print(f"{'tenant':<9} {name:<16} {desc}")
     print(f"{'final':<9} {'demo_user':<16} The showcase login, owning its own tenant")
+    for name, desc, _argv, _flags in FINAL_STEPS:
+        print(f"{'final':<9} {name:<16} {desc}")
     sys.exit(0)
 
 if not ARGS.database_url:
@@ -410,6 +428,9 @@ async def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"  [!!] {'demo_user':<22} FAILED: {exc}")
             failed.append("demo_user")
+
+    for step in FINAL_STEPS:
+        await run(step, None)
 
     if failed:
         print(f"\nSteps needing a retry (they will re-run next start): {', '.join(failed)}")

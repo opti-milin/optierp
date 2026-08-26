@@ -57,7 +57,8 @@ from app.services.pagination import paginate
 
 logger = get_logger(__name__)
 
-_SERIES = "ASSET-.YYYY.-"
+ASSET_SERIES = "ASSET-.YYYY.-"
+_SERIES = ASSET_SERIES  # kept as the module-local name the rest of this file uses
 TWOPLACES = Decimal("0.01")
 ZERO = Decimal("0")
 
