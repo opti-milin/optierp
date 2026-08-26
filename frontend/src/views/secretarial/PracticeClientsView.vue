@@ -6,13 +6,19 @@
 // they show zero, which is honest — a made-up number on a compliance dashboard is
 // worse than a blank one.
 import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import CompanyForm from "@/components/secretarial/CompanyForm.vue";
+import { useAuthStore } from "@/stores/auth";
 import { useSecretarialStore } from "@/stores/secretarial";
 import type { ErrorEnvelope, ListResponse } from "@/types/core";
 import type { PracticeClient } from "@/types/secretarial";
 
 const store = useSecretarialStore();
+const auth = useAuthStore();
+const router = useRouter();
+const route = useRoute();
+const opening = ref("");
 const clients = ref<PracticeClient[]>([]);
 const loading = ref(false);
 const error = ref<ErrorEnvelope | null>(null);
@@ -70,14 +76,62 @@ async function onClientAdded(entityId: string): Promise<void> {
   await load();
 }
 
-function openClient(client: PracticeClient): void {
-  // Only entities this account owns can be opened directly; a delegated client
-  // lives in the client's own tenant and needs a company switch first.
-  if (client.relationship_type === "delegated") return;
-  store.setEntity(client.entity_id);
+async function openClient(client: PracticeClient): Promise<void> {
+  // An owned or managed client is just a change of selection — the records are in this
+  // account already. A delegated one lives in the client's own tenant, so opening it
+  // means acquiring a token for that tenant first; the grant is what makes that
+  // possible, and the banner in the sidebar is what makes it visible afterwards.
+  if (client.relationship_type !== "delegated") {
+    store.setEntity(client.entity_id);
+    return;
+  }
+
+  opening.value = client.id;
+  error.value = null;
+  try {
+    // The store keeps the routed view unmounted across both the navigation and the
+    // switch, so no firm-side view is ever alive while the token points elsewhere.
+    await store.enterDelegated(
+      {
+        owner_company_id: client.owner_company_id,
+        entity_id: client.entity_id,
+        entity_name: client.entity_name,
+      },
+      // Captured before the switch, while this token still belongs to the firm.
+      {
+        companyId: auth.companyId ?? "",
+        name: store.settings?.practice_name || "your practice",
+      },
+      () => router.push("/secretarial"),
+    );
+  } catch (e) {
+    // A revoked or expired grant surfaces here as a 403 from switch-company. Say that,
+    // rather than a bare failure: it is the expected outcome of the client ending the
+    // engagement, not a bug.
+    //
+    // We have already navigated away, so the message has to travel back with us —
+    // setting it on this instance would write to a component nobody is looking at.
+    const detail = (e as { response?: { data?: ErrorEnvelope } }).response?.data?.detail;
+    await router.push({
+      path: "/secretarial/clients",
+      query: {
+        error:
+          detail ??
+          `Could not open ${client.entity_name}. The engagement may have been revoked — ask the client to re-grant access.`,
+      },
+    });
+  } finally {
+    opening.value = "";
+  }
 }
 
 (async () => {
+  // A failed delegated open bounces back here with the reason in the query string.
+  const carried = route.query.error;
+  if (typeof carried === "string" && carried) {
+    error.value = { detail: carried } as ErrorEnvelope;
+    router.replace({ path: "/secretarial/clients" });
+  }
   await store.load();
   await load();
 })();
@@ -182,15 +236,23 @@ function openClient(client: PracticeClient): void {
             </td>
             <td class="px-3 py-2 text-right">
               <button
-                v-if="c.relationship_type !== 'delegated'"
-                class="text-xs text-blue-600 hover:underline"
+                class="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                :disabled="opening !== ''"
+                :title="
+                  c.relationship_type === 'delegated'
+                    ? 'Opens the client\'s own account under your engagement'
+                    : undefined
+                "
                 @click="openClient(c)"
               >
-                Work on this
+                {{
+                  opening === c.id
+                    ? "Opening…"
+                    : c.relationship_type === "delegated"
+                      ? "Open their account →"
+                      : "Work on this"
+                }}
               </button>
-              <span v-else class="text-xs text-gray-400" title="Switch company to open this client's records">
-                switch company
-              </span>
             </td>
           </tr>
         </tbody>

@@ -731,14 +731,15 @@ const MANUFACTURING: WorkspaceConfig = {
 const MIGRATION: WorkspaceConfig = {
   key: "migration",
   title: "Data Migration",
-  statsEndpoint: "/tally/workspace",
+  statsEndpoint: "/migration/workspace",
   sidebar: [
     {
       items: [
         { label: "Home", to: "/", icon: "⌂" },
         { label: "Data Migration", to: "/data-migration", icon: "⇥" },
-        { label: "Tally Imports", to: "/tally", icon: "📥" },
-        { label: "Coverage Matrix", to: "/tally/coverage", icon: "🗺" },
+        { label: "Imports", to: "/data-migration/imports", icon: "📥" },
+        { label: "Sources & Templates", to: "/data-migration/sources", icon: "📄" },
+        { label: "Coverage Matrix", to: "/data-migration/coverage", icon: "🗺" },
       ],
     },
     {
@@ -756,14 +757,16 @@ const MIGRATION: WorkspaceConfig = {
   ],
   cards: [
     {
-      title: "Import from Tally",
+      title: "Bring your books across",
       links: [
-        { label: "New / recent imports", to: "/tally" },
-        { label: "What comes across (coverage)", to: "/tally/coverage" },
+        { label: "New / recent imports", to: "/data-migration/imports" },
+        { label: "Supported sources & templates", to: "/data-migration/sources" },
+        { label: "What comes across (coverage)", to: "/data-migration/coverage" },
+        { label: "Exporting from Tally", to: "/data-migration/guides/tally" },
       ],
     },
     {
-      title: "Compare against Tally",
+      title: "Compare against the old system",
       links: [
         { label: "Trial Balance", to: "/reports?tab=trial-balance" },
         { label: "General Ledger", to: "/reports?tab=general-ledger" },
@@ -789,12 +792,12 @@ const MIGRATION: WorkspaceConfig = {
 };
 
 /**
- * Every module gets the same "Import from Tally" entry, deep-linked so the
- * wizard pre-selects that module's entities. Appended here rather than repeated
- * in each config, so a new module inherits it automatically.
+ * Every module gets the same "Import data" entry, deep-linked so the wizard
+ * pre-selects that module's entities. Appended here rather than repeated in each
+ * config, so a new module inherits it automatically.
  */
-function withTallyImport(config: WorkspaceConfig, moduleKey: string): WorkspaceConfig {
-  const link = { label: "Import from Tally", to: `/tally?module=${moduleKey}` };
+function withDataImport(config: WorkspaceConfig, moduleKey: string): WorkspaceConfig {
+  const link = { label: "Import data", to: `/data-migration/imports?module=${moduleKey}` };
   return {
     ...config,
     sidebar: [...config.sidebar, { title: "Data Migration", items: [link] }],
@@ -802,14 +805,17 @@ function withTallyImport(config: WorkspaceConfig, moduleKey: string): WorkspaceC
       ...config.cards,
       {
         title: "Data Migration",
-        links: [link, { label: "What comes across (coverage)", to: "/tally/coverage" }],
+        links: [
+          link,
+          { label: "What comes across (coverage)", to: "/data-migration/coverage" },
+        ],
       },
     ],
   };
 }
 
-// Module 13 — Company Secretarial & Governance. Deliberately has no `withTallyImport`
-// wrapper: statutory records do not come out of a Tally file.
+// Module 13 — Company Secretarial & Governance. Deliberately has no `withDataImport`
+// wrapper: statutory records do not come out of an accounting export.
 const SECRETARIAL: WorkspaceConfig = {
   key: "secretarial",
   title: "Secretarial & Compliance",
@@ -830,6 +836,7 @@ const SECRETARIAL: WorkspaceConfig = {
           profiles: ["business"],
         },
         { label: "Compliance calendar", to: "/secretarial/compliance", icon: "🗓" },
+        { label: "Financial figures", to: "/secretarial/facts", icon: "₹" },
       ],
     },
     {
@@ -840,6 +847,13 @@ const SECRETARIAL: WorkspaceConfig = {
         { label: "Document library", to: "/secretarial/documents" },
         { label: "Certified true copies", to: "/secretarial/ctcs" },
         { label: "Filings", to: "/secretarial/filings" },
+      ],
+    },
+    {
+      title: "Capital",
+      items: [
+        { label: "Share capital", to: "/secretarial/capital" },
+        { label: "Loans & investments", to: "/secretarial/s186" },
       ],
     },
     {
@@ -891,6 +905,7 @@ const SECRETARIAL: WorkspaceConfig = {
       title: "Compliance",
       links: [
         { label: "Calendar", to: "/secretarial/compliance" },
+        { label: "Financial figures", to: "/secretarial/facts" },
         { label: "Statutory content review", to: "/secretarial/rules" },
       ],
     },
@@ -915,13 +930,13 @@ const SECRETARIAL: WorkspaceConfig = {
 };
 
 export const WORKSPACES: Record<string, WorkspaceConfig> = {
-  selling: withTallyImport(SELLING, "selling"),
-  buying: withTallyImport(BUYING, "buying"),
-  stock: withTallyImport(STOCK, "stock"),
-  accounting: withTallyImport(ACCOUNTING, "accounting"),
-  assets: withTallyImport(ASSETS, "assets"),
-  taxation: withTallyImport(TAXATION, "accounting"),
-  manufacturing: withTallyImport(MANUFACTURING, "manufacturing"),
+  selling: withDataImport(SELLING, "selling"),
+  buying: withDataImport(BUYING, "buying"),
+  stock: withDataImport(STOCK, "stock"),
+  accounting: withDataImport(ACCOUNTING, "accounting"),
+  assets: withDataImport(ASSETS, "assets"),
+  taxation: withDataImport(TAXATION, "accounting"),
+  manufacturing: withDataImport(MANUFACTURING, "manufacturing"),
   migration: MIGRATION,
   secretarial: SECRETARIAL,
 };

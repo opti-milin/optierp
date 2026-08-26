@@ -9,6 +9,21 @@ encode — in particular §2.1 (``company_id`` means the *owning* tenant, not th
 tenant currently looking at the row) and §2.2 (delegation).
 """
 
+from app.models.secretarial.capital import (
+    CAPITAL_EVENT_STATUSES,
+    CAPITAL_EVENT_TYPES,
+    CERTIFICATE_ISSUE_TYPES,
+    CERTIFICATE_STATUSES,
+    S186_ENTRY_STATUSES,
+    S186_ENTRY_TYPES,
+    TRANSFER_STATUSES,
+    SecretarialCapitalEvent,
+    SecretarialDistinctiveSequence,
+    SecretarialS186Entry,
+    SecretarialS186Limit,
+    SecretarialShareCertificate,
+    SecretarialShareTransferDetail,
+)
 from app.models.secretarial.compliance import (
     CLOSED_STATUSES,
     DEFAULT_REMINDER_OFFSETS,
@@ -86,6 +101,19 @@ from app.models.secretarial.persons import (
 )
 
 __all__ = [
+    "CAPITAL_EVENT_STATUSES",
+    "CAPITAL_EVENT_TYPES",
+    "CERTIFICATE_ISSUE_TYPES",
+    "CERTIFICATE_STATUSES",
+    "S186_ENTRY_STATUSES",
+    "S186_ENTRY_TYPES",
+    "TRANSFER_STATUSES",
+    "SecretarialCapitalEvent",
+    "SecretarialDistinctiveSequence",
+    "SecretarialS186Entry",
+    "SecretarialS186Limit",
+    "SecretarialShareCertificate",
+    "SecretarialShareTransferDetail",
     "ATTENDANCE_STATUSES",
     "CIRCULAR_STATUSES",
     "CIRCULATION_STATUSES",

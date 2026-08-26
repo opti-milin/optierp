@@ -394,6 +394,12 @@ async def list_purchase_orders(
     )
     if status:
         stmt = stmt.where(PurchaseOrder.status == status)
+    else:
+        # A cancelled document keeps its reversing entries — that is the audit
+        # trail — but it is noise in the working list. Rolling back an import
+        # would otherwise leave every cancelled document on screen, looking
+        # like the rollback had not worked. Ask for them with ?status=Cancelled.
+        stmt = stmt.where(PurchaseOrder.docstatus != DOCSTATUS_CANCELLED)
     if supplier_id is not None:
         stmt = stmt.where(PurchaseOrder.supplier_id == supplier_id)
     return await paginate(db, stmt, page, page_size)

@@ -6,11 +6,11 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "@/api/client";
 import DataTable, { type Column } from "@/components/shared/DataTable.vue";
-import ImportFromTallyButton from "@/components/shared/ImportFromTallyButton.vue";
+import ImportDataButton from "@/components/shared/ImportDataButton.vue";
 import TreeView from "@/components/shared/TreeView.vue";
 import { useList } from "@/composables/useList";
 import type { DocTypeMeta } from "@/types/registry";
-import { SLUG_TO_TALLY_ENTITY } from "@/types/tally";
+import { SLUG_TO_MIGRATION_ENTITY } from "@/types/migration";
 
 const route = useRoute();
 const router = useRouter();
@@ -32,7 +32,7 @@ async function init(): Promise<void> {
 
 // Masters that a Tally export can fill get an "Import from Tally" button here,
 // so every new engine-backed master inherits the option for free.
-const tallySource = computed(() => SLUG_TO_TALLY_ENTITY[doctype.value]);
+const tallySource = computed(() => SLUG_TO_MIGRATION_ENTITY[doctype.value]);
 
 onMounted(init);
 watch(() => route.params.doctype, init);
@@ -50,7 +50,7 @@ function openRow(row: { id: string }): void {
     <div class="mb-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold text-gray-900">{{ meta?.name ?? "Records" }}</h1>
       <div class="flex items-center gap-2">
-        <ImportFromTallyButton
+        <ImportDataButton
           v-if="tallySource"
           :module="tallySource.module"
           :entity="tallySource.entity"

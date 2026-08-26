@@ -461,3 +461,206 @@ export interface PortalConsent {
   responded_at: string | null;
   circular_status: string;
 }
+
+// The register-of-members row, typed where a screen needs to reason about a member
+// rather than just render a generic register grid.
+export interface MemberRow {
+  id: string;
+  entity_id: string;
+  member_name: string;
+  folio_no: string;
+  member_type: string;
+  person_id: string | null;
+  shareholder_id: string | null;
+  pan: string | null;
+  share_class: string | null;
+  shares_held: string;
+  nominal_value: string | null;
+  holding_as_on: string | null;
+  joined_on: string | null;
+  ceased_on: string | null;
+  is_beneficial_owner: boolean;
+  notes: string | null;
+}
+
+// --- Capital (Phase 5) ------------------------------------------------------------
+
+export interface ShareCertificate {
+  id: string;
+  entity_id: string;
+  certificate_no: number;
+  member_id: string | null;
+  holder_name: string;
+  folio_no: string | null;
+  share_class: string;
+  no_of_shares: string;
+  face_value: string | null;
+  amount_paid_up: string | null;
+  distinctive_from: number;
+  distinctive_to: number;
+  issue_type: "original" | "duplicate" | "renewed" | "split" | "consolidation";
+  issued_on: string | null;
+  deferred: boolean;
+  status: "issued" | "cancelled" | "surrendered";
+  cancelled_on: string | null;
+  cancelled_reason: string | null;
+  supersedes_id: string | null;
+  capital_event_id: string | null;
+  document_id: string | null;
+  notes: string | null;
+  creation: string;
+}
+
+export interface ShareTransfer {
+  id: string;
+  entity_id: string;
+  instrument_no: number;
+  share_transfer_id: string | null;
+  transferor_member_id: string | null;
+  transferee_member_id: string | null;
+  transferor_name: string;
+  transferee_name: string;
+  transferor_folio: string | null;
+  transferee_folio: string | null;
+  share_class: string;
+  no_of_shares: string;
+  face_value: string | null;
+  consideration: string;
+  stamp_duty: string | null;
+  executed_on: string;
+  lodged_on: string | null;
+  distinctive_from: number | null;
+  distinctive_to: number | null;
+  board_meeting_id: string | null;
+  circular_id: string | null;
+  approved_on: string | null;
+  surrendered_certificate_id: string | null;
+  issued_certificate_id: string | null;
+  document_id: string | null;
+  status: "draft" | "board_approved" | "issued_posted" | "reverted";
+  posted_on: string | null;
+  reverted_on: string | null;
+  reverted_reason: string | null;
+  notes: string | null;
+  creation: string;
+}
+
+export type CapitalEventType =
+  | "right_issue"
+  | "private_placement"
+  | "preferential_allotment"
+  | "esop_grant"
+  | "bonus_issue"
+  | "buyback"
+  | "dividend";
+
+export interface CapitalEvent {
+  id: string;
+  entity_id: string;
+  event_type: CapitalEventType;
+  title: string;
+  fy: string | null;
+  board_meeting_id: string | null;
+  general_meeting_id: string | null;
+  circular_id: string | null;
+  share_class: string | null;
+  shares_offered: string | null;
+  shares_allotted: string | null;
+  face_value: string | null;
+  price_per_share: string | null;
+  premium_per_share: string | null;
+  total_amount: string | null;
+  dividend_per_share: string | null;
+  offer_on: string | null;
+  record_on: string | null;
+  closes_on: string | null;
+  allotted_on: string | null;
+  paid_up_before: string | null;
+  paid_up_after: string | null;
+  authorised_capital: string | null;
+  allottees: Array<Record<string, unknown>> | null;
+  solvency_check: Record<string, unknown> | null;
+  filing_id: string | null;
+  document_id: string | null;
+  status: "draft" | "approved" | "allotted" | "cancelled";
+  notes: string | null;
+  creation: string;
+}
+
+export interface CapTableRow {
+  member_id: string | null;
+  holder_name: string;
+  folio_no: string | null;
+  share_class: string;
+  shares: string;
+  pct: string | null;
+  certificates: number;
+  distinctive_ranges: string[];
+}
+
+export interface CapTable {
+  entity_id: string;
+  source: "ledger" | "register" | "opening";
+  total_shares: string;
+  rows: CapTableRow[];
+  unissued_from: number | null;
+  notes: string[];
+}
+
+export interface S186Limit {
+  id: string | null;
+  entity_id: string;
+  fy: string;
+  paid_up_capital: string | null;
+  free_reserves: string | null;
+  securities_premium: string | null;
+  limit_sixty_pct: string | null;
+  limit_hundred_pct: string | null;
+  effective_limit: string | null;
+  special_resolution_meeting_id: string | null;
+  special_resolution_on: string | null;
+  source: string;
+  computed_on: string | null;
+  gaps: string[] | null;
+  notes: string | null;
+  exposure: string | null;
+  headroom: string | null;
+  verdict: "within" | "exceeded" | "lifted" | "unknown";
+}
+
+export interface S186Entry {
+  id: string;
+  entity_id: string;
+  entry_type: "loan" | "guarantee" | "security" | "investment";
+  fy: string | null;
+  party_name: string;
+  party_cin: string | null;
+  party_relation: string | null;
+  amount: string;
+  rate_of_interest: string | null;
+  purpose: string | null;
+  security_details: string | null;
+  made_on: string;
+  due_on: string | null;
+  repaid_on: string | null;
+  board_meeting_id: string | null;
+  special_resolution_meeting_id: string | null;
+  limit_check: Record<string, unknown> | null;
+  status: "outstanding" | "repaid" | "invoked" | "written_off";
+  notes: string | null;
+  creation: string;
+}
+
+export interface DividendCheck {
+  entity_id: string;
+  fy: string;
+  current_profit: string | null;
+  accumulated_profit: string | null;
+  accumulated_losses: string | null;
+  depreciation_provided: boolean | null;
+  distributable: string | null;
+  proposed: string | null;
+  verdict: "ok" | "exceeded" | "unknown";
+  reasons: string[];
+  source: string;
+}

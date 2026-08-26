@@ -536,16 +536,24 @@ const routes: RouteRecordRaw[] = [
       { path: "manufacturing-reports", name: "manufacturing-reports", component: () => import("@/views/manufacturing/ManufacturingReportsView.vue") },
       { path: "manufacturing-planning", name: "manufacturing-planning", component: () => import("@/views/manufacturing/ManufacturingPlanningView.vue") },
       { path: "manufacturing-settings", name: "manufacturing-settings", component: () => import("@/views/manufacturing/ManufacturingSettingsView.vue") },
-      // Module 12 — Data Migration (import from Tally)
+      // Module 12 — Data Migration (Tally XML/CSV, or a spreadsheet from any app)
       {
         path: "data-migration",
         name: "data-migration-workspace",
         component: () => import("@/views/ModuleWorkspace.vue"),
         props: { moduleKey: "migration" },
       },
-      { path: "tally", name: "tally-imports", component: () => import("@/views/tally/TallyImportView.vue") },
-      { path: "tally/coverage", name: "tally-coverage", component: () => import("@/views/tally/TallyCoverageView.vue") },
-      { path: "tally/imports/:id", name: "tally-import-detail", component: () => import("@/views/tally/TallyImportDetailView.vue"), props: true },
+      { path: "data-migration/imports", name: "migration-imports", component: () => import("@/views/migration/MigrationImportView.vue") },
+      { path: "data-migration/coverage", name: "migration-coverage", component: () => import("@/views/migration/MigrationCoverageView.vue") },
+      { path: "data-migration/sources", name: "migration-sources", component: () => import("@/views/migration/MigrationSourcesView.vue") },
+      { path: "data-migration/guides/tally", name: "migration-guide-tally", component: () => import("@/views/migration/TallyExportGuideView.vue") },
+      { path: "data-migration/imports/:id", name: "migration-import-detail", component: () => import("@/views/migration/MigrationImportDetailView.vue"), props: true },
+      // The old /tally/* paths are what testers have bookmarked and what every
+      // screenshot in the docs points at. Redirect rather than 404 them.
+      { path: "tally", redirect: "/data-migration/imports" },
+      { path: "tally/coverage", redirect: "/data-migration/coverage" },
+      { path: "tally/guide", redirect: "/data-migration/guides/tally" },
+      { path: "tally/imports/:id", redirect: (to) => `/data-migration/imports/${to.params.id}` },
       // Module 13 — Company Secretarial & Governance. One module, two shells: the
       // home view renders a client roster for a practice and a single-entity
       // overview for a business (see docs/SECRETARIAL_GAP_AND_PLAN.md §2.3).
@@ -565,6 +573,9 @@ const routes: RouteRecordRaw[] = [
       { path: "secretarial/documents", name: "secretarial-documents", component: () => import("@/views/secretarial/DocumentsView.vue") },
       { path: "secretarial/ctcs", name: "secretarial-ctcs", component: () => import("@/views/secretarial/CtcsView.vue") },
       { path: "secretarial/filings", name: "secretarial-filings", component: () => import("@/views/secretarial/FilingsView.vue") },
+      { path: "secretarial/facts", name: "secretarial-facts", component: () => import("@/views/secretarial/FactsView.vue") },
+      { path: "secretarial/capital", name: "secretarial-capital", component: () => import("@/views/secretarial/CapitalView.vue") },
+      { path: "secretarial/s186", name: "secretarial-s186", component: () => import("@/views/secretarial/S186View.vue") },
       // Module 06+ routes register here per module
     ],
   },

@@ -1,11 +1,20 @@
 <script setup lang="ts">
 // "Data Entry" control for transaction line items. Manual entry is the grid
-// itself; this adds the other two modes the user asked for:
-//   • Import — from a CSV template or a Tally CSV export
-//   • OCR    — upload an invoice/PO; extraction connects via API (future)
+// itself; this adds the other two modes:
+//   • CSV — a flat item_code/qty/rate list, for pasting a quote or a price sheet
+//   • OCR — upload an invoice/PO; extraction runs through the API
 // Emits parsed rows; the parent maps them to catalog items.
+//
+// There is deliberately no "migrate my books" mode here. This control only ever
+// produces line items, and a voucher is not a line-item list: it needs its party,
+// its ledgers and its tax rows resolved together, in dependency order. That is
+// Module 12 (Data Migration), which reads real Tally XML and real .xlsx exports.
+// A tab here that took a hand-made item_code/qty/rate CSV and called it "Tally"
+// only taught people the real importer did not exist — so we link to it instead.
 
-import { ref } from "vue";
+import { ref, watch } from "vue";
+import { api } from "@/api/client";
+import type { ErrorEnvelope } from "@/types/core";
 
 export interface ImportedRow {
   item_code: string;
@@ -13,16 +22,84 @@ export interface ImportedRow {
   rate?: number;
 }
 
+interface OcrLine {
+  item_code: string;
+  item_name: string;
+  description: string;
+  qty: number | string;
+  rate: number | string | null;
+  uom: string | null;
+  matched: boolean;
+  match_confidence: number;
+}
+
+interface OcrExtractResponse {
+  lines: OcrLine[];
+  warnings: string[];
+  document_type: string | null;
+  party_name: string | null;
+  document_number: string | null;
+  document_date: string | null;
+  provider: string;
+  model: string;
+}
+
+interface ReviewRow {
+  item_code: string;
+  description: string;
+  qty: number;
+  rate: number | "";
+  matched: boolean;
+  include: boolean;
+}
+
 const emit = defineEmits<{ import: [rows: ImportedRow[]] }>();
 
 const open = ref(false);
-const mode = ref<"csv" | "tally" | "ocr">("csv");
+const mode = ref<"csv" | "ocr">("csv");
 const note = ref<string | null>(null);
+
+const ocrConfigured = ref<boolean | null>(null);
+const ocrFile = ref<File | null>(null);
+const ocrBusy = ref(false);
+const ocrError = ref<string | null>(null);
+const ocrMeta = ref<string | null>(null);
+const ocrWarnings = ref<string[]>([]);
+const reviewRows = ref<ReviewRow[]>([]);
+
+const OCR_MAX_BYTES = 10 * 1024 * 1024;
+
+function resetOcr(): void {
+  ocrFile.value = null;
+  ocrBusy.value = false;
+  ocrError.value = null;
+  ocrMeta.value = null;
+  ocrWarnings.value = [];
+  reviewRows.value = [];
+}
 
 function close(): void {
   open.value = false;
   note.value = null;
+  resetOcr();
 }
+
+async function loadOcrStatus(): Promise<void> {
+  try {
+    const { data } = await api.get<{ configured: boolean }>("/ocr/status");
+    ocrConfigured.value = data.configured;
+  } catch {
+    ocrConfigured.value = null;
+  }
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) void loadOcrStatus();
+});
+
+watch(mode, (m) => {
+  if (m === "ocr") void loadOcrStatus();
+});
 
 // Split one CSV line, honouring double-quoted fields (with "" escapes) so an
 // embedded comma stays in a single cell.
@@ -99,6 +176,92 @@ function downloadTemplate(): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function onOcrFile(e: Event): void {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  ocrFile.value = file;
+  ocrError.value = null;
+  ocrMeta.value = null;
+  ocrWarnings.value = [];
+  reviewRows.value = [];
+  if (file && file.size > OCR_MAX_BYTES) {
+    ocrFile.value = null;
+    input.value = "";
+    ocrError.value = "That file is larger than 10 MB. Use a smaller scan or a single page.";
+  }
+}
+
+async function extractOcr(): Promise<void> {
+  const file = ocrFile.value;
+  if (!file || ocrBusy.value) return;
+  ocrBusy.value = true;
+  ocrError.value = null;
+  ocrWarnings.value = [];
+  reviewRows.value = [];
+  ocrMeta.value = null;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const { data } = await api.post<OcrExtractResponse>(
+      "/ocr/extract",
+      {
+        file_name: file.name,
+        content_base64: bytesToBase64(bytes),
+        mime_type: file.type || null,
+      },
+      { timeout: 120_000 },
+    );
+    const bits = [data.party_name, data.document_number, data.document_date].filter(Boolean);
+    ocrMeta.value = bits.length ? bits.join(" · ") : null;
+    ocrWarnings.value = data.warnings ?? [];
+    reviewRows.value = data.lines.map((line) => ({
+      item_code: line.item_code,
+      description: line.description,
+      qty: Number(line.qty) || 1,
+      rate: line.rate == null || line.rate === "" ? "" : Number(line.rate),
+      matched: line.matched,
+      include: true,
+    }));
+    if (data.lines.length === 0 && ocrWarnings.value.length === 0) {
+      ocrError.value = "No line items were found. Try a clearer scan of the item table.";
+    }
+  } catch (e) {
+    const err = e as ErrorEnvelope;
+    ocrError.value = err.detail || "OCR extraction failed.";
+    if (err.code === "ocr_not_configured") {
+      ocrConfigured.value = false;
+    }
+  } finally {
+    ocrBusy.value = false;
+  }
+}
+
+function applyOcr(): void {
+  const rows: ImportedRow[] = [];
+  for (const row of reviewRows.value) {
+    if (!row.include || !row.item_code.trim()) continue;
+    rows.push({
+      item_code: row.item_code.trim(),
+      qty: Number(row.qty) || 1,
+      rate: row.rate === "" ? undefined : Number(row.rate),
+    });
+  }
+  if (rows.length === 0) {
+    ocrError.value = "Select at least one line with an item code.";
+    return;
+  }
+  emit("import", rows);
+  close();
+}
 </script>
 
 <template>
@@ -108,7 +271,7 @@ function downloadTemplate(): void {
     </button>
 
     <div v-if="open" class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4" @click.self="close">
-      <div class="w-full max-w-lg rounded-lg bg-white shadow-xl">
+      <div class="w-full max-w-2xl rounded-lg bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-gray-200 px-5 py-3">
           <h3 class="text-sm font-semibold text-gray-900">Import items</h3>
           <button type="button" class="text-gray-400 hover:text-gray-700" @click="close">✕</button>
@@ -117,7 +280,7 @@ function downloadTemplate(): void {
         <!-- mode tabs -->
         <div class="flex gap-4 border-b border-gray-200 px-5">
           <button
-            v-for="m in (['csv', 'tally', 'ocr'] as const)"
+            v-for="m in (['csv', 'ocr'] as const)"
             :key="m"
             type="button"
             class="-mb-px border-b-2 py-2 text-sm font-medium capitalize"
@@ -136,24 +299,88 @@ function downloadTemplate(): void {
               ↓ Download template
             </button>
             <input type="file" accept=".csv,text/csv" class="block w-full text-sm" @change="onFile" />
-          </template>
-
-          <!-- Tally -->
-          <template v-else-if="mode === 'tally'">
-            <p class="text-gray-600">
-              In Tally: <em>Gateway of Tally → Display → Export</em> to <strong>CSV</strong>, then upload it here
-              (same <code>item_code, qty, rate</code> columns).
+            <p class="border-t border-gray-100 pt-3 text-xs text-gray-500">
+              Moving your books from Tally? A voucher needs its party, ledgers and tax rows
+              imported together, which this list cannot carry.
+              <router-link :to="{ name: 'tally-imports' }" class="text-primary hover:underline" @click="close">
+                Use Tally Imports
+              </router-link>
+              to bring in a Tally XML export.
             </p>
-            <input type="file" accept=".csv,text/csv" class="block w-full text-sm" @change="onFile" />
-            <p class="text-xs text-gray-400">Direct Tally XML import connects via API (coming soon).</p>
           </template>
 
           <!-- OCR -->
           <template v-else>
             <p class="text-gray-600">Upload a scanned invoice or PO; line items are extracted automatically.</p>
-            <input type="file" accept="image/*,application/pdf" class="block w-full text-sm" disabled />
-            <button type="button" class="btn-primary" disabled>Extract</button>
-            <p class="text-xs text-gray-400">OCR extraction connects via API (coming soon).</p>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+              class="block w-full text-sm"
+              :disabled="ocrBusy"
+              @change="onOcrFile"
+            />
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="btn-primary"
+                :disabled="!ocrFile || ocrBusy || ocrConfigured === false"
+                @click="extractOcr"
+              >
+                {{ ocrBusy ? "Extracting…" : "Extract" }}
+              </button>
+              <p v-if="ocrConfigured === false" class="text-xs text-amber-700">
+                OCR is not configured. Set <code>OCR_API_KEY</code> on the API (OpenAI-compatible vision) and restart.
+              </p>
+            </div>
+            <p v-if="ocrMeta" class="text-xs text-gray-500">{{ ocrMeta }}</p>
+            <p v-for="w in ocrWarnings" :key="w" class="text-xs text-amber-700">{{ w }}</p>
+            <p v-if="ocrError" class="text-sm text-red-600">{{ ocrError }}</p>
+
+            <div v-if="reviewRows.length" class="overflow-x-auto rounded border border-gray-200">
+              <table class="min-w-full text-left text-xs">
+                <thead class="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th class="px-2 py-1.5 font-medium">Add</th>
+                    <th class="px-2 py-1.5 font-medium">Item</th>
+                    <th class="px-2 py-1.5 font-medium">Description</th>
+                    <th class="px-2 py-1.5 font-medium text-right">Qty</th>
+                    <th class="px-2 py-1.5 font-medium text-right">Rate</th>
+                    <th class="px-2 py-1.5 font-medium">Match</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in reviewRows" :key="idx" class="border-t border-gray-100">
+                    <td class="px-2 py-1">
+                      <input v-model="row.include" type="checkbox" />
+                    </td>
+                    <td class="px-2 py-1">
+                      <input v-model="row.item_code" type="text" class="form-input py-1 text-xs" />
+                    </td>
+                    <td class="max-w-[12rem] truncate px-2 py-1 text-gray-600" :title="row.description">
+                      {{ row.description }}
+                    </td>
+                    <td class="px-2 py-1">
+                      <input v-model.number="row.qty" type="number" min="0" step="any" class="form-input py-1 text-right text-xs" />
+                    </td>
+                    <td class="px-2 py-1">
+                      <input v-model="row.rate" type="number" min="0" step="any" class="form-input py-1 text-right text-xs" />
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-1">
+                      <span v-if="row.matched" class="text-emerald-700">Catalog</span>
+                      <span v-else class="text-amber-700">Unmatched</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button
+              v-if="reviewRows.length"
+              type="button"
+              class="btn-primary"
+              @click="applyOcr"
+            >
+              Add selected to document
+            </button>
           </template>
 
           <p v-if="note" class="text-sm text-red-600">{{ note }}</p>

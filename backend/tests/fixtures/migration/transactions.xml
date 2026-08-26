@@ -1,0 +1,128 @@
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>All Masters</REPORTNAME>
+        <STATICVARIABLES>
+          <SVCURRENTCOMPANY>OptiReach Import Test</SVCURRENTCOMPANY>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+      <REQUESTDATA>
+
+        <!-- A cancelled voucher. Tally keeps it in the export with
+             ACTION="Cancel"; it must be staged and reported, never posted, and
+             never counted as a document the dry run promises. -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <VOUCHER REMOTEID="6c5c39d3-8d04-455d-85f9-f53464f81e71-00000001"
+                   VCHKEY="6c5c39d3-8d04-455d-85f9-f53464f81e71-0000b420:00000008"
+                   VCHTYPE="Purchase" ACTION="Cancel" OBJVIEW="Invoice Voucher View">
+            <DATE>20260401</DATE>
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000001</GUID>
+            <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+            <VOUCHERNUMBER>1</VOUCHERNUMBER>
+            <REFERENCE>1</REFERENCE>
+            <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>
+            <ISCANCELLED>Yes</ISCANCELLED>
+            <ISINVOICE>Yes</ISINVOICE>
+            <ALTERID> 1</ALTERID>
+            <MASTERID> 1</MASTERID>
+            <ALLINVENTORYENTRIES.LIST>             </ALLINVENTORYENTRIES.LIST>
+            <LEDGERENTRIES.LIST>             </LEDGERENTRIES.LIST>
+          </VOUCHER>
+        </TALLYMESSAGE>
+
+        <!-- A live purchase invoice. Note what is nested where:
+             * the item's own expense ledger is in ACCOUNTINGALLOCATIONS.LIST
+             * input IGST is a DEBIT (negative) and still ADDS to the bill
+             * the bill reference carries BILLCREDITPERIOD, i.e. the due date -->
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <VOUCHER REMOTEID="6c5c39d3-8d04-455d-85f9-f53464f81e71-00000002"
+                   VCHKEY="6c5c39d3-8d04-455d-85f9-f53464f81e71-0000b420:00000010"
+                   VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">
+            <ADDRESS.LIST TYPE="String">
+              <ADDRESS>45 Industrial Estate</ADDRESS>
+            </ADDRESS.LIST>
+            <DATE>20260401</DATE>
+            <REFERENCEDATE>20260401</REFERENCEDATE>
+            <GUID>6c5c39d3-8d04-455d-85f9-f53464f81e71-00000002</GUID>
+            <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+            <STATENAME>Gujarat</STATENAME>
+            <PLACEOFSUPPLY>Maharashtra</PLACEOFSUPPLY>
+            <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+            <PARTYNAME>TechSource Distributors</PARTYNAME>
+            <PARTYLEDGERNAME>TechSource Distributors</PARTYLEDGERNAME>
+            <VOUCHERNUMBER>2</VOUCHERNUMBER>
+            <REFERENCE>PUR-002</REFERENCE>
+            <BASICBUYERNAME>OptiReach Import Test</BASICBUYERNAME>
+            <PARTYMAILINGNAME>TechSource Distributors</PARTYMAILINGNAME>
+            <PARTYPINCODE>450100</PARTYPINCODE>
+            <CONSIGNEESTATENAME>Maharashtra</CONSIGNEESTATENAME>
+            <VCHENTRYMODE>Item Invoice</VCHENTRYMODE>
+            <ISCANCELLED>No</ISCANCELLED>
+            <ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>
+            <ISINVOICE>Yes</ISINVOICE>
+            <ALTERID> 2</ALTERID>
+            <MASTERID> 2</MASTERID>
+            <ALLINVENTORYENTRIES.LIST>
+              <STOCKITEMNAME>Laptop Computer</STOCKITEMNAME>
+              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+              <RATE>50000.00/Nos</RATE>
+              <AMOUNT>-100000.00</AMOUNT>
+              <ACTUALQTY> 2 Nos</ACTUALQTY>
+              <BILLEDQTY> 2 Nos</BILLEDQTY>
+              <BATCHALLOCATIONS.LIST>
+                <GODOWNNAME>Main Location</GODOWNNAME>
+                <BATCHNAME>Primary Batch</BATCHNAME>
+                <AMOUNT>-100000.00</AMOUNT>
+                <ACTUALQTY> 2 Nos</ACTUALQTY>
+                <BILLEDQTY> 2 Nos</BILLEDQTY>
+              </BATCHALLOCATIONS.LIST>
+              <ACCOUNTINGALLOCATIONS.LIST>
+                <LEDGERNAME>Purchase - GST 18%</LEDGERNAME>
+                <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+                <ISPARTYLEDGER>No</ISPARTYLEDGER>
+                <AMOUNT>-100000.00</AMOUNT>
+              </ACCOUNTINGALLOCATIONS.LIST>
+            </ALLINVENTORYENTRIES.LIST>
+            <LEDGERENTRIES.LIST>
+              <LEDGERNAME>TechSource Distributors</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+              <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+              <AMOUNT>118000.00</AMOUNT>
+              <BILLALLOCATIONS.LIST>
+                <NAME>PUR-002</NAME>
+                <BILLCREDITPERIOD JD="46112" P="30 Days">30 Days</BILLCREDITPERIOD>
+                <BILLTYPE>New Ref</BILLTYPE>
+                <AMOUNT>118000.00</AMOUNT>
+              </BILLALLOCATIONS.LIST>
+            </LEDGERENTRIES.LIST>
+            <LEDGERENTRIES.LIST>
+              <RATEOFINVOICETAX.LIST TYPE="Number">
+                <RATEOFINVOICETAX> 18</RATEOFINVOICETAX>
+              </RATEOFINVOICETAX.LIST>
+              <LEDGERNAME>IGST 18%</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+              <ISPARTYLEDGER>No</ISPARTYLEDGER>
+              <AMOUNT>-18000.00</AMOUNT>
+              <VATEXPAMOUNT>-18000.00</VATEXPAMOUNT>
+            </LEDGERENTRIES.LIST>
+          </VOUCHER>
+        </TALLYMESSAGE>
+
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <COMPANY>
+            <REMOTECMPINFO.LIST MERGE="Yes">
+              <NAME>6c5c39d3-8d04-455d-85f9-f53464f81e71</NAME>
+              <REMOTECMPNAME>OptiReach Import Test</REMOTECMPNAME>
+              <REMOTECMPSTATE>Maharashtra</REMOTECMPSTATE>
+            </REMOTECMPINFO.LIST>
+          </COMPANY>
+        </TALLYMESSAGE>
+
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>

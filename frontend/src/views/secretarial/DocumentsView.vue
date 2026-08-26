@@ -131,6 +131,26 @@ async function showVersions(doc: SecretarialDocument): Promise<void> {
   }
 }
 
+async function regenerate(doc: SecretarialDocument): Promise<void> {
+  const summary = window.prompt(
+    "What changed? Stored on the new version; the previous one is kept as-is.",
+    "Updated master data",
+  );
+  if (summary === null) return;
+  busy.value = doc.id;
+  error.value = null;
+  try {
+    await api.post(`/secretarial/documents/${doc.id}/regenerate`, {
+      change_summary: summary || "Re-rendered",
+    });
+    await load();
+  } catch (e) {
+    fail(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
 async function finalise(doc: SecretarialDocument): Promise<void> {
   busy.value = doc.id;
   error.value = null;
@@ -273,6 +293,13 @@ store.load().then(load);
                   @click="openPdf(`/secretarial/documents/${d.id}/download?fmt=pdf`)"
                 >
                   PDF
+                </button>
+                <button
+                  class="ml-3 text-gray-600 hover:underline"
+                  :disabled="busy !== ''"
+                  @click="regenerate(d)"
+                >
+                  New version
                 </button>
                 <button
                   v-if="d.status === 'draft'"

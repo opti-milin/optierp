@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exporting Your Tally Data</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 16mm 16mm;
+    @bottom-left {
+      content: "Exporting Your Tally Data for OptiReach";
+      font-family: sans-serif; font-size: 7.5pt; color: #7A8794;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: sans-serif; font-size: 7.5pt; color: #7A8794;
+    }
+  }
+  @page :first { margin-top: 14mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+    color: #1B222B;
+    margin: 0;
+  }
+
+  h1 {
+    font-size: 21pt; line-height: 1.15; margin: 0 0 2mm;
+    color: #0E4F57; letter-spacing: -.2pt;
+  }
+  .sub { font-size: 10.5pt; color: #4A5661; margin: 0 0 6mm; max-width: 135mm; }
+  .rule { height: 2.4pt; background: #0E4F57; margin: 0 0 6mm; }
+
+  h2 {
+    font-size: 12.5pt; margin: 7mm 0 2.5mm; color: #0E4F57;
+    padding-bottom: 1.2mm; border-bottom: .5pt solid #C9D2D8;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; color: #1B222B; page-break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 2.5mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  code, .path {
+    font-family: monospace; font-size: 9pt;
+    background: #EEF2F4; padding: .3mm 1mm; border: .4pt solid #DCE3E7;
+  }
+
+  table { border-collapse: collapse; width: 100%; margin: 0 0 3mm; font-size: 9.2pt; }
+  th {
+    text-align: left; background: #0E4F57; color: #fff;
+    padding: 1.8mm 2mm; font-size: 8.6pt; letter-spacing: .3pt;
+    text-transform: uppercase;
+  }
+  td { padding: 1.8mm 2mm; border-bottom: .4pt solid #DCE3E7; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+
+  .steps { counter-reset: step; margin: 0 0 3mm; padding: 0; list-style: none; }
+  .steps > li {
+    counter-increment: step; position: relative;
+    padding-left: 8mm; margin-bottom: 2.2mm; page-break-inside: avoid;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: .2mm;
+    width: 5.2mm; height: 5.2mm; border-radius: 50%;
+    background: #0E4F57; color: #fff;
+    font-size: 8pt; font-weight: bold;
+    text-align: center; line-height: 5.2mm;
+  }
+
+  .critical {
+    border-left: 2.5pt solid #B4451F; background: #FBEFEA;
+    padding: 2.5mm 3mm; margin: 0 0 3mm; page-break-inside: avoid;
+  }
+  .critical .tag {
+    font-size: 8pt; font-weight: bold; letter-spacing: .4pt;
+    color: #B4451F; text-transform: uppercase; display: block; margin-bottom: .8mm;
+  }
+  .note {
+    border-left: 2.5pt solid #0E4F57; background: #EAF2F3;
+    padding: 2.5mm 3mm; margin: 0 0 3mm; page-break-inside: avoid;
+  }
+
+  .check { list-style: none; padding-left: 0; }
+  .check li {
+    padding-left: 6.5mm; position: relative; margin-bottom: 1.8mm;
+    page-break-inside: avoid;
+  }
+  .check li::before {
+    content: ""; position: absolute; left: 0; top: .8mm;
+    width: 3.6mm; height: 3.6mm; border: .8pt solid #0E4F57; background: #fff;
+  }
+
+  .avoid { page-break-inside: avoid; }
+  .newpage { page-break-before: always; }
+  .muted { color: #4A5661; font-size: 9pt; }
+  strong { color: #0E1519; }
+</style>
+</head>
+<body>
+
+<h1>Exporting Your Tally Data</h1>
+<p class="sub">
+  A step-by-step guide to producing the two files OptiReach needs from TallyPrime,
+  so your books come across complete and accurate the first time.
+</p>
+<div class="rule"></div>
+
+<h2>What we need from you</h2>
+<p>Two files, exported in this order. The order matters.</p>
+
+<table>
+  <tr>
+    <th style="width:26mm">File</th>
+    <th style="width:44mm">What it contains</th>
+    <th>Why we need it</th>
+  </tr>
+  <tr>
+    <td><strong>1. Masters</strong></td>
+    <td>Ledgers, groups, stock items, units, godowns, parties, tax ledgers</td>
+    <td>These are the <em>names</em> everything else refers to. Without them a
+        transaction naming "ABC Traders" or "Laptop Computer" has nothing to point at.</td>
+  </tr>
+  <tr>
+    <td><strong>2. Transactions</strong></td>
+    <td>Your vouchers — sales, purchases, receipts, payments, journals</td>
+    <td>The actual entries in your books for the period being moved across.</td>
+  </tr>
+</table>
+
+<div class="critical">
+  <span class="tag">Most common mistake</span>
+  Exporting only the transactions. On its own it is unusable — every ledger and
+  item it mentions will be unrecognised. <strong>Always send both files.</strong>
+</div>
+
+<h2>Before you start</h2>
+<ul>
+  <li>Open <strong>TallyPrime</strong> and load the company you want to send.</li>
+  <li>Check the company name on screen is the right one — if you keep several
+      companies, it is easy to export the wrong books.</li>
+  <li>Decide the <strong>period</strong>. If unsure, send one full financial year.</li>
+  <li>Have a folder ready to save into, such as your Desktop.</li>
+</ul>
+
+<h2>Export 1 &mdash; Masters</h2>
+<ol class="steps">
+  <li>From the <strong>Gateway of Tally</strong>, press <code>Alt</code> + <code>E</code>
+      to open the Export menu.</li>
+  <li>Choose <strong>Masters</strong>.</li>
+  <li>In the configuration screen, set <strong>Type of Masters</strong> to
+      <strong>All Masters</strong>.</li>
+  <li>Set <strong>File Format</strong> to <strong>XML</strong>.</li>
+  <li>Set the file name to
+      <span class="path">YourCompany-Masters.xml</span></li>
+  <li>Note the folder shown in <strong>Export Location</strong>, then press
+      <code>Enter</code> to export.</li>
+</ol>
+
+<div class="critical">
+  <span class="tag">Check this one carefully</span>
+  <strong>Type of Masters</strong> must say <strong>All Masters</strong> &mdash; not
+  <em>Accounting Masters</em>. If it says Accounting Masters you will get your ledgers
+  but <strong>no stock items</strong>, and every product on your invoices will come
+  across as unknown. This is the single most frequent problem we see.
+</div>
+
+<h2>Export 2 &mdash; Transactions</h2>
+<ol class="steps">
+  <li>From the <strong>Gateway of Tally</strong>, go to
+      <strong>Display More Reports</strong> &rarr; <strong>Day Book</strong>.</li>
+  <li>Press <code>Alt</code> + <code>F2</code> to set the period, and enter the
+      <strong>from and to dates</strong> you want to send.</li>
+  <li>Press <code>Alt</code> + <code>E</code> and choose <strong>Current</strong>.</li>
+  <li>Set <strong>File Format</strong> to <strong>XML</strong>.</li>
+  <li>Set the file name to include the period, for example
+      <span class="path">YourCompany-Transactions-Apr2025-Mar2026.xml</span></li>
+  <li>Press <code>Enter</code> to export.</li>
+</ol>
+
+<div class="note">
+  <strong>Large books?</strong> If the period covers more than about 10,000 vouchers,
+  export it in quarters &mdash; one file per quarter, each named with its period.
+  Several smaller files are easier to check and far easier to correct if something
+  needs redoing. Send them all together.
+</div>
+
+<h2>Settings that must be right</h2>
+<table>
+  <tr>
+    <th style="width:38mm">Setting</th>
+    <th style="width:30mm">Must be</th>
+    <th>What goes wrong otherwise</th>
+  </tr>
+  <tr>
+    <td>File Format</td>
+    <td><strong>XML</strong></td>
+    <td>Excel and CSV drop the internal reference numbers, bill-wise details and
+        warehouse information. Your invoices would not match up to their payments.</td>
+  </tr>
+  <tr>
+    <td>Type of Masters</td>
+    <td><strong>All Masters</strong></td>
+    <td>Accounting Masters leaves out every stock item, unit and godown.</td>
+  </tr>
+  <tr>
+    <td>Period (Day Book)</td>
+    <td>The full range you want moved</td>
+    <td>Tally exports only what is on screen. A one-day period exports one day.</td>
+  </tr>
+  <tr>
+    <td>Company</td>
+    <td>The correct one</td>
+    <td>With several companies loaded it is easy to export the wrong books.</td>
+  </tr>
+</table>
+
+<div class="newpage"></div>
+
+<h2>Check your files before sending</h2>
+<p>
+  Two minutes here saves a round trip. Right-click each file, choose
+  <strong>Open with</strong> &rarr; <strong>Notepad</strong>, then use
+  <code>Ctrl</code> + <code>F</code> to search for the text below.
+</p>
+
+<h3>In the Masters file</h3>
+<ul class="check">
+  <li>Search for <code>&lt;STOCKITEM</code> &mdash; you should find matches
+      <span class="muted">(if you have no stock items at all, skip this)</span></li>
+  <li>Search for <code>&lt;LEDGER</code> &mdash; you should find many matches</li>
+  <li>Search for <code>&lt;GROUP</code> &mdash; you should find many matches</li>
+</ul>
+<p class="muted">
+  No <code>&lt;STOCKITEM</code> matches but you do sell products? Type of Masters
+  was set to Accounting Masters. Export it again as All Masters.
+</p>
+
+<h3>In the Transactions file</h3>
+<ul class="check">
+  <li>Search for <code>&lt;VOUCHER</code> &mdash; you should find many matches</li>
+  <li>Check the file size is not near-empty &mdash; a few KB usually means the
+      Day Book period was wrong</li>
+</ul>
+
+<h3>Both files</h3>
+<ul class="check">
+  <li>The file name ends in <code>.xml</code>, not <code>.csv</code> or <code>.xlsx</code></li>
+  <li>The company name near the top of the file is the right company</li>
+</ul>
+
+<h2>Sending the files</h2>
+<ul>
+  <li>Put both files in one folder, right-click it and choose
+      <strong>Send to</strong> &rarr; <strong>Compressed (zipped) folder</strong>.</li>
+  <li>Email the ZIP to your OptiReach contact. XML files are often blocked by email
+      filters when sent loose, which is why we ask for a ZIP.</li>
+  <li>If the ZIP is too large to email, tell us and we will send you a secure
+      upload link.</li>
+</ul>
+
+<h2>If something does not look right</h2>
+<table>
+  <tr>
+    <th style="width:58mm">What you see</th>
+    <th>What it means</th>
+  </tr>
+  <tr>
+    <td>No <strong>Type of Masters</strong> option</td>
+    <td>You are exporting from inside a report rather than the Gateway. Press
+        <code>Esc</code> back to the Gateway of Tally and start again.</td>
+  </tr>
+  <tr>
+    <td>Export file is very small</td>
+    <td>Usually an empty period in the Day Book, or the wrong company. Check both
+        and export again.</td>
+  </tr>
+  <tr>
+    <td>Cannot find the exported file</td>
+    <td>Look at <strong>Export Location</strong> on the export screen &mdash; it
+        shows the exact folder Tally saved to.</td>
+  </tr>
+  <tr>
+    <td>Tally offers only Excel or PDF</td>
+    <td>Scroll the File Format list; XML is there. If it genuinely is not, tell us
+        your Tally version and we will advise.</td>
+  </tr>
+</table>
+
+<h2>About your data</h2>
+<p>
+  These files contain your accounting records. We treat them accordingly:
+</p>
+<ul>
+  <li>They are used only to load your books into OptiReach and to verify the
+      result matches Tally.</li>
+  <li>They are stored securely and are not shared with anyone outside the
+      engagement.</li>
+  <li>Nothing is written to your live Tally company. Exporting is read-only &mdash;
+      it cannot alter or damage your books.</li>
+  <li>Tell us when you would like the source files deleted and we will confirm
+      once done.</li>
+</ul>
+
+<div class="note">
+  <strong>Not sure about any step?</strong> Stop and ask before exporting again.
+  Sending us a file you are unsure about is fine &mdash; we check every file on
+  arrival and will tell you quickly if anything is missing.
+</div>
+
+</body>
+</html>

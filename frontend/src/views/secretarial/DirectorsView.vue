@@ -32,6 +32,10 @@ const ROLES_BY_KIND: Record<string, string[]> = {
   llp: ["designated_partner", "partner", "auditor"],
 };
 
+function dinFor(personId: string): string {
+  return people.value.find((p) => p.id === personId)?.din ?? "—";
+}
+
 async function load(): Promise<void> {
   if (!store.entityId) return;
   loading.value = true;
@@ -217,6 +221,7 @@ async function cease(row: Appointment): Promise<void> {
         <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th class="px-3 py-2">Name</th>
+            <th class="px-3 py-2">DIN</th>
             <th class="px-3 py-2">Role</th>
             <th class="px-3 py-2">Designation</th>
             <th class="px-3 py-2">Appointed</th>
@@ -225,9 +230,9 @@ async function cease(row: Appointment): Promise<void> {
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-          <tr v-if="loading"><td colspan="6" class="px-3 py-6 text-center text-gray-400">Loading…</td></tr>
+          <tr v-if="loading"><td colspan="7" class="px-3 py-6 text-center text-gray-400">Loading…</td></tr>
           <tr v-else-if="!rows.length">
-            <td colspan="6" class="px-3 py-6 text-center text-gray-400">No officers recorded yet.</td>
+            <td colspan="7" class="px-3 py-6 text-center text-gray-400">No officers recorded yet.</td>
           </tr>
           <tr v-for="row in rows" :key="row.id" class="hover:bg-gray-50" :class="row.ceased_on ? 'text-gray-400' : ''">
             <td class="px-3 py-2 font-medium" :class="row.ceased_on ? '' : 'text-gray-900'">
@@ -235,6 +240,7 @@ async function cease(row: Appointment): Promise<void> {
               <span v-if="row.is_chairperson" class="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">chair</span>
               <span v-if="row.is_signing" class="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-800">signs</span>
             </td>
+            <td class="px-3 py-2 font-mono text-xs">{{ dinFor(row.person_id) }}</td>
             <td class="px-3 py-2">{{ row.role_type.replace("_", " ") }}</td>
             <td class="px-3 py-2">{{ row.designation || "—" }}</td>
             <td class="px-3 py-2">{{ row.appointed_on }}</td>

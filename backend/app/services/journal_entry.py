@@ -130,6 +130,10 @@ async def list_journal_entries(
     )
     if docstatus is not None:
         stmt = stmt.where(JournalEntry.docstatus == docstatus)
+    else:
+        # Cancelled entries stay in the books for audit but are noise here;
+        # ask for them with ?docstatus=2.
+        stmt = stmt.where(JournalEntry.docstatus != DOCSTATUS_CANCELLED)
     return await paginate(db, stmt, page, page_size)
 
 

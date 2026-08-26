@@ -258,6 +258,12 @@ async def list_delivery_notes(
     )
     if status:
         stmt = stmt.where(DeliveryNote.status == status)
+    else:
+        # A cancelled document keeps its reversing entries — that is the audit
+        # trail — but it is noise in the working list. Rolling back an import
+        # would otherwise leave every cancelled document on screen, looking
+        # like the rollback had not worked. Ask for them with ?status=Cancelled.
+        stmt = stmt.where(DeliveryNote.docstatus != DOCSTATUS_CANCELLED)
     if customer_id is not None:
         stmt = stmt.where(DeliveryNote.customer_id == customer_id)
     return await paginate(db, stmt, page, page_size)

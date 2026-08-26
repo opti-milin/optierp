@@ -227,12 +227,19 @@ async def get_payment_entry(
 
 async def list_payment_entries(
     db: AsyncSession, company_id: uuid.UUID | None, page: int = 1, page_size: int = 20,
+    *, include_cancelled: bool = False,
 ) -> tuple[list[PaymentEntry], int]:
     stmt = (
         select(PaymentEntry)
         .where(PaymentEntry.company_id == company_id)
         .order_by(PaymentEntry.posting_date.desc(), PaymentEntry.creation.desc())
     )
+    # Cancelled documents keep their reversing entries — that is the audit
+    # trail — but they are noise in the working list, and a rolled-back import
+    # would otherwise leave its cancelled documents on every screen. Pass
+    # include_cancelled=True to see them.
+    if not include_cancelled:
+        stmt = stmt.where(PaymentEntry.docstatus != DOCSTATUS_CANCELLED)
     return await paginate(db, stmt, page, page_size)
 
 

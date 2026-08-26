@@ -60,6 +60,13 @@ _SECRETARIAL_DOCTYPES = (
     "Secretarial Circular Resolution",
     "Secretarial Certified True Copy",
     "Secretarial Filing",
+    # Phase 5 — capital. Appended to the same tuple on purpose: every role and every
+    # engagement projection below is built by iterating it, so the new doctypes inherit
+    # the whole matrix without a single new rule.
+    "Secretarial Share Transfer",
+    "Secretarial Share Certificate",
+    "Secretarial Capital Event",
+    "Secretarial s.186 Entry",
 )
 
 _CS_FULL = ["read", "write", "create", "delete", "submit", "cancel", "print", "email", "report"]
@@ -244,11 +251,11 @@ DEFAULT_PERMISSIONS: list[tuple[str, str, list[str]]] = [
     # Module 12 — Data Migration (Tally import). Running an import creates
     # masters *and* posts vouchers across every module, so only Accounts Manager
     # gets the write/submit/cancel actions; other managers can watch the run.
-    ("Accounts Manager", "Tally Import", _ACCOUNTS_TXN_ALL),
-    ("Accounts User", "Tally Import", ["read", "report"]),
-    ("Stock Manager", "Tally Import", ["read", "report"]),
-    ("Sales Manager", "Tally Import", ["read", "report"]),
-    ("Purchase Manager", "Tally Import", ["read", "report"]),
+    ("Accounts Manager", "Data Migration", _ACCOUNTS_TXN_ALL),
+    ("Accounts User", "Data Migration", ["read", "report"]),
+    ("Stock Manager", "Data Migration", ["read", "report"]),
+    ("Sales Manager", "Data Migration", ["read", "report"]),
+    ("Purchase Manager", "Data Migration", ["read", "report"]),
     # Module 13 — Company Secretarial & Governance.
     *_SECRETARIAL_PERMISSIONS,
 ]

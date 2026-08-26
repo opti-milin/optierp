@@ -421,6 +421,12 @@ async def list_sales_invoices(
     )
     if status:
         stmt = stmt.where(SalesInvoice.status == status)
+    else:
+        # A cancelled document keeps its reversing entries — that is the audit
+        # trail — but it is noise in the working list. Rolling back an import
+        # would otherwise leave every cancelled document on screen, looking
+        # like the rollback had not worked. Ask for them with ?status=Cancelled.
+        stmt = stmt.where(SalesInvoice.docstatus != DOCSTATUS_CANCELLED)
     if customer_id is not None:
         stmt = stmt.where(SalesInvoice.customer_id == customer_id)
     return await paginate(db, stmt, page, page_size)
